@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.assist.emitMustUse": true,
+    "rust-analyzer.linkedProjects": [
+        "src/rs/ppc/Cargo.toml"
+    ],
+    "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
+}

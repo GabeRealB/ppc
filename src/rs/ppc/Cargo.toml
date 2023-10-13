@@ -1,0 +1,87 @@
+[package]
+name = "ppc"
+version = "0.1.0"
+authors = ["Gabriel Borrelli <gabriel.borrelli@uni-muenster.de>"]
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+regex = "1.9.5"
+once_cell = "1.18.0"
+console_error_panic_hook = "0.1.1"
+async-channel = "1.9.0"
+wasm-bindgen-futures = "0.4.37"
+wasm-bindgen = "0.2.87"
+js-sys = "0.3.64"
+
+[dependencies.web-sys]
+version = "0.3.64"
+features = [
+    "console",
+    "Window",
+    "Navigator",
+    "Gpu",
+    "GpuAdapter",
+    "GpuDevice",
+    "GpuCanvasContext",
+    "GpuTextureFormat",
+    "GpuCanvasAlphaMode",
+    "GpuCanvasConfiguration",
+    "GpuBindGroup",
+    "GpuBindGroupDescriptor",
+    "GpuBindGroupEntry",
+    "GpuBindGroupLayout",
+    "GpuBindGroupLayoutDescriptor",
+    "GpuBindGroupLayoutEntry",
+    "GpuBuffer",
+    "GpuBufferBindingType",
+    "GpuBufferBindingLayout",
+    "GpuTextureBindingLayout",
+    "GpuTextureSampleType",
+    "GpuTextureViewDimension",
+    "GpuStorageTextureBindingLayout",
+    "GpuStorageTextureAccess",
+    "GpuSamplerBindingLayout",
+    "GpuSamplerBindingType",
+    "GpuPipelineLayout",
+    "GpuPipelineLayoutDescriptor",
+    "GpuRenderPipeline",
+    "GpuRenderPipelineDescriptor",
+    "GpuVertexState",
+    "GpuFragmentState",
+    "GpuMultisampleState",
+    "GpuPrimitiveState",
+    "GpuCullMode",
+    "GpuFrontFace",
+    "GpuIndexFormat",
+    "GpuPrimitiveTopology",
+    "GpuSamplerDescriptor",
+    "GpuAddressMode",
+    "GpuCompareFunction",
+    "GpuFilterMode",
+    "GpuMipmapFilterMode",
+    "GpuCommandBuffer",
+    "GpuCommandEncoder",
+    "GpuComputePassEncoder",
+    "GpuComputePipeline",
+    "GpuComputePipelineDescriptor",
+    "GpuProgrammableStage",
+    "GpuQueue",
+    "GpuRenderPassEncoder",
+    "GpuSampler",
+    "GpuShaderModule",
+    "GpuShaderModuleDescriptor",
+    "GpuTexture",
+    "GpuTextureView",
+    "GpuCompilationInfo",
+    "gpu_buffer_usage",
+    "gpu_color_write",
+    "gpu_map_mode",
+    "gpu_shader_stage",
+    "gpu_texture_usage",
+    "CanvasRenderingContext2d",
+    "HtmlCanvasElement",
+    "PointerEvent",
+]
