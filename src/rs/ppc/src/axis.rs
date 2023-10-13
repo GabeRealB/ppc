@@ -6,12 +6,15 @@ use std::{
     rc::{Rc, Weak},
 };
 
+use wasm_bindgen::JsCast;
+
 use crate::{
     coordinates::{
-        Aabb, CartesianLength, CartesianOffset, CartesianPosition, CoordinateSystemTransformer,
-        Length, LocalSpace, Offset, Position, ViewSpace, WorldLocalTransformer, WorldSpace,
+        Aabb, CartesianLength, CartesianOffset, CartesianPosition, ComponentAccessible,
+        CoordinateSystemTransformer, Length, LocalSpace, Offset, Position, ScreenSpace,
+        ScreenViewTransformer, ViewSpace, WorldLocalTransformer, WorldSpace,
     },
-    lerp::Lerp,
+    lerp::{InverseLerp, Lerp},
 };
 
 const AXIS_LOCAL_Y_SCALE: f32 = 0.8;
@@ -124,33 +127,68 @@ pub struct Axis {
 }
 
 impl Axis {
+    #[allow(clippy::type_complexity)]
     fn new(
         key: &str,
-        label: &str,
-        datums: &[f32],
-        range: Option<(f32, f32)>,
-        visible_range: Option<(f32, f32)>,
+        args: AxisArgs,
+        axis_index: Option<usize>,
+        world_offset: f32,
+        axes: &Rc<RefCell<Axes>>,
+        get_rem_length: Rc<dyn Fn(f32) -> (Length<LocalSpace>, Length<LocalSpace>)>,
+        get_text_length: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
     ) -> Self {
-        todo!();
+        let label = args.label;
+        let datums = args.datums;
+        let datums_range = args.range;
+        let visible_datums_range = args.visible_range;
+        let state = args.state;
+
+        let datums_normalized = datums
+            .iter()
+            .map(|d| d.inv_lerp(datums_range.0, datums_range.1))
+            .collect();
+
+        let visible_datums_range_normalized = (
+            visible_datums_range
+                .0
+                .inv_lerp(datums_range.0, datums_range.1),
+            visible_datums_range
+                .1
+                .inv_lerp(datums_range.0, datums_range.1),
+        );
+
+        let locales = wasm_bindgen::JsValue::undefined().unchecked_into();
+        let options = wasm_bindgen::JsValue::undefined().unchecked_into();
+        let formatter = js_sys::Intl::NumberFormat::new(&locales, &options);
+        let format = formatter.format();
+
+        let min_num = wasm_bindgen::JsValue::from_f64(visible_datums_range.0 as f64);
+        let max_num = wasm_bindgen::JsValue::from_f64(visible_datums_range.1 as f64);
+        let min_label = format.call1(&formatter, &min_num).unwrap();
+        let max_label = format.call1(&formatter, &max_num).unwrap();
+
+        let min_label = min_label.as_string().unwrap().into();
+        let max_label = max_label.as_string().unwrap().into();
+        let axes = Rc::downgrade(axes);
 
         Self {
             key: key.into(),
-            label: label.into(),
-            min_label: (),
-            max_label: (),
-            state: (),
-            axis_index: (),
-            datums: (),
-            datums_normalized: (),
-            datums_range: (),
-            visible_datums_range: (),
-            visible_datums_range_normalized: (),
-            world_offset: (),
-            get_rem_length: (),
-            get_text_length: (),
-            axes: (),
-            left: (),
-            right: (),
+            label,
+            min_label,
+            max_label,
+            state: Cell::new(state),
+            axis_index,
+            datums,
+            datums_normalized,
+            datums_range,
+            visible_datums_range,
+            visible_datums_range_normalized,
+            world_offset: Cell::new(world_offset),
+            get_rem_length,
+            get_text_length,
+            axes,
+            left: RefCell::new(None),
+            right: RefCell::new(None),
         }
     }
 
@@ -472,7 +510,6 @@ pub enum AxisState {
 }
 
 /// A collection of axes.
-#[derive(Debug)]
 pub struct Axes {
     axes: BTreeMap<String, Rc<Axis>>,
     expanded_axis: Option<Rc<Axis>>,
@@ -486,11 +523,46 @@ pub struct Axes {
 
     view_bounding_box: Aabb<ViewSpace>,
     world_bounding_box: Aabb<WorldSpace>,
+
+    get_rem_length_screen: Rc<dyn Fn(f32) -> Length<ScreenSpace>>,
+    get_text_length_screen: Rc<dyn Fn(&str) -> (Length<ScreenSpace>, Length<ScreenSpace>)>,
+
+    get_rem_length_world: Rc<dyn Fn(f32) -> (Length<WorldSpace>, Length<WorldSpace>)>,
+    get_text_length_world: Rc<dyn Fn(&str) -> (Length<WorldSpace>, Length<WorldSpace>)>,
+
+    get_rem_length_local: Rc<dyn Fn(f32) -> (Length<LocalSpace>, Length<LocalSpace>)>,
+    get_text_length_local: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
 }
 
 impl Axes {
     /// Constructs a new instance.
-    pub fn new(view_bounding_box: Aabb<ViewSpace>) -> Self {
+    pub fn new(
+        view_bounding_box: Aabb<ViewSpace>,
+        get_rem_length_screen: Rc<dyn Fn(f32) -> Length<ScreenSpace>>,
+        get_text_length_screen: Rc<dyn Fn(&str) -> (Length<ScreenSpace>, Length<ScreenSpace>)>,
+    ) -> Self {
+        let view_space_height = Rc::new(Cell::new(view_bounding_box.size().get_component(1)));
+        let get_rem_length_world = {
+            let view_space_height = view_space_height.clone();
+            let get_rem_length_screen = get_rem_length_screen.clone();
+            Rc::new(move |rem| {
+                let length = get_rem_length_screen(rem);
+                let p0 = Offset::<ScreenSpace>::zero();
+                let p1 = Offset::<ScreenSpace>::from_length_at_axis(0, length);
+                let p2 = Offset::<ScreenSpace>::from_length_at_axis(1, length);
+
+                let mapper = ScreenViewTransformer::new(view_space_height.get());
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let w = p1 - p0;
+                let h = p2 - p0;
+
+                (w.into(), h.into())
+            })
+        };
+
         Self {
             axes: Default::default(),
             expanded_axis: None,
@@ -504,6 +576,12 @@ impl Axes {
                 Position::zero(),
                 Position::new(CartesianPosition { x: 1.0, y: 1.0 }),
             ),
+            get_rem_length_screen,
+            get_text_length_screen,
+            get_rem_length_world,
+            get_text_length_world: todo!(),
+            get_rem_length_local: todo!(),
+            get_text_length_local: todo!(),
         }
     }
 
@@ -519,6 +597,9 @@ impl Axes {
         key: &str,
         label: &str,
         datums: &[f32],
+        range: Option<(f32, f32)>,
+        visible_range: Option<(f32, f32)>,
+        hidden: bool,
     ) -> Rc<Axis> {
         if !std::ptr::eq(self, this.as_ptr()) {
             panic!("this does not point to the same instance as self");
@@ -531,6 +612,33 @@ impl Axes {
         } else {
             self.num_datums = Some(datums.len());
         }
+
+        let mut args = AxisArgs::new(label, datums);
+        if let Some((min, max)) = range {
+            args = args.with_range(min, max);
+        }
+        if let Some((min, max)) = visible_range {
+            args = args.with_visible_range(min, max);
+        }
+
+        let axis_index = if hidden {
+            args = args.hidden();
+            None
+        } else {
+            let x = Some(self.next_axis_index);
+            self.next_axis_index += 1;
+            x
+        };
+
+        let axis = Axis::new(
+            key,
+            args,
+            axis_index,
+            0.0,
+            this,
+            self.get_rem_length_local.clone(),
+            self.get_text_length_local.clone(),
+        );
 
         todo!()
     }
@@ -589,6 +697,22 @@ impl Axes {
             len: self.num_visible_axes,
             _phantom: PhantomData,
         }
+    }
+}
+
+impl Debug for Axes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Axes")
+            .field("axes", &self.axes)
+            .field("expanded_axis", &self.expanded_axis)
+            .field("num_visible_axes", &self.num_visible_axes)
+            .field("visible_axis_start", &self.visible_axis_start)
+            .field("visible_axis_end", &self.visible_axis_end)
+            .field("num_datums", &self.num_datums)
+            .field("next_axis_index", &self.next_axis_index)
+            .field("view_bounding_box", &self.view_bounding_box)
+            .field("world_bounding_box", &self.world_bounding_box)
+            .finish_non_exhaustive()
     }
 }
 

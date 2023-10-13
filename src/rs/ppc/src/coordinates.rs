@@ -245,6 +245,12 @@ impl<T: CoordinateSystem> Offset<T> {
         Self::ZERO
     }
 
+    /// Constructs a new offset, where the value at axis `axis` is `length`.
+    pub fn from_length_at_axis(axis: usize, length: Length<T>) -> Self {
+        let value = <T::Offset as ComponentAccessible>::unit_component(axis);
+        Offset { value } * length
+    }
+
     /// Applies a coordinate system transform to the offset.
     pub fn transform<U: CoordinateSystem>(
         self,
@@ -501,6 +507,11 @@ impl<T: CoordinateSystem> Aabb<T> {
             start: self.start.transform(transformer),
             end: self.end.transform(transformer),
         }
+    }
+
+    /// Returns the size of the bounding box.
+    pub fn size(&self) -> Offset<T> {
+        self.end - self.start
     }
 
     /// Checks if the bounding box is degenerate.
