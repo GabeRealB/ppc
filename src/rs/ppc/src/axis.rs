@@ -10,9 +10,9 @@ use wasm_bindgen::JsCast;
 
 use crate::{
     coordinates::{
-        Aabb, CartesianLength, CartesianOffset, CartesianPosition, ComponentAccessible,
-        CoordinateSystemTransformer, Length, LocalSpace, Offset, Position, ScreenSpace,
-        ScreenViewTransformer, ViewSpace, WorldLocalTransformer, WorldSpace,
+        Aabb, ComponentAccessible, CoordinateSystemTransformer, Length, LocalSpace, Offset,
+        Position, ScreenSpace, ScreenViewTransformer, ViewSpace, ViewWorldTransformer,
+        WorldLocalTransformer, WorldSpace,
     },
     lerp::{InverseLerp, Lerp},
 };
@@ -296,12 +296,11 @@ impl Axis {
             axis_width
         };
 
-        let half_width = width / Length::new(CartesianLength(2.0));
-        let width_offset =
-            Offset::<LocalSpace>::new(CartesianOffset { x: 1.0, y: 0.0 }) * half_width;
+        let half_width = width / Length::new(2.0);
+        let width_offset = Offset::<LocalSpace>::new((1.0, 0.0)) * half_width;
 
-        let mut start = Position::<LocalSpace>::new(CartesianPosition { x: 0.5, y: 0.0 });
-        let mut end = Position::<LocalSpace>::new(CartesianPosition { x: 0.5, y: 1.0 });
+        let mut start = Position::<LocalSpace>::new((0.5, 0.0));
+        let mut end = Position::<LocalSpace>::new((0.5, 1.0));
 
         start -= width_offset;
         end += width_offset;
@@ -323,9 +322,8 @@ impl Axis {
         let (mut start, mut end) = self.axis_line_range();
 
         let (axis_width, _) = (self.get_rem_length)(AXIS_LINE_PADDING_REM + AXIS_LINE_WIDTH_REM);
-        let half_width = axis_width / Length::new(CartesianLength(2.0));
-        let width_offset =
-            Offset::<LocalSpace>::new(CartesianOffset { x: 1.0, y: 0.0 }) * half_width;
+        let half_width = axis_width / Length::new(2.0);
+        let width_offset = Offset::<LocalSpace>::new((1.0, 0.0)) * half_width;
 
         start -= width_offset;
         end += width_offset;
@@ -340,14 +338,11 @@ impl Axis {
         let (label_width, label_height) = (self.get_text_length)(&self.label);
         let (padding_width, padding_height) = (self.get_rem_length)(AXIS_LINE_PADDING_REM);
 
-        let start = Position::new(CartesianPosition {
-            x: POSITION_X - padding_width.0 - (label_width.0 / 2.0),
-            y: 1.0 - padding_height.0 - label_height.0 - padding_height.0,
-        });
-        let end = Position::new(CartesianPosition {
-            x: POSITION_X + padding_width.0 + (label_width.0 / 2.0),
-            y: 1.0,
-        });
+        let start = Position::new((
+            POSITION_X - padding_width.0 - (label_width.0 / 2.0),
+            1.0 - padding_height.0 - label_height.0 - padding_height.0,
+        ));
+        let end = Position::new((POSITION_X + padding_width.0 + (label_width.0 / 2.0), 1.0));
 
         Aabb::new(start, end)
     }
@@ -363,7 +358,7 @@ impl Axis {
         let (_, label_height) = (self.get_text_length)(&self.label);
 
         let start = min_label_height + label_margin;
-        let end = Length::new(CartesianLength(1.0))
+        let end = Length::new(1.0)
             - label_padding
             - label_height
             - label_padding
@@ -374,14 +369,8 @@ impl Axis {
         let end = start.lerp(end, self.visible_datums_range_normalized.1);
 
         (
-            Position::new(CartesianPosition {
-                x: POSITION_X,
-                y: start.0,
-            }),
-            Position::new(CartesianPosition {
-                x: POSITION_X,
-                y: end.0,
-            }),
+            Position::new((POSITION_X, start.0)),
+            Position::new((POSITION_X, end.0)),
         )
     }
 
@@ -392,10 +381,7 @@ impl Axis {
         let (_, label_height) = (self.get_text_length)(&self.label);
         let (_, padding_height) = (self.get_rem_length)(AXIS_LINE_PADDING_REM);
 
-        Position::new(CartesianPosition {
-            x: POSITION_X,
-            y: 1.0 - padding_height.0 - label_height.0,
-        })
+        Position::new((POSITION_X, 1.0 - padding_height.0 - label_height.0))
     }
 
     /// Returns the local position of the min label.
@@ -405,10 +391,7 @@ impl Axis {
 
         let (start, _) = self.axis_line_range();
 
-        Position::new(CartesianPosition {
-            x: start.x,
-            y: start.y - label_margin.0 - min_label_height.0,
-        })
+        Position::new((start.x, start.y - label_margin.0 - min_label_height.0))
     }
 
     /// Returns the local position of the max label.
@@ -418,10 +401,7 @@ impl Axis {
 
         let (_, end) = self.axis_line_range();
 
-        Position::new(CartesianPosition {
-            x: end.x,
-            y: end.y + label_margin.0 + max_label_height.0,
-        })
+        Position::new((end.x, end.y + label_margin.0 + max_label_height.0))
     }
 
     /// Returns a transformer to map between the world space and local space.
@@ -432,10 +412,16 @@ impl Axis {
         WorldLocalTransformer::new(self.world_offset.get(), AXIS_LOCAL_Y_SCALE)
     }
 
+    /// Sets the world offset of the axis.
     pub fn set_world_offset(&self, offset: f32) {
         // Clamp the offset.
 
         self.world_offset.set(offset)
+    }
+
+    /// Returns the world offset of the axis.
+    pub fn get_world_offset(&self) -> f32 {
+        self.world_offset.get()
     }
 
     /// Returns the left neighbor of the axis.
@@ -510,6 +496,7 @@ pub enum AxisState {
 }
 
 /// A collection of axes.
+#[derive(Clone)]
 pub struct Axes {
     axes: BTreeMap<String, Rc<Axis>>,
     expanded_axis: Option<Rc<Axis>>,
@@ -521,8 +508,7 @@ pub struct Axes {
     num_datums: Option<usize>,
     next_axis_index: usize,
 
-    view_bounding_box: Aabb<ViewSpace>,
-    world_bounding_box: Aabb<WorldSpace>,
+    coordinate_mappings: Rc<RefCell<AxesCoordinateMappings>>,
 
     get_rem_length_screen: Rc<dyn Fn(f32) -> Length<ScreenSpace>>,
     get_text_length_screen: Rc<dyn Fn(&str) -> (Length<ScreenSpace>, Length<ScreenSpace>)>,
@@ -534,24 +520,160 @@ pub struct Axes {
     get_text_length_local: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct AxesCoordinateMappings {
+    view_height: f32,
+    view_width: f32,
+    world_width: f32,
+
+    view_bounding_box: Aabb<ViewSpace>,
+    world_bounding_box: Aabb<WorldSpace>,
+}
+
 impl Axes {
     /// Constructs a new instance.
+    #[allow(clippy::type_complexity)]
     pub fn new(
         view_bounding_box: Aabb<ViewSpace>,
         get_rem_length_screen: Rc<dyn Fn(f32) -> Length<ScreenSpace>>,
         get_text_length_screen: Rc<dyn Fn(&str) -> (Length<ScreenSpace>, Length<ScreenSpace>)>,
     ) -> Self {
-        let view_space_height = Rc::new(Cell::new(view_bounding_box.size().get_component(1)));
+        let (view_width, view_height) = view_bounding_box.size().extract();
+        let coordinate_mappings = Rc::new(RefCell::new(AxesCoordinateMappings {
+            view_height,
+            view_width,
+            world_width: 1.0,
+            view_bounding_box,
+            world_bounding_box: Aabb::new(Position::zero(), Position::new((1.0, 1.0))),
+        }));
+
         let get_rem_length_world = {
-            let view_space_height = view_space_height.clone();
+            let coordinate_mappings = coordinate_mappings.clone();
             let get_rem_length_screen = get_rem_length_screen.clone();
             Rc::new(move |rem| {
+                let mappings = coordinate_mappings.borrow();
+
                 let length = get_rem_length_screen(rem);
                 let p0 = Offset::<ScreenSpace>::zero();
                 let p1 = Offset::<ScreenSpace>::from_length_at_axis(0, length);
                 let p2 = Offset::<ScreenSpace>::from_length_at_axis(1, length);
 
-                let mapper = ScreenViewTransformer::new(view_space_height.get());
+                let mapper = ScreenViewTransformer::new(mappings.view_height);
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let mapper = ViewWorldTransformer::new(
+                    mappings.view_height,
+                    mappings.view_width,
+                    mappings.world_width,
+                );
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let w = p1 - p0;
+                let h = p2 - p0;
+
+                (w.into(), h.into())
+            })
+        };
+
+        let get_rem_length_local = {
+            let coordinate_mappings = coordinate_mappings.clone();
+            let get_rem_length_screen = get_rem_length_screen.clone();
+            Rc::new(move |rem| {
+                let mappings = coordinate_mappings.borrow();
+
+                let length = get_rem_length_screen(rem);
+                let p0 = Offset::<ScreenSpace>::zero();
+                let p1 = Offset::<ScreenSpace>::from_length_at_axis(0, length);
+                let p2 = Offset::<ScreenSpace>::from_length_at_axis(1, length);
+
+                let mapper = ScreenViewTransformer::new(mappings.view_height);
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let mapper = ViewWorldTransformer::new(
+                    mappings.view_height,
+                    mappings.view_width,
+                    mappings.world_width,
+                );
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let mapper = WorldLocalTransformer::new(0.0, AXIS_LOCAL_Y_SCALE);
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let w = p1 - p0;
+                let h = p2 - p0;
+
+                (w.into(), h.into())
+            })
+        };
+
+        let get_text_length_world = {
+            let coordinate_mappings = coordinate_mappings.clone();
+            let get_text_length_screen = get_text_length_screen.clone();
+            Rc::new(move |text: &str| {
+                let mappings = coordinate_mappings.borrow();
+
+                let (width, height) = get_text_length_screen(text);
+                let p0 = Offset::<ScreenSpace>::zero();
+                let p1 = Offset::<ScreenSpace>::from_length_at_axis(0, width);
+                let p2 = Offset::<ScreenSpace>::from_length_at_axis(1, height);
+
+                let mapper = ScreenViewTransformer::new(mappings.view_height);
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let mapper = ViewWorldTransformer::new(
+                    mappings.view_height,
+                    mappings.view_width,
+                    mappings.world_width,
+                );
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let w = p1 - p0;
+                let h = p2 - p0;
+
+                (w.into(), h.into())
+            })
+        };
+
+        let get_text_length_local = {
+            let coordinate_mappings = coordinate_mappings.clone();
+            let get_text_length_screen = get_text_length_screen.clone();
+            Rc::new(move |text: &str| {
+                let mappings = coordinate_mappings.borrow();
+
+                let (width, height) = get_text_length_screen(text);
+                let p0 = Offset::<ScreenSpace>::zero();
+                let p1 = Offset::<ScreenSpace>::from_length_at_axis(0, width);
+                let p2 = Offset::<ScreenSpace>::from_length_at_axis(1, height);
+
+                let mapper = ScreenViewTransformer::new(mappings.view_height);
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let mapper = ViewWorldTransformer::new(
+                    mappings.view_height,
+                    mappings.view_width,
+                    mappings.world_width,
+                );
+                let p0 = p0.transform(&mapper);
+                let p1 = p1.transform(&mapper);
+                let p2 = p2.transform(&mapper);
+
+                let mapper = WorldLocalTransformer::new(0.0, AXIS_LOCAL_Y_SCALE);
                 let p0 = p0.transform(&mapper);
                 let p1 = p1.transform(&mapper);
                 let p2 = p2.transform(&mapper);
@@ -571,26 +693,32 @@ impl Axes {
             visible_axis_end: None,
             num_datums: None,
             next_axis_index: 0,
-            view_bounding_box,
-            world_bounding_box: Aabb::new(
-                Position::zero(),
-                Position::new(CartesianPosition { x: 1.0, y: 1.0 }),
-            ),
+            coordinate_mappings,
             get_rem_length_screen,
             get_text_length_screen,
             get_rem_length_world,
-            get_text_length_world: todo!(),
-            get_rem_length_local: todo!(),
-            get_text_length_local: todo!(),
+            get_text_length_world,
+            get_rem_length_local,
+            get_text_length_local,
         }
     }
 
     /// Constructs a new instance.
-    pub fn new_rc(view_bounding_box: Aabb<ViewSpace>) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self::new(view_bounding_box)))
+    #[allow(clippy::type_complexity)]
+    pub fn new_rc(
+        view_bounding_box: Aabb<ViewSpace>,
+        get_rem_length_screen: Rc<dyn Fn(f32) -> Length<ScreenSpace>>,
+        get_text_length_screen: Rc<dyn Fn(&str) -> (Length<ScreenSpace>, Length<ScreenSpace>)>,
+    ) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::new(
+            view_bounding_box,
+            get_rem_length_screen,
+            get_text_length_screen,
+        )))
     }
 
     /// Constructs and inserts a new instance of an [`Axis`].
+    #[allow(clippy::too_many_arguments)]
     pub fn construct_axis(
         &mut self,
         this: &Rc<RefCell<Self>>,
@@ -603,6 +731,10 @@ impl Axes {
     ) -> Rc<Axis> {
         if !std::ptr::eq(self, this.as_ptr()) {
             panic!("this does not point to the same instance as self");
+        }
+
+        if self.axes.contains_key(key) {
+            panic!("axis {key:?} already exists");
         }
 
         if let Some(num_datums) = self.num_datums {
@@ -630,7 +762,7 @@ impl Axes {
             x
         };
 
-        let axis = Axis::new(
+        let axis = Rc::new(Axis::new(
             key,
             args,
             axis_index,
@@ -638,9 +770,41 @@ impl Axes {
             this,
             self.get_rem_length_local.clone(),
             self.get_text_length_local.clone(),
-        );
+        ));
 
-        todo!()
+        self.axes.insert(key.into(), axis.clone());
+
+        if !axis.is_hidden() {
+            self.num_visible_axes += 1;
+            let mut mappings = self.coordinate_mappings.borrow_mut();
+            mappings.world_width = (self.num_visible_axes as f32).max(1.0);
+            mappings.world_bounding_box = Aabb::new(
+                Position::zero(),
+                Position::new((self.num_visible_axes as f32, 1.0)),
+            );
+            drop(mappings);
+
+            // Axis is the first visible axis, so we set it to the start and end of the list.
+            if self.num_visible_axes == 1 {
+                axis.set_world_offset(0.5);
+                self.visible_axis_start = Some(axis.clone());
+                self.visible_axis_end = Some(axis.clone());
+            }
+            // Otherwise we append it to the end of the visible axes.
+            else {
+                let last_axis = self.visible_axis_end.as_ref().unwrap();
+                last_axis.set_right_neighbor(Some(&axis));
+
+                let last_axis_offset = last_axis.get_world_offset();
+                let axis_offset = last_axis_offset.floor() + 1.5;
+                axis.set_world_offset(axis_offset);
+
+                axis.set_left_neighbor(Some(last_axis));
+                self.visible_axis_end = Some(axis.clone());
+            }
+        }
+
+        axis
     }
 
     /// Returns the order of the axes.
@@ -710,8 +874,7 @@ impl Debug for Axes {
             .field("visible_axis_end", &self.visible_axis_end)
             .field("num_datums", &self.num_datums)
             .field("next_axis_index", &self.next_axis_index)
-            .field("view_bounding_box", &self.view_bounding_box)
-            .field("world_bounding_box", &self.world_bounding_box)
+            .field("coordinate_mappings", &self.coordinate_mappings)
             .finish_non_exhaustive()
     }
 }

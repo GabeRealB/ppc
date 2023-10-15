@@ -123,20 +123,29 @@ pub trait ComponentAccessible {
 }
 
 /// A position in a coordinate system.
-#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position<T: CoordinateSystem> {
     value: T::Position,
 }
 
 impl<T: CoordinateSystem> Position<T> {
     /// Constructs a new position.
-    pub const fn new(position: T::Position) -> Self {
-        Position { value: position }
+    pub fn new(position: impl Into<T::Position>) -> Self {
+        Position {
+            value: position.into(),
+        }
     }
 
     /// Constructs the zero position.
     pub const fn zero() -> Self {
         Self::ZERO
+    }
+
+    /// Extracts the value representation of the position.
+    pub fn extract<U>(self) -> U
+    where
+        U: From<T::Position>,
+    {
+        self.value.into()
     }
 
     /// Applies a coordinate system transform to the position.
@@ -145,6 +154,37 @@ impl<T: CoordinateSystem> Position<T> {
         transformer: &impl CoordinateSystemTransformer<T, U>,
     ) -> Position<U> {
         Position::new(transformer.transform_position(*self))
+    }
+}
+
+impl<T: CoordinateSystem> Debug for Position<T>
+where
+    T::Position: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Position")
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
+impl<T: CoordinateSystem> Copy for Position<T> where T::Position: Copy {}
+
+impl<T: CoordinateSystem> Clone for Position<T>
+where
+    T::Position: Clone,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: CoordinateSystem> PartialEq for Position<T>
+where
+    T::Position: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
     }
 }
 
@@ -209,7 +249,9 @@ impl<T: CoordinateSystem> DerefMut for Position<T> {
 impl<T: CoordinateSystem> ComponentAccessible for Position<T> {
     type Component = <T::Position as ComponentAccessible>::Component;
     const COMPONENTS: usize = <T::Position as ComponentAccessible>::COMPONENTS;
-    const ZERO: Self = Self::new(<T::Position as ComponentAccessible>::ZERO);
+    const ZERO: Self = Self {
+        value: <T::Position as ComponentAccessible>::ZERO,
+    };
 
     fn unit_component(idx: usize) -> Self {
         Self::new(T::Position::unit_component(idx))
@@ -229,15 +271,16 @@ impl<T: CoordinateSystem> ComponentAccessible for Position<T> {
 }
 
 /// An offset in a coordinate system.
-#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Offset<T: CoordinateSystem> {
     value: T::Offset,
 }
 
 impl<T: CoordinateSystem> Offset<T> {
     /// Constructs a new offset.
-    pub const fn new(offset: T::Offset) -> Self {
-        Offset { value: offset }
+    pub fn new(offset: impl Into<T::Offset>) -> Self {
+        Offset {
+            value: offset.into(),
+        }
     }
 
     /// Constructs the zero offset.
@@ -251,12 +294,51 @@ impl<T: CoordinateSystem> Offset<T> {
         Offset { value } * length
     }
 
+    /// Extracts the value representation of the offset.
+    pub fn extract<U>(self) -> U
+    where
+        U: From<T::Offset>,
+    {
+        self.value.into()
+    }
+
     /// Applies a coordinate system transform to the offset.
     pub fn transform<U: CoordinateSystem>(
         self,
         transformer: &impl CoordinateSystemTransformer<T, U>,
     ) -> Offset<U> {
         Offset::new(transformer.transform_offset(*self))
+    }
+}
+
+impl<T: CoordinateSystem> Debug for Offset<T>
+where
+    T::Offset: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Offset")
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
+impl<T: CoordinateSystem> Copy for Offset<T> where T::Offset: Copy {}
+
+impl<T: CoordinateSystem> Clone for Offset<T>
+where
+    T::Offset: Clone,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: CoordinateSystem> PartialEq for Offset<T>
+where
+    T::Offset: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
     }
 }
 
@@ -357,7 +439,9 @@ impl<T: CoordinateSystem> DerefMut for Offset<T> {
 impl<T: CoordinateSystem> ComponentAccessible for Offset<T> {
     type Component = <T::Offset as ComponentAccessible>::Component;
     const COMPONENTS: usize = <T::Offset as ComponentAccessible>::COMPONENTS;
-    const ZERO: Self = Self::new(<T::Offset as ComponentAccessible>::ZERO);
+    const ZERO: Self = Self {
+        value: <T::Offset as ComponentAccessible>::ZERO,
+    };
 
     fn unit_component(idx: usize) -> Self {
         Self::new(T::Offset::unit_component(idx))
@@ -377,15 +461,16 @@ impl<T: CoordinateSystem> ComponentAccessible for Offset<T> {
 }
 
 /// A length in a coordinate system.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Length<T: CoordinateSystem> {
     value: T::Length,
 }
 
 impl<T: CoordinateSystem> Length<T> {
     /// Constructs a new length.
-    pub fn new(offset: T::Length) -> Self {
-        Length { value: offset }
+    pub fn new(offset: impl Into<T::Length>) -> Self {
+        Length {
+            value: offset.into(),
+        }
     }
 
     /// Constructs the zero length.
@@ -396,6 +481,54 @@ impl<T: CoordinateSystem> Length<T> {
     /// Constructs the unit length.
     pub fn unit() -> Self {
         Length::new(T::Length::UNIT)
+    }
+
+    /// Extracts the value representation of the length.
+    pub fn extract<U>(self) -> U
+    where
+        U: From<T::Length>,
+    {
+        self.value.into()
+    }
+}
+
+impl<T: CoordinateSystem> Debug for Length<T>
+where
+    T::Length: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Length")
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
+impl<T: CoordinateSystem> Copy for Length<T> where T::Length: Copy {}
+
+impl<T: CoordinateSystem> Clone for Length<T>
+where
+    T::Length: Clone,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: CoordinateSystem> PartialEq for Length<T>
+where
+    T::Length: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<T: CoordinateSystem> PartialOrd for Length<T>
+where
+    T::Length: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.value.partial_cmp(&other.value)
     }
 }
 
@@ -455,7 +588,7 @@ impl<T: CoordinateSystem> Mul<Offset<T>> for Length<T> {
 
 impl<T: CoordinateSystem> From<Offset<T>> for Length<T> {
     fn from(value: Offset<T>) -> Self {
-        Self::new((*value).into())
+        Self::new(*value)
     }
 }
 
@@ -818,6 +951,18 @@ mod cartesian {
         pub y: f32,
     }
 
+    impl<const INVERSE_Y: bool> From<(f32, f32)> for CartesianPosition<INVERSE_Y> {
+        fn from((x, y): (f32, f32)) -> Self {
+            Self { x, y }
+        }
+    }
+
+    impl<const INVERSE_Y: bool> From<CartesianPosition<INVERSE_Y>> for (f32, f32) {
+        fn from(value: CartesianPosition<INVERSE_Y>) -> Self {
+            (value.x, value.y)
+        }
+    }
+
     impl<const INVERSE_Y: bool> Lerp for CartesianPosition<INVERSE_Y> {
         fn lerp(self, other: Self, t: f32) -> Self {
             Self {
@@ -928,6 +1073,18 @@ mod cartesian {
     pub struct CartesianOffset {
         pub x: f32,
         pub y: f32,
+    }
+
+    impl From<(f32, f32)> for CartesianOffset {
+        fn from((x, y): (f32, f32)) -> Self {
+            Self { x, y }
+        }
+    }
+
+    impl From<CartesianOffset> for (f32, f32) {
+        fn from(value: CartesianOffset) -> Self {
+            (value.x, value.y)
+        }
     }
 
     impl Lerp for CartesianOffset {
@@ -1080,6 +1237,18 @@ mod cartesian {
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct CartesianLength(pub f32);
+
+    impl From<f32> for CartesianLength {
+        fn from(value: f32) -> Self {
+            Self(value)
+        }
+    }
+
+    impl From<CartesianLength> for f32 {
+        fn from(value: CartesianLength) -> Self {
+            value.0
+        }
+    }
 
     impl Lerp for CartesianLength {
         fn lerp(self, other: Self, t: f32) -> Self {
