@@ -1,12 +1,17 @@
+use std::{cell::RefCell, collections::BTreeSet, mem::MaybeUninit, rc::Rc};
+
 use async_channel::{Receiver, Sender};
 use wasm_bindgen::prelude::*;
 
 use web_sys::console;
 
+use crate::coordinates::{Aabb, Length, Position};
+
 mod webgpu;
 mod wgsl;
 
 mod axis;
+mod buffers;
 mod color_scale;
 mod colors;
 mod coordinates;
@@ -25,6 +30,25 @@ impl EventQueue {
     pub fn exit(&self) {
         self.sender
             .send_blocking(Event::Exit)
+            .expect("the channel should be open");
+    }
+
+    /// Updates the data of the renderer.
+    pub fn update_data(&self, payload: UpdateDataPayload) {
+        let axes = if payload.axes.is_empty() {
+            None
+        } else {
+            Some(payload.axes.into())
+        };
+
+        let order = if payload.order.is_empty() {
+            None
+        } else {
+            Some(payload.order.into())
+        };
+
+        self.sender
+            .send_blocking(Event::UpdateData { axes, order })
             .expect("the channel should be open");
     }
 
@@ -77,6 +101,10 @@ impl EventQueue {
 
 enum Event {
     Exit,
+    UpdateData {
+        axes: Option<Box<[AxisDef]>>,
+        order: Option<Box<[String]>>,
+    },
     Draw {
         completion: Sender<()>,
     },
@@ -96,6 +124,57 @@ enum Event {
     },
 }
 
+/// Definition of an axis.
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct UpdateDataPayload {
+    axes: Vec<AxisDef>,
+    order: Vec<String>,
+}
+
+struct AxisDef {
+    key: Box<str>,
+    label: Box<str>,
+    datums: Box<[f32]>,
+    range: Option<(f32, f32)>,
+    visible_range: Option<(f32, f32)>,
+    hidden: bool,
+}
+
+#[wasm_bindgen]
+impl UpdateDataPayload {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            axes: Vec::new(),
+            order: Vec::new(),
+        }
+    }
+
+    pub fn new_axis(
+        &mut self,
+        key: &str,
+        label: &str,
+        datums: Box<[f32]>,
+        range: Option<Box<[f32]>>,
+        visible_range: Option<Box<[f32]>>,
+        hidden: Option<bool>,
+    ) {
+        self.axes.push(AxisDef {
+            key: key.into(),
+            label: label.into(),
+            datums,
+            range: range.map(|v| (v[0], v[1])),
+            visible_range: visible_range.map(|v| (v[0], v[1])),
+            hidden: hidden.unwrap_or(false),
+        });
+    }
+
+    pub fn add_order(&mut self, key: &str) {
+        self.order.push(key.into())
+    }
+}
+
 /// Implementation of the renderer for the parallel coordinates.
 #[wasm_bindgen]
 pub struct Renderer {
@@ -104,7 +183,11 @@ pub struct Renderer {
     context_gpu: web_sys::GpuCanvasContext,
     context_2d: web_sys::CanvasRenderingContext2d,
     device: webgpu::Device,
+    pipelines: pipelines::Pipelines,
+    buffers: buffers::Buffers,
     events: Option<Receiver<Event>>,
+    axes: Rc<RefCell<axis::Axes>>,
+    redraw: bool,
 }
 
 #[wasm_bindgen]
@@ -117,7 +200,8 @@ impl Renderer {
     ) -> Self {
         console_error_panic_hook::set_once();
 
-        let navigator = web_sys::window().unwrap().navigator();
+        let window = web_sys::window().unwrap();
+        let navigator = window.navigator();
         if navigator.gpu().is_falsy() {
             panic!("WebGPU is not supported in the current browser.");
         }
@@ -167,15 +251,59 @@ impl Renderer {
         let device = webgpu::Device::new(device);
         let preferred_format = gpu.get_preferred_canvas_format().into();
         let pipelines = pipelines::Pipelines::new(&device, preferred_format).await;
+        let buffers = buffers::Buffers::new(&device);
 
-        Self {
+        let client_width = canvas_gpu.client_width() as f32;
+        let client_height = canvas_gpu.client_height() as f32;
+        let view_bounding_box = Aabb::new(
+            Position::zero(),
+            Position::new((client_width, client_height)),
+        );
+
+        let document = window.document().unwrap();
+        let root_element = document.document_element().unwrap();
+        let root_element_style = window.get_computed_style(&root_element).unwrap().unwrap();
+        let get_rem_length_screen = Rc::new(move |rem| {
+            let font_size_str = root_element_style.get_property_value("font-size").unwrap();
+            let font_size = js_sys::parse_float(&font_size_str) as f32;
+            Length::new(font_size * rem)
+        });
+
+        let get_text_length_screen = {
+            let context_2d = context_2d.clone();
+            Rc::new(move |text: &str| {
+                let metrics = context_2d.measure_text(text).unwrap();
+                let width = metrics.width() as f32;
+                let height = (metrics.actual_bounding_box_ascent()
+                    + metrics.actual_bounding_box_descent()) as f32;
+                (Length::new(width), Length::new(height))
+            })
+        };
+
+        let axes = axis::Axes::new_rc(
+            view_bounding_box,
+            get_rem_length_screen,
+            get_text_length_screen,
+        );
+
+        let mut this = Self {
             canvas_gpu,
             canvas_2d,
             context_gpu,
             context_2d,
             device,
+            pipelines,
+            buffers,
             events: None,
-        }
+            axes,
+            redraw: true,
+        };
+
+        this.update_matrix_buffer();
+        this.update_axes_buffer();
+        this.update_axes_config_buffer();
+
+        this
     }
 
     /// Constructs a new event queue for this renderer.
@@ -208,6 +336,7 @@ impl Renderer {
         loop {
             match events.recv().await.expect("the channel should be open") {
                 Event::Exit => break,
+                Event::UpdateData { axes, order } => self.update_data(axes, order).await,
                 Event::Draw { completion } => self.render(completion).await,
                 Event::Resize {
                     width,
@@ -228,11 +357,132 @@ impl Renderer {
 }
 
 impl Renderer {
+    fn render_labels(&self) {
+        self.context_2d.save();
+        self.context_2d.set_text_align("center");
+
+        let guard = self.axes.borrow();
+        let screen_mapper = guard.space_transformer();
+
+        for ax in guard.visible_axes() {
+            let label = ax.label();
+
+            if label.is_empty() {
+                continue;
+            }
+
+            let world_mapper = ax.space_transformer();
+            let label_position = ax.label_position();
+            let label_position = label_position.transform(&world_mapper);
+            let label_position = label_position.transform(&screen_mapper);
+            let (x, y) = label_position.extract();
+
+            self.context_2d
+                .fill_text(&label, x as f64, y as f64)
+                .unwrap();
+        }
+
+        self.context_2d.restore();
+    }
+
+    fn render_min_max_labels(&self) {
+        self.context_2d.save();
+        self.context_2d.set_text_align("center");
+
+        let guard = self.axes.borrow();
+        let screen_mapper = guard.space_transformer();
+
+        for ax in guard.visible_axes() {
+            let min_label = ax.min_label();
+            let max_label = ax.max_label();
+
+            let world_mapper = ax.space_transformer();
+            if !min_label.is_empty() {
+                let position = ax.min_label_position();
+                let position = position.transform(&world_mapper);
+                let position = position.transform(&screen_mapper);
+                let (x, y) = position.extract();
+
+                self.context_2d
+                    .fill_text(&min_label, x as f64, y as f64)
+                    .unwrap();
+            }
+
+            if !max_label.is_empty() {
+                let position = ax.max_label_position();
+                let position = position.transform(&world_mapper);
+                let position = position.transform(&screen_mapper);
+                let (x, y) = position.extract();
+
+                self.context_2d
+                    .fill_text(&max_label, x as f64, y as f64)
+                    .unwrap();
+            }
+        }
+
+        self.context_2d.restore();
+    }
+}
+
+impl Renderer {
     async fn render(&mut self, completion: Sender<()>) {
+        let redraw = self.redraw;
+        self.redraw = false;
+
+        if !redraw {
+            completion
+                .send(())
+                .await
+                .expect("the channel should be open");
+            return;
+        }
+
+        // Draw the text and ui control elements.
+        self.context_2d.clear_rect(
+            0.0,
+            0.0,
+            self.canvas_2d.width() as f64,
+            self.canvas_2d.height() as f64,
+        );
+        self.render_labels();
+        self.render_min_max_labels();
+
         completion
             .send(())
             .await
             .expect("the channel should be open");
+    }
+
+    async fn update_data(&mut self, axes: Option<Box<[AxisDef]>>, order: Option<Box<[String]>>) {
+        let axes_keys = axes
+            .iter()
+            .flat_map(|x| x.iter())
+            .map(|a| &*a.key)
+            .collect::<BTreeSet<_>>();
+
+        let mut guard = self.axes.borrow_mut();
+        guard.retain_axes(axes_keys);
+
+        for axis in axes.into_iter().flat_map(Vec::from) {
+            guard.construct_axis(
+                &self.axes,
+                &axis.key,
+                &axis.label,
+                axis.datums,
+                axis.range,
+                axis.visible_range,
+                axis.hidden,
+            );
+        }
+
+        if let Some(order) = order {
+            guard.set_axes_order(&order);
+        }
+        drop(guard);
+
+        self.update_matrix_buffer();
+        self.update_axes_buffer();
+        self.update_axes_line_infos_buffer();
     }
 
     async fn resize_drawing_area(&mut self, width: u32, height: u32, device_pixel_ratio: f32) {
@@ -247,6 +497,15 @@ impl Renderer {
         self.context_2d
             .scale(device_pixel_ratio as f64, device_pixel_ratio as f64)
             .unwrap();
+
+        let guard = self.axes.borrow();
+        guard.set_view_bounding_box(Aabb::new(
+            Position::zero(),
+            Position::new((width as f32, height as f32)),
+        ));
+        drop(guard);
+
+        self.update_axes_config_buffer();
     }
 
     async fn pointer_down(&mut self, event: web_sys::PointerEvent) {
@@ -271,5 +530,63 @@ impl Renderer {
         }
 
         console::log_2(&"Pointer moved".into(), &event);
+    }
+}
+
+impl Renderer {
+    fn update_matrix_buffer(&mut self) {
+        let guard = self.axes.borrow();
+        self.buffers
+            .general
+            .matrix
+            .update(&self.device, &buffers::Matrices::new(guard.world_width()));
+        self.redraw = true;
+    }
+
+    fn update_axes_buffer(&mut self) {
+        let guard = self.axes.borrow();
+        let mut axes = Vec::new();
+        axes.resize_with(guard.visible_axes().len(), MaybeUninit::uninit);
+
+        for ax in guard.visible_axes() {
+            let range = ax.axis_line_range();
+            let range = (
+                range.0.transform(&ax.space_transformer()),
+                range.1.transform(&ax.space_transformer()),
+            );
+            let range = [
+                range.0.extract::<(f32, f32)>().1,
+                range.1.extract::<(f32, f32)>().1,
+            ];
+
+            axes[ax.axis_index().unwrap()].write(buffers::Axis {
+                expanded_val: if ax.is_expanded() { 1.0 } else { 0.0 },
+                center_x: ax.get_world_offset(),
+                position_x: wgsl::Vec2([ax.get_world_offset(), ax.get_world_offset()]), // TODO: Replace with extends of the axis.
+                range_y: wgsl::Vec2(range),
+            });
+        }
+        self.buffers.general.axes.update(&self.device, &axes);
+        self.redraw = true;
+    }
+
+    fn update_axes_config_buffer(&mut self) {
+        let guard = self.axes.borrow();
+        let (width, height) = guard.axis_line_size();
+        self.buffers.axes.config.update(
+            &self.device,
+            &buffers::LineConfig {
+                line_width: wgsl::Vec2([width.0, height.0]),
+                line_type: 1 + 2,
+                color_mode: 0,
+                color: wgsl::Vec3([0.8, 0.8, 0.8]),
+            },
+        );
+        self.redraw = true;
+    }
+
+    fn update_axes_line_infos_buffer(&mut self) {
+        let guard = self.axes.borrow();
+        self.redraw = true;
     }
 }

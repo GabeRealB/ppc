@@ -11,6 +11,7 @@ unsafe impl HostSharable for i32 {}
 unsafe impl HostSharable for u32 {}
 unsafe impl HostSharable for f32 {}
 unsafe impl<T: HostSharable, const N: usize> HostSharable for [T; N] {}
+unsafe impl<T: HostSharable> HostSharable for MaybeUninit<T> {}
 
 /// Wrapper for an atomic type.
 #[repr(C, align(4))]
@@ -113,7 +114,7 @@ where
     (): vector::VectorType<R>,
     (): vector::VectorType<C>,
 {
-    data: [<() as vector::VectorType<R>>::Type<T>; C],
+    pub data: [<() as vector::VectorType<R>>::Type<T>; C],
 }
 
 impl<T, const C: usize, const R: usize> Matrix<T, C, R>

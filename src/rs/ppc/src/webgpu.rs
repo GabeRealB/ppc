@@ -2,6 +2,7 @@
 
 use std::{
     borrow::Cow,
+    mem::MaybeUninit,
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign},
 };
 
@@ -45,6 +46,15 @@ impl Device {
         }
 
         BindGroupLayout { layout }
+    }
+
+    pub fn create_buffer(&self, descriptor: BufferDescriptor<'_>) -> Buffer {
+        let buffer = self.device.create_buffer(&descriptor.into());
+        if buffer.is_falsy() {
+            panic!("could not create buffer");
+        }
+
+        Buffer { buffer }
     }
 
     pub fn create_pipeline_layout<const N: usize>(
@@ -151,12 +161,7 @@ impl Queue {
         self.queue.set_label(value);
     }
 
-    pub fn write_buffer<T: HostSharable>(
-        &self,
-        buffer: &web_sys::GpuBuffer,
-        buffer_offset: u32,
-        data: &[T],
-    ) {
+    pub fn write_buffer<T: HostSharable>(&self, buffer: &Buffer, buffer_offset: u32, data: &[T]) {
         let data_offset = data as *const [T] as *const () as usize;
         let data_size = std::mem::size_of_val(data);
         assert!(data_offset <= u32::MAX as usize);
@@ -184,7 +189,7 @@ impl Queue {
         let memory_data = js_sys::DataView::new(&memory_data, data_offset, data_size);
 
         self.queue.write_buffer_with_u32_and_buffer_source_and_u32(
-            buffer,
+            &buffer.buffer,
             buffer_offset,
             &memory_data,
             0,
@@ -193,7 +198,7 @@ impl Queue {
 
     pub fn write_buffer_single<T: HostSharable>(
         &self,
-        buffer: &web_sys::GpuBuffer,
+        buffer: &Buffer,
         buffer_offset: u32,
         data: &T,
     ) {
@@ -201,9 +206,9 @@ impl Queue {
         self.write_buffer(buffer, buffer_offset, data)
     }
 
-    pub fn write_buffer_raw(&self, buffer: &web_sys::GpuBuffer, buffer_offset: u32, data: &[u8]) {
+    pub fn write_buffer_raw(&self, buffer: &Buffer, buffer_offset: u32, data: &[u8]) {
         self.queue
-            .write_buffer_with_u32_and_u8_array(buffer, buffer_offset, data)
+            .write_buffer_with_u32_and_u8_array(&buffer.buffer, buffer_offset, data)
     }
 }
 
@@ -220,6 +225,73 @@ impl BindGroupLayout {
 
     pub fn set_label(&self, value: &str) {
         self.layout.set_label(value);
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuBuffer`]
+#[derive(Debug, Clone)]
+pub struct Buffer {
+    buffer: web_sys::GpuBuffer,
+}
+
+impl Buffer {
+    pub fn label(&self) -> String {
+        self.buffer.label()
+    }
+
+    pub fn size(&self) -> usize {
+        self.buffer.size() as usize
+    }
+
+    pub fn usage(&self) -> BufferUsage {
+        let usage = self.buffer.usage();
+        BufferUsage(usage)
+    }
+
+    pub fn map_state(&self) -> BufferMapState {
+        self.buffer.map_state().into()
+    }
+
+    pub fn mapped_range(&self) -> js_sys::ArrayBuffer {
+        self.buffer.get_mapped_range()
+    }
+
+    pub unsafe fn get_mapped_range<T: HostSharable>(&self) -> Box<[T]> {
+        if self.size() % std::mem::size_of::<T>() != 0 {
+            panic!("invalid buffer size for the selected element type")
+        }
+
+        let num_elements = self.size() / std::mem::size_of::<T>();
+        let mut elements = Vec::<MaybeUninit<T>>::with_capacity(num_elements);
+
+        let mapped_range = self.buffer.get_mapped_range();
+        let mapped_range_u8 = js_sys::Uint8Array::new(&mapped_range);
+
+        let elements_ptr = elements.as_mut_ptr().cast::<u8>();
+        mapped_range_u8.raw_copy_to_ptr(elements_ptr);
+        elements.set_len(num_elements);
+
+        let elements: Box<[MaybeUninit<T>]> = elements.into();
+        let ptr = Box::into_raw(elements);
+        Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+            ptr.cast::<T>(),
+            num_elements,
+        ))
+    }
+
+    pub async fn map_async(&self, mode: MapMode) {
+        let promise = self.buffer.map_async(mode.0);
+        JsFuture::from(promise).await.expect("could not map buffer");
+    }
+
+    pub fn unmap(&self) {
+        self.buffer.unmap()
+    }
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        self.buffer.destroy();
     }
 }
 
@@ -488,6 +560,168 @@ impl From<BufferBindingType> for web_sys::GpuBufferBindingType {
             BufferBindingType::Storage => web_sys::GpuBufferBindingType::Storage,
             BufferBindingType::ReadOnlyStorage => web_sys::GpuBufferBindingType::ReadOnlyStorage,
         }
+    }
+}
+
+/// Representation of a [`web_sys::GpuBufferDescriptor`].
+#[derive(Debug)]
+pub struct BufferDescriptor<'a> {
+    pub label: Option<Cow<'a, str>>,
+    pub size: usize,
+    pub usage: BufferUsage,
+    pub mapped_at_creation: Option<bool>,
+}
+
+impl From<BufferDescriptor<'_>> for web_sys::GpuBufferDescriptor {
+    fn from(value: BufferDescriptor) -> Self {
+        let size = value.size as f64;
+        let usage = value.usage.0;
+
+        let mut descriptor = web_sys::GpuBufferDescriptor::new(size, usage);
+        value.label.map(|x| descriptor.label(&x));
+        value
+            .mapped_at_creation
+            .map(|x| descriptor.mapped_at_creation(x));
+        descriptor
+    }
+}
+
+/// Representation of a buffer usage bitset.
+#[derive(Debug)]
+pub struct BufferUsage(u32);
+
+impl BufferUsage {
+    pub const COPY_SRC: Self = BufferUsage(web_sys::gpu_buffer_usage::COPY_SRC);
+    pub const COPY_DST: Self = BufferUsage(web_sys::gpu_buffer_usage::COPY_DST);
+    pub const INDEX: Self = BufferUsage(web_sys::gpu_buffer_usage::INDEX);
+    pub const INDIRECT: Self = BufferUsage(web_sys::gpu_buffer_usage::INDIRECT);
+    pub const MAP_READ: Self = BufferUsage(web_sys::gpu_buffer_usage::MAP_READ);
+    pub const MAP_WRITE: Self = BufferUsage(web_sys::gpu_buffer_usage::MAP_WRITE);
+    pub const QUERY_RESOLVE: Self = BufferUsage(web_sys::gpu_buffer_usage::QUERY_RESOLVE);
+    pub const STORAGE: Self = BufferUsage(web_sys::gpu_buffer_usage::STORAGE);
+    pub const UNIFORM: Self = BufferUsage(web_sys::gpu_buffer_usage::UNIFORM);
+    pub const VERTEX: Self = BufferUsage(web_sys::gpu_buffer_usage::VERTEX);
+}
+
+impl BitAnd for BufferUsage {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for BufferUsage {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl BitOr for BufferUsage {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for BufferUsage {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitXor for BufferUsage {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
+
+impl BitXorAssign for BufferUsage {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        self.0 ^= rhs.0;
+    }
+}
+
+/// Representation of a [`web_sys::GpuBufferMapState`].
+#[derive(Debug)]
+pub enum BufferMapState {
+    Unmapped,
+    Pending,
+    Mapped,
+}
+
+impl From<BufferMapState> for web_sys::GpuBufferMapState {
+    fn from(value: BufferMapState) -> Self {
+        match value {
+            BufferMapState::Unmapped => web_sys::GpuBufferMapState::Unmapped,
+            BufferMapState::Pending => web_sys::GpuBufferMapState::Pending,
+            BufferMapState::Mapped => web_sys::GpuBufferMapState::Mapped,
+        }
+    }
+}
+
+impl From<web_sys::GpuBufferMapState> for BufferMapState {
+    fn from(value: web_sys::GpuBufferMapState) -> Self {
+        match value {
+            web_sys::GpuBufferMapState::Unmapped => BufferMapState::Unmapped,
+            web_sys::GpuBufferMapState::Pending => BufferMapState::Pending,
+            web_sys::GpuBufferMapState::Mapped => BufferMapState::Mapped,
+            _ => panic!("unsupported map state"),
+        }
+    }
+}
+
+/// Representation of a buffer map mode bitset.
+#[derive(Debug)]
+pub struct MapMode(u32);
+
+impl MapMode {
+    pub const READ: Self = Self(web_sys::gpu_map_mode::READ);
+    pub const WRITE: Self = Self(web_sys::gpu_map_mode::WRITE);
+}
+
+impl BitAnd for MapMode {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for MapMode {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl BitOr for MapMode {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for MapMode {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitXor for MapMode {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
+
+impl BitXorAssign for MapMode {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        self.0 ^= rhs.0;
     }
 }
 

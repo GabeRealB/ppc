@@ -1,6 +1,6 @@
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::Debug,
     marker::PhantomData,
     rc::{Rc, Weak},
@@ -10,36 +10,46 @@ use wasm_bindgen::JsCast;
 
 use crate::{
     coordinates::{
-        Aabb, ComponentAccessible, CoordinateSystemTransformer, Length, LocalSpace, Offset,
-        Position, ScreenSpace, ScreenViewTransformer, ViewSpace, ViewWorldTransformer,
-        WorldLocalTransformer, WorldSpace,
+        Aabb, ComponentAccessible, CoordinateSystem, CoordinateSystemTransformer, Length,
+        LocalSpace, Offset, Position, ScreenSpace, ScreenViewTransformer, ViewSpace,
+        ViewWorldTransformer, WorldLocalTransformer, WorldSpace,
     },
     lerp::{InverseLerp, Lerp},
 };
 
-const AXIS_LOCAL_Y_SCALE: f32 = 0.8;
+const AXIS_LOCAL_Y_SCALE: f32 = 1.0;
 const AXIS_LINE_WIDTH_REM: f32 = 0.05;
 const AXIS_LINE_PADDING_REM: f32 = 0.0;
+const AXIS_TOP_PADDING: f32 = 1.0;
+const LOCAL_AXIS_HEIGHT: f32 = 1.0;
 
 const LABEL_PADDING_REM: f32 = 1.0;
 const LABEL_MARGIN_REM: f32 = 1.0;
 
+#[derive(Debug)]
 pub struct AxisArgs {
     label: Rc<str>,
     datums: Box<[f32]>,
     range: (f32, f32),
     min_range: (f32, f32),
-    visible_range: (f32, f32),
+    visible_range: Option<(f32, f32)>,
     state: AxisState,
 }
 
 impl AxisArgs {
     /// Constructs a new instance with default settings.
-    pub fn new(label: &str, datums: &[f32]) -> Self {
-        let datums = datums.iter().cloned().filter(|x| !x.is_nan());
+    pub fn new(label: &str, datums: Box<[f32]>) -> Self {
+        let mut datums: Vec<_> = datums.into();
+        datums.retain(|x| !x.is_nan());
 
-        let min = datums.clone().min_by(|x, y| x.partial_cmp(y).unwrap());
-        let max = datums.clone().max_by(|x, y| x.partial_cmp(y).unwrap());
+        let min = datums
+            .iter()
+            .cloned()
+            .min_by(|x, y| x.partial_cmp(y).unwrap());
+        let max = datums
+            .iter()
+            .cloned()
+            .max_by(|x, y| x.partial_cmp(y).unwrap());
 
         let mut range = min.zip(max).unwrap_or((0.0, 1.0));
         if range.0 == range.1 {
@@ -48,45 +58,54 @@ impl AxisArgs {
         }
 
         let min_range = range;
-        let visible_range = range;
 
         Self {
             label: label.into(),
-            datums: datums.collect(),
+            datums: datums.into(),
             range,
             min_range,
-            visible_range,
+            visible_range: None,
             state: AxisState::Collapsed,
         }
     }
 
     /// Sets the range of the axis.
     pub fn with_range(mut self, min: f32, max: f32) -> Self {
-        assert!(min < max, "min must be smaller than max");
+        assert!(
+            min < max,
+            "min must be smaller than max, min = {min}, max = {max}"
+        );
         assert!(min.is_finite(), "the minimum must be finite");
         assert!(max.is_finite(), "the maximum must be finite");
         assert!(
             min <= self.min_range.0 && max >= self.min_range.1,
-            "the range must be bigger or equal to the min/max of the datums"
+            "the range must be bigger or equal to the min/max of the datums, min = {min}, max = {max}, range = {:?}", 
+            self.min_range
         );
 
         self.range = (min, max);
-        self.visible_range.0 = self.visible_range.0.clamp(self.range.0, self.range.1);
-        self.visible_range.1 = self.visible_range.1.clamp(self.range.0, self.range.1);
+        if let Some(visible_range) = &mut self.visible_range {
+            visible_range.0 = visible_range.0.clamp(self.range.0, self.range.1);
+            visible_range.1 = visible_range.1.clamp(self.range.0, self.range.1);
+        }
         self
     }
 
     /// Sets the visible range of the axis.
     pub fn with_visible_range(mut self, min: f32, max: f32) -> Self {
-        assert!(min < max, "min must be smaller than max");
+        assert!(
+            min < max,
+            "min must be smaller than max, min = {min}, max = {max}"
+        );
         assert!(min.is_finite(), "the minimum must be finite");
         assert!(max.is_finite(), "the maximum must be finite");
         assert!(
             min >= self.range.0 && max <= self.range.1,
-            "the range must be smaller or equal to the datums range"
+            "the range must be smaller or equal to the datums range, min = {min}, max = {max}, range = {:?}",
+            self.range
         );
 
-        self.visible_range = (min, max);
+        self.visible_range = Some((min, max));
         self
     }
 
@@ -140,7 +159,7 @@ impl Axis {
         let label = args.label;
         let datums = args.datums;
         let datums_range = args.range;
-        let visible_datums_range = args.visible_range;
+        let visible_datums_range = args.visible_range.unwrap_or(datums_range);
         let state = args.state;
 
         let datums_normalized = datums
@@ -336,13 +355,21 @@ impl Axis {
         const POSITION_X: f32 = 0.5;
 
         let (label_width, label_height) = (self.get_text_length)(&self.label);
+        let (_, top_padding) = (self.get_rem_length)(AXIS_TOP_PADDING);
         let (padding_width, padding_height) = (self.get_rem_length)(AXIS_LINE_PADDING_REM);
 
         let start = Position::new((
             POSITION_X - padding_width.0 - (label_width.0 / 2.0),
-            1.0 - padding_height.0 - label_height.0 - padding_height.0,
+            LOCAL_AXIS_HEIGHT
+                - top_padding.0
+                - padding_height.0
+                - label_height.0
+                - padding_height.0,
         ));
-        let end = Position::new((POSITION_X + padding_width.0 + (label_width.0 / 2.0), 1.0));
+        let end = Position::new((
+            POSITION_X + padding_width.0 + (label_width.0 / 2.0),
+            LOCAL_AXIS_HEIGHT - top_padding.0,
+        ));
 
         Aabb::new(start, end)
     }
@@ -350,6 +377,7 @@ impl Axis {
     /// Returns the range of the axis line.
     pub fn axis_line_range(&self) -> (Position<LocalSpace>, Position<LocalSpace>) {
         const POSITION_X: f32 = 0.5;
+        let (_, top_padding) = (self.get_rem_length)(AXIS_TOP_PADDING);
         let (_, label_padding) = (self.get_rem_length)(LABEL_PADDING_REM);
         let (_, label_margin) = (self.get_rem_length)(LABEL_MARGIN_REM);
 
@@ -358,7 +386,8 @@ impl Axis {
         let (_, label_height) = (self.get_text_length)(&self.label);
 
         let start = min_label_height + label_margin;
-        let end = Length::new(1.0)
+        let end = Length::new(LOCAL_AXIS_HEIGHT)
+            - top_padding
             - label_padding
             - label_height
             - label_padding
@@ -378,10 +407,14 @@ impl Axis {
     pub fn label_position(&self) -> Position<LocalSpace> {
         const POSITION_X: f32 = 0.5;
 
+        let (_, top_padding) = (self.get_rem_length)(AXIS_TOP_PADDING);
         let (_, label_height) = (self.get_text_length)(&self.label);
         let (_, padding_height) = (self.get_rem_length)(AXIS_LINE_PADDING_REM);
 
-        Position::new((POSITION_X, 1.0 - padding_height.0 - label_height.0))
+        Position::new((
+            POSITION_X,
+            LOCAL_AXIS_HEIGHT - top_padding.0 - padding_height.0 - label_height.0,
+        ))
     }
 
     /// Returns the local position of the min label.
@@ -499,7 +532,6 @@ pub enum AxisState {
 #[derive(Clone)]
 pub struct Axes {
     axes: BTreeMap<String, Rc<Axis>>,
-    expanded_axis: Option<Rc<Axis>>,
 
     num_visible_axes: usize,
     visible_axis_start: Option<Rc<Axis>>,
@@ -687,7 +719,6 @@ impl Axes {
 
         Self {
             axes: Default::default(),
-            expanded_axis: None,
             num_visible_axes: 0,
             visible_axis_start: None,
             visible_axis_end: None,
@@ -717,6 +748,45 @@ impl Axes {
         )))
     }
 
+    /// Removes all axes that are not specified.
+    pub fn retain_axes(&mut self, axes: BTreeSet<&str>) {
+        self.axes.retain(|k, _| axes.contains(k as &str));
+
+        let visible_axes = self
+            .visible_axes()
+            .filter(|ax| axes.contains(&ax.key() as &str))
+            .collect::<Box<_>>();
+
+        for window in visible_axes.windows(2) {
+            let left = &window[0];
+            let right = &window[1];
+            left.set_right_neighbor(Some(right));
+            right.set_left_neighbor(Some(left));
+        }
+
+        self.num_visible_axes = visible_axes.len();
+        if let Some(ax) = visible_axes.first() {
+            self.visible_axis_start = Some(ax.clone());
+            ax.set_left_neighbor(None);
+        } else {
+            self.visible_axis_start = None;
+        }
+
+        if let Some(ax) = visible_axes.last() {
+            self.visible_axis_end = Some(ax.clone());
+            ax.set_right_neighbor(None);
+        } else {
+            self.visible_axis_end = None;
+        }
+
+        let mut mappings = self.coordinate_mappings.borrow_mut();
+        mappings.world_width = (self.num_visible_axes as f32).max(1.0);
+        mappings.world_bounding_box = Aabb::new(
+            Position::zero(),
+            Position::new((self.num_visible_axes as f32, 1.0)),
+        );
+    }
+
     /// Constructs and inserts a new instance of an [`Axis`].
     #[allow(clippy::too_many_arguments)]
     pub fn construct_axis(
@@ -724,7 +794,7 @@ impl Axes {
         this: &Rc<RefCell<Self>>,
         key: &str,
         label: &str,
-        datums: &[f32],
+        datums: Box<[f32]>,
         range: Option<(f32, f32)>,
         visible_range: Option<(f32, f32)>,
         hidden: bool,
@@ -786,7 +856,7 @@ impl Axes {
 
             // Axis is the first visible axis, so we set it to the start and end of the list.
             if self.num_visible_axes == 1 {
-                axis.set_world_offset(0.5);
+                axis.set_world_offset(0.0);
                 self.visible_axis_start = Some(axis.clone());
                 self.visible_axis_end = Some(axis.clone());
             }
@@ -796,7 +866,7 @@ impl Axes {
                 last_axis.set_right_neighbor(Some(&axis));
 
                 let last_axis_offset = last_axis.get_world_offset();
-                let axis_offset = last_axis_offset.floor() + 1.5;
+                let axis_offset = last_axis_offset.floor() + 1.0;
                 axis.set_world_offset(axis_offset);
 
                 axis.set_left_neighbor(Some(last_axis));
@@ -848,6 +918,108 @@ impl Axes {
         self.axes.get(key).cloned()
     }
 
+    /// Sets the bounding box of the view space.
+    pub fn set_view_bounding_box(&self, view_bounding_box: Aabb<ViewSpace>) {
+        let (view_width, view_height) = view_bounding_box.size().extract();
+
+        let mut mappings = self.coordinate_mappings.borrow_mut();
+        mappings.view_bounding_box = view_bounding_box;
+        mappings.view_width = view_width;
+        mappings.view_height = view_height;
+    }
+
+    /// Returns the axis line size.
+    pub fn axis_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
+        (self.get_rem_length_world)(AXIS_LINE_WIDTH_REM)
+    }
+
+    /// Returns the width of the world space.
+    pub fn world_width(&self) -> f32 {
+        let mappings = self.coordinate_mappings.borrow();
+        mappings.world_width
+    }
+
+    /// Returns a transformer to map between the screen space and world space.
+    pub fn space_transformer(
+        &self,
+    ) -> impl CoordinateSystemTransformer<ScreenSpace, WorldSpace>
+           + CoordinateSystemTransformer<WorldSpace, ScreenSpace> {
+        struct ScreenWorldTransformer {
+            screen: ScreenViewTransformer,
+            world: ViewWorldTransformer,
+        }
+
+        impl CoordinateSystemTransformer<ScreenSpace, WorldSpace> for ScreenWorldTransformer {
+            fn transform_position(
+                &self,
+                position: <ScreenSpace as CoordinateSystem>::Position,
+            ) -> <WorldSpace as CoordinateSystem>::Position {
+                let position = <ScreenViewTransformer as CoordinateSystemTransformer<
+                    ScreenSpace,
+                    ViewSpace,
+                >>::transform_position(&self.screen, position);
+                <ViewWorldTransformer as CoordinateSystemTransformer<
+                    ViewSpace,
+                    WorldSpace,
+                >>::transform_position(&self.world, position)
+            }
+
+            fn transform_offset(
+                &self,
+                offset: <ScreenSpace as CoordinateSystem>::Offset,
+            ) -> <WorldSpace as CoordinateSystem>::Offset {
+                let offset = <ScreenViewTransformer as CoordinateSystemTransformer<
+                    ScreenSpace,
+                    ViewSpace,
+                >>::transform_offset(&self.screen, offset);
+                <ViewWorldTransformer as CoordinateSystemTransformer<
+                    ViewSpace,
+                    WorldSpace,
+                >>::transform_offset(&self.world, offset)
+            }
+        }
+
+        impl CoordinateSystemTransformer<WorldSpace, ScreenSpace> for ScreenWorldTransformer {
+            fn transform_position(
+                &self,
+                position: <WorldSpace as CoordinateSystem>::Position,
+            ) -> <ScreenSpace as CoordinateSystem>::Position {
+                let position = <ViewWorldTransformer as CoordinateSystemTransformer<
+                    WorldSpace,
+                    ViewSpace,
+                >>::transform_position(&self.world, position);
+                <ScreenViewTransformer as CoordinateSystemTransformer<
+                    ViewSpace,
+                    ScreenSpace,
+                >>::transform_position(&self.screen, position)
+            }
+
+            fn transform_offset(
+                &self,
+                offset: <WorldSpace as CoordinateSystem>::Offset,
+            ) -> <ScreenSpace as CoordinateSystem>::Offset {
+                let offset = <ViewWorldTransformer as CoordinateSystemTransformer<
+                    WorldSpace,
+                    ViewSpace,
+                >>::transform_offset(&self.world, offset);
+                <ScreenViewTransformer as CoordinateSystemTransformer<
+                    ViewSpace,
+                    ScreenSpace,
+                >>::transform_offset(&self.screen, offset)
+            }
+        }
+
+        let mappings = self.coordinate_mappings.borrow();
+        let screen = ScreenViewTransformer::new(mappings.view_height);
+        let world = ViewWorldTransformer::new(
+            mappings.view_height,
+            mappings.view_width,
+            mappings.world_width,
+        );
+
+        ScreenWorldTransformer { screen, world }
+    }
+
     /// Returns an iterator over all contained axes.
     pub fn axes(&self) -> impl Iterator<Item = Rc<Axis>> + '_ {
         self.axes.values().cloned()
@@ -868,7 +1040,6 @@ impl Debug for Axes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Axes")
             .field("axes", &self.axes)
-            .field("expanded_axis", &self.expanded_axis)
             .field("num_visible_axes", &self.num_visible_axes)
             .field("visible_axis_start", &self.visible_axis_start)
             .field("visible_axis_end", &self.visible_axis_end)

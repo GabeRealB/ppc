@@ -9,25 +9,30 @@ class App extends Component {
         super(props);
         this.state = {
             axes: {
-                "Var 1": {
+                "v_1": {
+                    label: "Var 1",
                     range: [0, 100],
-                    values: [...Array(100)].map(() => Math.random() * 100)
+                    datums: [...Array(100)].map(() => Math.random() * 100)
                 },
-                "Var 2": {
+                "v_2": {
+                    label: "Var 2",
                     range: [15, 30],
-                    values: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
                 },
-                "Var 3": {
+                "v_3": {
+                    label: "Var 3",
                     range: [0, 1],
-                    values: [...Array(100)].map(() => (Math.random()) > 0.5 ? 1 : 0)
+                    datums: [...Array(100)].map(() => (Math.random()) > 0.5 ? 1 : 0)
                 },
-                "Var 4": {
+                "v_4": {
+                    label: "Var 4",
                     range: [15, 30],
-                    values: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
                 },
-                "Var 5": {
+                "v_5": {
+                    label: "Var 5",
                     range: [15, 30],
-                    values: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
                 },
             }
         };

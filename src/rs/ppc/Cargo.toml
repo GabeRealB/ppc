@@ -21,6 +21,9 @@ version = "0.3.64"
 features = [
     "console",
     "Window",
+    "Document",
+    "Element",
+    "CssStyleDeclaration",
     "Navigator",
     "Gpu",
     "GpuAdapter",
@@ -36,8 +39,10 @@ features = [
     "GpuBindGroupLayoutDescriptor",
     "GpuBindGroupLayoutEntry",
     "GpuBuffer",
+    "GpuBufferMapState",
     "GpuBufferBindingType",
     "GpuBufferBindingLayout",
+    "GpuBufferDescriptor",
     "GpuTextureBindingLayout",
     "GpuTextureSampleType",
     "GpuTextureViewDimension",
@@ -82,6 +87,7 @@ features = [
     "gpu_shader_stage",
     "gpu_texture_usage",
     "CanvasRenderingContext2d",
+    "TextMetrics",
     "HtmlCanvasElement",
     "PointerEvent",
 ]
