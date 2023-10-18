@@ -2,7 +2,7 @@
 
 use std::{
     borrow::Cow,
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign},
 };
 
@@ -36,6 +36,18 @@ impl Device {
         }
     }
 
+    pub fn create_bind_group<const N: usize>(
+        &self,
+        descriptor: BindGroupDescriptor<'_, N>,
+    ) -> BindGroup {
+        let group = self.device.create_bind_group(&descriptor.into());
+        if group.is_falsy() {
+            panic!("could not create bind group");
+        }
+
+        BindGroup { group }
+    }
+
     pub fn create_bind_group_layout<const N: usize>(
         &self,
         descriptor: BindGroupLayoutDescriptor<'_, N>,
@@ -55,6 +67,20 @@ impl Device {
         }
 
         Buffer { buffer }
+    }
+
+    pub fn create_command_encoder(
+        &self,
+        descriptor: CommandEncoderDescriptor<'_>,
+    ) -> CommandEncoder {
+        let encoder = self
+            .device
+            .create_command_encoder_with_descriptor(&descriptor.into());
+        if encoder.is_falsy() {
+            panic!("could not create command encoder")
+        }
+
+        CommandEncoder { encoder }
     }
 
     pub fn create_pipeline_layout<const N: usize>(
@@ -173,6 +199,12 @@ impl Queue {
         self.queue.set_label(value);
     }
 
+    pub fn submit(&self, command_buffers: &[CommandBuffer]) {
+        let command_buffers =
+            js_sys::Array::from_iter(command_buffers.iter().map(|x| x.command_buffer.clone()));
+        self.queue.submit(&command_buffers.into());
+    }
+
     pub fn write_buffer<T: HostSharable>(&self, buffer: &Buffer, buffer_offset: u32, data: &[T]) {
         let data_offset = data as *const [T] as *const () as usize;
         let data_size = std::mem::size_of_val(data);
@@ -221,6 +253,22 @@ impl Queue {
     pub fn write_buffer_raw(&self, buffer: &Buffer, buffer_offset: u32, data: &[u8]) {
         self.queue
             .write_buffer_with_u32_and_u8_array(&buffer.buffer, buffer_offset, data)
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuBindGroup`].
+#[derive(Debug, Clone)]
+pub struct BindGroup {
+    group: web_sys::GpuBindGroup,
+}
+
+impl BindGroup {
+    pub fn label(&self) -> String {
+        self.group.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.group.set_label(value);
     }
 }
 
@@ -303,11 +351,286 @@ impl Buffer {
     pub fn unmap(&self) {
         self.buffer.unmap()
     }
+
+    pub fn destroy(&self) {
+        self.buffer.destroy();
+    }
 }
 
-impl Drop for Buffer {
-    fn drop(&mut self) {
-        self.buffer.destroy();
+/// Wrapper of a [`web_sys::GpuCommandEncoder`].
+#[derive(Debug, Clone)]
+pub struct CommandEncoder {
+    encoder: web_sys::GpuCommandEncoder,
+}
+
+impl CommandEncoder {
+    pub fn label(&self) -> String {
+        self.encoder.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.encoder.set_label(value);
+    }
+
+    pub fn begin_compute_pass(
+        &self,
+        descriptor: Option<ComputePassDescriptor<'_>>,
+    ) -> ComputePassEncoder {
+        let encoder = if let Some(descriptor) = descriptor {
+            self.encoder
+                .begin_compute_pass_with_descriptor(&descriptor.into())
+        } else {
+            self.encoder.begin_compute_pass()
+        };
+        if encoder.is_falsy() {
+            panic!("could not begin compute pass")
+        }
+
+        ComputePassEncoder { encoder }
+    }
+
+    pub fn begin_render_pass<const N: usize>(
+        &self,
+        descriptor: RenderPassDescriptor<'_, N>,
+    ) -> RenderPassEncoder {
+        let encoder = self.encoder.begin_render_pass(&descriptor.into());
+        if encoder.is_falsy() {
+            panic!("could not begin render pass")
+        }
+
+        RenderPassEncoder { encoder }
+    }
+
+    pub fn clear_buffer(&self, buffer: &Buffer) {
+        self.encoder.clear_buffer(&buffer.buffer)
+    }
+
+    pub fn clear_buffer_with_offset(&self, buffer: &Buffer, offset: usize) {
+        self.encoder
+            .clear_buffer_with_u32(&buffer.buffer, offset as u32)
+    }
+
+    pub fn clear_buffer_with_offset_and_size(&self, buffer: &Buffer, offset: usize, size: usize) {
+        self.encoder
+            .clear_buffer_with_u32_and_u32(&buffer.buffer, offset as u32, size as u32)
+    }
+
+    pub fn copy_buffer_to_buffer(
+        &self,
+        source: &Buffer,
+        source_offset: usize,
+        destination: &Buffer,
+        destination_offset: usize,
+        size: usize,
+    ) {
+        self.encoder.copy_buffer_to_buffer_with_u32_and_u32_and_u32(
+            &source.buffer,
+            source_offset as u32,
+            &destination.buffer,
+            destination_offset as u32,
+            size as u32,
+        )
+    }
+
+    pub fn finish(&self, descriptor: Option<CommandBufferDescriptor<'_>>) -> CommandBuffer {
+        let command_buffer = if let Some(descriptor) = descriptor {
+            self.encoder.finish_with_descriptor(&descriptor.into())
+        } else {
+            self.encoder.finish()
+        };
+
+        CommandBuffer { command_buffer }
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuComputePassEncoder`].
+#[derive(Debug, Clone)]
+pub struct ComputePassEncoder {
+    encoder: web_sys::GpuComputePassEncoder,
+}
+
+impl ComputePassEncoder {
+    pub fn label(&self) -> String {
+        self.encoder.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.encoder.set_label(value);
+    }
+
+    pub fn dispatch_workgroups(&self, workgroup_count: &[u32]) {
+        match workgroup_count.len() {
+            1 => self.encoder.dispatch_workgroups(workgroup_count[0]),
+            2 => self
+                .encoder
+                .dispatch_workgroups_with_workgroup_count_y(workgroup_count[0], workgroup_count[1]),
+            3 => self
+                .encoder
+                .dispatch_workgroups_with_workgroup_count_y_and_workgroup_count_z(
+                    workgroup_count[0],
+                    workgroup_count[1],
+                    workgroup_count[2],
+                ),
+            _ => panic!("invalid workgroup count"),
+        }
+    }
+
+    pub fn dispatch_workgroups_indirect(&self, indirect_buffer: &Buffer, indirect_offset: usize) {
+        self.encoder
+            .dispatch_workgroups_indirect_with_f64(&indirect_buffer.buffer, indirect_offset as f64)
+    }
+
+    pub fn end(&self) {
+        self.encoder.end()
+    }
+
+    pub fn set_pipeline(&self, pipeline: &ComputePipeline) {
+        self.encoder.set_pipeline(&pipeline.pipeline)
+    }
+
+    pub fn set_bind_group(&self, index: u32, bind_group: &BindGroup) {
+        self.encoder.set_bind_group(index, &bind_group.group)
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuRenderPassEncoder`].
+#[derive(Debug, Clone)]
+pub struct RenderPassEncoder {
+    encoder: web_sys::GpuRenderPassEncoder,
+}
+
+impl RenderPassEncoder {
+    pub fn label(&self) -> String {
+        self.encoder.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.encoder.set_label(value);
+    }
+
+    pub fn begin_occlusion_query(&self, query_index: u32) {
+        self.encoder.begin_occlusion_query(query_index)
+    }
+
+    pub fn end(&self) {
+        self.encoder.end()
+    }
+
+    pub fn end_occlusion_query(&self) {
+        self.encoder.end_occlusion_query()
+    }
+
+    pub fn set_blend_constant(&self, color: [f64; 4]) {
+        let [r, g, b, a] = color;
+        self.encoder
+            .set_blend_constant_with_gpu_color_dict(&web_sys::GpuColorDict::new(a, b, g, r))
+    }
+
+    pub fn set_scissor_rect(&self, x: u32, y: u32, width: u32, height: u32) {
+        self.encoder.set_scissor_rect(x, y, width, height)
+    }
+
+    pub fn set_stencil_reference(&self, reference: u32) {
+        self.encoder.set_stencil_reference(reference)
+    }
+
+    pub fn set_viewport(
+        &self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        min_depth: f32,
+        max_depth: f32,
+    ) {
+        self.encoder
+            .set_viewport(x, y, width, height, min_depth, max_depth)
+    }
+
+    pub fn set_bind_group(&self, index: u32, bind_group: &BindGroup) {
+        self.encoder.set_bind_group(index, &bind_group.group)
+    }
+
+    pub fn draw(&self, vertex_count: usize) {
+        self.encoder.draw(vertex_count as u32)
+    }
+
+    pub fn draw_with_instance_count(&self, vertex_count: usize, instance_count: usize) {
+        self.encoder
+            .draw_with_instance_count(vertex_count as u32, instance_count as u32)
+    }
+
+    pub fn draw_with_instance_count_and_first_vertex(
+        &self,
+        vertex_count: usize,
+        instance_count: usize,
+        first_vertex: usize,
+    ) {
+        self.encoder.draw_with_instance_count_and_first_vertex(
+            vertex_count as u32,
+            instance_count as u32,
+            first_vertex as u32,
+        )
+    }
+
+    pub fn draw_with_instance_count_and_first_vertex_and_first_instance(
+        &self,
+        vertex_count: usize,
+        instance_count: usize,
+        first_vertex: usize,
+        first_instance: usize,
+    ) {
+        self.encoder
+            .draw_with_instance_count_and_first_vertex_and_first_instance(
+                vertex_count as u32,
+                instance_count as u32,
+                first_vertex as u32,
+                first_instance as u32,
+            )
+    }
+
+    pub fn set_pipeline(&self, pipeline: &RenderPipeline) {
+        self.encoder.set_pipeline(&pipeline.pipeline)
+    }
+
+    pub fn set_vertex_buffer(&self, slot: u32, buffer: &Buffer) {
+        self.encoder.set_vertex_buffer(slot, &buffer.buffer)
+    }
+
+    pub fn set_vertex_buffer_with_offset(&self, slot: u32, buffer: &Buffer, offset: usize) {
+        self.encoder
+            .set_vertex_buffer_with_u32(slot, &buffer.buffer, offset as u32)
+    }
+
+    pub fn set_vertex_buffer_with_offset_and_size(
+        &self,
+        slot: u32,
+        buffer: &Buffer,
+        offset: usize,
+        size: usize,
+    ) {
+        self.encoder.set_vertex_buffer_with_u32_and_u32(
+            slot,
+            &buffer.buffer,
+            offset as u32,
+            size as u32,
+        )
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuCommandBuffer`].
+#[derive(Debug, Clone)]
+pub struct CommandBuffer {
+    command_buffer: web_sys::GpuCommandBuffer,
+}
+
+impl CommandBuffer {
+    pub fn label(&self) -> String {
+        self.command_buffer.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.command_buffer.set_label(value);
     }
 }
 
@@ -422,6 +745,10 @@ pub struct Texture {
 }
 
 impl Texture {
+    pub fn from_raw(texture: web_sys::GpuTexture) -> Self {
+        Self { texture }
+    }
+
     pub fn width(&self) -> u32 {
         self.texture.width()
     }
@@ -492,6 +819,85 @@ impl TextureView {
 
     pub fn set_label(&self, value: &str) {
         self.view.set_label(value);
+    }
+}
+
+/// Representation of a [`web_sys::GpuBindGroupDescriptor`].
+#[derive(Debug)]
+pub struct BindGroupDescriptor<'a, const N: usize> {
+    pub label: Option<Cow<'a, str>>,
+    pub entries: [BindGroupEntry; N],
+    pub layout: BindGroupLayout,
+}
+
+impl<'a, const N: usize> From<BindGroupDescriptor<'a, N>> for web_sys::GpuBindGroupDescriptor {
+    fn from(value: BindGroupDescriptor<'a, N>) -> Self {
+        let entries = value
+            .entries
+            .map::<_, web_sys::GpuBindGroupEntry>(|e| e.into());
+        let entries = js_sys::Array::from_iter(entries);
+
+        let mut descriptor = web_sys::GpuBindGroupDescriptor::new(&entries, &value.layout.layout);
+
+        if let Some(label) = value.label {
+            descriptor.label(&label);
+        }
+
+        descriptor
+    }
+}
+
+/// Representation of a [`web_sys::GpuBindGroupEntry`].
+#[derive(Debug)]
+pub struct BindGroupEntry {
+    pub binding: u32,
+    pub resource: BindGroupEntryResource,
+}
+
+impl From<BindGroupEntry> for web_sys::GpuBindGroupEntry {
+    fn from(value: BindGroupEntry) -> Self {
+        web_sys::GpuBindGroupEntry::new(value.binding, &value.resource.into())
+    }
+}
+
+/// A resource for a [`BindGroupEntry`].
+#[derive(Debug)]
+pub enum BindGroupEntryResource {
+    Buffer(BufferBinding),
+    Sampler(Sampler),
+    TextureView(TextureView),
+}
+
+impl From<BindGroupEntryResource> for JsValue {
+    fn from(value: BindGroupEntryResource) -> Self {
+        match value {
+            BindGroupEntryResource::Buffer(x) => web_sys::GpuBufferBinding::from(x).into(),
+            BindGroupEntryResource::Sampler(x) => x.sampler.into(),
+            BindGroupEntryResource::TextureView(x) => x.view.into(),
+        }
+    }
+}
+
+/// Representation of a [`web_sys::GpuBufferBinding`].
+#[derive(Debug)]
+pub struct BufferBinding {
+    pub buffer: Buffer,
+    pub offset: Option<usize>,
+    pub size: Option<usize>,
+}
+
+impl From<BufferBinding> for web_sys::GpuBufferBinding {
+    fn from(value: BufferBinding) -> Self {
+        let mut binding = web_sys::GpuBufferBinding::new(&value.buffer.buffer);
+
+        if let Some(offset) = value.offset {
+            binding.offset(offset as f64);
+        }
+        if let Some(size) = value.size {
+            binding.size(size as f64);
+        }
+
+        binding
     }
 }
 
@@ -642,7 +1048,7 @@ impl From<BufferBindingLayout> for web_sys::GpuBufferBindingLayout {
 }
 
 /// Representation of a [`web_sys::GpuBufferBindingType`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BufferBindingType {
     Uniform,
     Storage,
@@ -742,7 +1148,7 @@ impl BitXorAssign for BufferUsage {
 }
 
 /// Representation of a [`web_sys::GpuBufferMapState`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BufferMapState {
     Unmapped,
     Pending,
@@ -842,7 +1248,7 @@ impl From<TextureBindingLayout> for web_sys::GpuTextureBindingLayout {
 }
 
 /// Representation of a [`web_sys::GpuTextureSampleType`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextureSampleType {
     Float,
     UnfilterableFloat,
@@ -866,7 +1272,7 @@ impl From<TextureSampleType> for web_sys::GpuTextureSampleType {
 }
 
 /// Representation of a [`web_sys::GpuTextureDimension`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextureDimension {
     D1,
     D2,
@@ -895,7 +1301,7 @@ impl From<TextureDimension> for web_sys::GpuTextureDimension {
 }
 
 /// Representation of a [`web_sys::GpuTextureViewDimension`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextureViewDimension {
     D1,
     D2,
@@ -918,8 +1324,8 @@ impl From<TextureViewDimension> for web_sys::GpuTextureViewDimension {
     }
 }
 
-// Available texture formats
-#[derive(Debug, Clone, Copy, Hash)]
+// Available texture formats.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextureFormat {
     R8Unorm,
     R8Snorm,
@@ -1240,7 +1646,7 @@ impl From<StorageTextureBindingLayout> for web_sys::GpuStorageTextureBindingLayo
 }
 
 /// Representation of a [`web_sys::GpuStorageTextureAccess`].
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StorageTextureAccess {
     WriteOnly,
 }
@@ -1268,7 +1674,7 @@ impl From<SamplerBindingLayout> for web_sys::GpuSamplerBindingLayout {
 }
 
 /// Representation of a [`web_sys::GpuSamplerBindingType`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SamplerBindingType {
     Filtering,
     NonFiltering,
@@ -1510,7 +1916,7 @@ impl From<FragmentStateBlendEntry> for js_sys::Object {
 }
 
 /// Supported blend factors.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BlendFactor {
     Constant,
     Dst,
@@ -1548,7 +1954,7 @@ impl From<BlendFactor> for JsValue {
 }
 
 // Supported blend operations.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BlendOperation {
     Add,
     Max,
@@ -1624,7 +2030,7 @@ impl From<PrimitiveState> for web_sys::GpuPrimitiveState {
 }
 
 /// Possible cull modes.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CullMode {
     Back,
     Front,
@@ -1641,8 +2047,8 @@ impl From<CullMode> for web_sys::GpuCullMode {
     }
 }
 
-/// Possible front face modes
-#[derive(Debug)]
+/// Possible front face modes.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrontFace {
     Ccw,
     CW,
@@ -1658,7 +2064,7 @@ impl From<FrontFace> for web_sys::GpuFrontFace {
 }
 
 /// Possible index formats.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IndexFormat {
     UInt16,
     UInt32,
@@ -1674,7 +2080,7 @@ impl From<IndexFormat> for web_sys::GpuIndexFormat {
 }
 
 /// Possible primitive topologies.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PrimitiveTopology {
     LineList,
     LineStrip,
@@ -1738,7 +2144,7 @@ impl<'a> From<SamplerDescriptor<'a>> for web_sys::GpuSamplerDescriptor {
 }
 
 /// Representation of a [`web_sys::GpuAddressMode`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AddressMode {
     ClampToEdge,
     Repeat,
@@ -1756,7 +2162,7 @@ impl From<AddressMode> for web_sys::GpuAddressMode {
 }
 
 /// Representation of a [`web_sys::GpuCompareFunction`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CompareFunction {
     Never,
     Less,
@@ -1784,7 +2190,7 @@ impl From<CompareFunction> for web_sys::GpuCompareFunction {
 }
 
 /// Representation of a [`web_sys::GpuFilterMode`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FilterMode {
     Nearest,
     Linear,
@@ -1800,7 +2206,7 @@ impl From<FilterMode> for web_sys::GpuFilterMode {
 }
 
 /// Representation of a [`web_sys::GpuMipmapFilterMode`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MipMapFilterMode {
     Nearest,
     Linear,
@@ -1889,7 +2295,7 @@ impl<'a> From<TextureViewDescriptor<'a>> for web_sys::GpuTextureViewDescriptor {
 }
 
 /// Representation of a [`web_sys::GpuTextureAspect`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextureAspect {
     All,
     StencilOnly,
@@ -1957,6 +2363,136 @@ impl BitXor for TextureUsage {
 impl BitXorAssign for TextureUsage {
     fn bitxor_assign(&mut self, rhs: Self) {
         self.0 ^= rhs.0;
+    }
+}
+
+/// Representation of a [`web_sys::GpuCommandEncoderDescriptor`].
+#[derive(Debug)]
+pub struct CommandEncoderDescriptor<'a> {
+    pub label: Option<Cow<'a, str>>,
+}
+
+impl From<CommandEncoderDescriptor<'_>> for web_sys::GpuCommandEncoderDescriptor {
+    fn from(value: CommandEncoderDescriptor<'_>) -> Self {
+        let mut descriptor = web_sys::GpuCommandEncoderDescriptor::new();
+        value.label.map(|x| descriptor.label(&x));
+        descriptor
+    }
+}
+
+/// Representation of a [`web_sys::GpuComputePassDescriptor`].
+#[derive(Debug)]
+pub struct ComputePassDescriptor<'a> {
+    pub label: Option<Cow<'a, str>>,
+}
+
+impl From<ComputePassDescriptor<'_>> for web_sys::GpuComputePassDescriptor {
+    fn from(value: ComputePassDescriptor<'_>) -> Self {
+        let mut descriptor = web_sys::GpuComputePassDescriptor::new();
+        value.label.map(|x| descriptor.label(&x));
+        descriptor
+    }
+}
+
+/// Representation of a [`web_sys::GpuRenderPassDescriptor`].
+#[derive(Debug)]
+pub struct RenderPassDescriptor<'a, const N: usize> {
+    pub label: Option<Cow<'a, str>>,
+    pub color_attachments: [RenderPassColorAttachments; N],
+    pub max_draw_count: Option<usize>,
+}
+
+impl<const N: usize> From<RenderPassDescriptor<'_, N>> for web_sys::GpuRenderPassDescriptor {
+    fn from(value: RenderPassDescriptor<'_, N>) -> Self {
+        let color_attachments = value.color_attachments.map::<_, JsValue>(Into::into);
+        let color_attachments = js_sys::Array::from_iter(color_attachments);
+
+        let mut descriptor = web_sys::GpuRenderPassDescriptor::new(&color_attachments);
+        value.label.map(|x| descriptor.label(&x));
+        value
+            .max_draw_count
+            .map(|x| descriptor.max_draw_count(x as f64));
+        descriptor
+    }
+}
+
+/// Color attachments of a [`RenderPassDescriptor`].
+#[derive(Debug)]
+pub struct RenderPassColorAttachments {
+    pub clear_value: Option<[f32; 4]>,
+    pub load_op: RenderPassLoadOp,
+    pub store_op: RenderPassStoreOp,
+    pub resolve_target: Option<TextureView>,
+    pub view: TextureView,
+}
+
+impl From<RenderPassColorAttachments> for JsValue {
+    fn from(value: RenderPassColorAttachments) -> Self {
+        let object: ObjectExt = js_sys::Object::new().unchecked_into::<ObjectExt>();
+
+        if let Some(x) = value.clear_value {
+            object.set(
+                "clearValue".into(),
+                js_sys::Array::from_iter(x.map(js_sys::Number::from)).into(),
+            )
+        }
+
+        object.set("loadOp".into(), value.load_op.into());
+        object.set("storeOp".into(), value.store_op.into());
+
+        if let Some(resolve_target) = value.resolve_target {
+            object.set("resolveTarget".into(), resolve_target.view.into())
+        }
+
+        object.set("view".into(), value.view.view.into());
+
+        object.unchecked_into::<js_sys::Object>().into()
+    }
+}
+
+/// Load operation of a [`RenderPassColorAttachments`].
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RenderPassLoadOp {
+    Clear,
+    Load,
+}
+
+impl From<RenderPassLoadOp> for JsValue {
+    fn from(value: RenderPassLoadOp) -> Self {
+        match value {
+            RenderPassLoadOp::Clear => JsValue::from_str("clear"),
+            RenderPassLoadOp::Load => JsValue::from_str("load"),
+        }
+    }
+}
+
+/// Store operation of a [`RenderPassColorAttachments`].
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RenderPassStoreOp {
+    Discard,
+    Store,
+}
+
+impl From<RenderPassStoreOp> for JsValue {
+    fn from(value: RenderPassStoreOp) -> Self {
+        match value {
+            RenderPassStoreOp::Discard => JsValue::from_str("discard"),
+            RenderPassStoreOp::Store => JsValue::from_str("store"),
+        }
+    }
+}
+
+/// Representation of a [`web_sys::GpuCommandBufferDescriptor`].
+#[derive(Debug)]
+pub struct CommandBufferDescriptor<'a> {
+    pub label: Option<Cow<'a, str>>,
+}
+
+impl From<CommandBufferDescriptor<'_>> for web_sys::GpuCommandBufferDescriptor {
+    fn from(value: CommandBufferDescriptor<'_>) -> Self {
+        let mut descriptor = web_sys::GpuCommandBufferDescriptor::new();
+        value.label.map(|x| descriptor.label(&x));
+        descriptor
     }
 }
 

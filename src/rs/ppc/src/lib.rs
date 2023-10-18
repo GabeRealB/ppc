@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeSet, mem::MaybeUninit, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, mem::MaybeUninit, rc::Rc};
 
 use async_channel::{Receiver, Sender};
 use wasm_bindgen::prelude::*;
@@ -17,6 +17,8 @@ mod colors;
 mod coordinates;
 mod lerp;
 mod pipelines;
+
+const MSAA_SAMPLES: u32 = 4;
 
 /// An event queue to interact with the renderer.
 #[wasm_bindgen]
@@ -185,6 +187,7 @@ pub struct Renderer {
     device: webgpu::Device,
     pipelines: pipelines::Pipelines,
     buffers: buffers::Buffers,
+    render_texture: webgpu::Texture,
     events: Option<Receiver<Event>>,
     axes: Rc<RefCell<axis::Axes>>,
     redraw: bool,
@@ -252,6 +255,16 @@ impl Renderer {
         let preferred_format = gpu.get_preferred_canvas_format().into();
         let pipelines = pipelines::Pipelines::new(&device, preferred_format).await;
         let buffers = buffers::Buffers::new(&device);
+        let render_texture = device.create_texture(webgpu::TextureDescriptor::<'_, 2, 0> {
+            label: Some(Cow::Borrowed("render texture")),
+            dimension: None,
+            format: preferred_format,
+            mip_level_count: None,
+            sample_count: Some(MSAA_SAMPLES),
+            size: [canvas_gpu.width() as usize, canvas_gpu.height() as usize],
+            usage: webgpu::TextureUsage::RENDER_ATTACHMENT,
+            view_formats: None,
+        });
 
         let client_width = canvas_gpu.client_width() as f32;
         let client_height = canvas_gpu.client_height() as f32;
@@ -293,6 +306,7 @@ impl Renderer {
             context_2d,
             device,
             pipelines,
+            render_texture,
             buffers,
             events: None,
             axes,
@@ -358,6 +372,68 @@ impl Renderer {
 }
 
 impl Renderer {
+    fn render_axes(&self, encoder: &webgpu::CommandEncoder, msaa_texture: &webgpu::TextureView) {
+        let num_lines = self.buffers.axes.lines.len();
+        if num_lines == 0 {
+            return;
+        }
+
+        let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
+            label: Some(Cow::Borrowed("axes lines bind group")),
+            entries: [
+                webgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
+                        buffer: self.buffers.general.matrix.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                webgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
+                        buffer: self.buffers.axes.config.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                webgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
+                        buffer: self.buffers.general.axes.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                webgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
+                        buffer: self.buffers.axes.lines.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.pipelines.render_pipelines.draw_lines.0.clone(),
+        });
+
+        let pass = encoder.begin_render_pass(webgpu::RenderPassDescriptor {
+            label: Some(Cow::Borrowed("axes render pass")),
+            color_attachments: [webgpu::RenderPassColorAttachments {
+                clear_value: None,
+                load_op: webgpu::RenderPassLoadOp::Load,
+                store_op: webgpu::RenderPassStoreOp::Store,
+                resolve_target: None,
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        });
+        pass.set_pipeline(&self.pipelines.render_pipelines.draw_lines.1);
+        pass.set_bind_group(0, &bind_group);
+        pass.draw_with_instance_count(6, num_lines);
+        pass.end();
+    }
+
     fn render_labels(&self) {
         self.context_2d.save();
         self.context_2d.set_text_align("center");
@@ -438,6 +514,18 @@ impl Renderer {
             return;
         }
 
+        let command_encoder = self
+            .device
+            .create_command_encoder(webgpu::CommandEncoderDescriptor { label: None });
+        let texture_view =
+            webgpu::Texture::from_raw(self.context_gpu.get_current_texture()).create_view(None);
+        let msaa_texture_view = self.render_texture.create_view(None);
+
+        // Draw the main view into the framebuffer.
+        self.render_axes(&command_encoder, &msaa_texture_view);
+
+        self.device.queue().submit(&[command_encoder.finish(None)]);
+
         // Draw the text and ui control elements.
         self.context_2d.clear_rect(
             0.0,
@@ -498,6 +586,22 @@ impl Renderer {
         self.context_2d
             .scale(device_pixel_ratio as f64, device_pixel_ratio as f64)
             .unwrap();
+
+        self.render_texture = self
+            .device
+            .create_texture(webgpu::TextureDescriptor::<'_, 2, 0> {
+                label: Some(Cow::Borrowed("render texture")),
+                dimension: None,
+                format: self.render_texture.format(),
+                mip_level_count: None,
+                sample_count: Some(MSAA_SAMPLES),
+                size: [
+                    self.canvas_gpu.width() as usize,
+                    self.canvas_gpu.height() as usize,
+                ],
+                usage: webgpu::TextureUsage::RENDER_ATTACHMENT,
+                view_formats: None,
+            });
 
         let guard = self.axes.borrow();
         guard.set_view_bounding_box(Aabb::new(

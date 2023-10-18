@@ -1,7 +1,7 @@
 use std::{borrow::Cow, mem::MaybeUninit};
 
 use crate::{
-    webgpu::{Buffer, BufferDescriptor, BufferUsage, Device},
+    webgpu::{Buffer, BufferDescriptor, BufferUsage, Device, Sampler, Texture},
     wgsl::{HostSharable, Matrix4x4, Vec2, Vec3, Vec4},
 };
 
@@ -85,6 +85,19 @@ pub struct ValueLineConfig {
 
 unsafe impl HostSharable for ValueLineConfig {}
 
+/// Representation of an entry for the value lines buffer.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct ValueLine {
+    pub curve_idx: u32,
+    pub start_axis: u32,
+    pub start_value: f32,
+    pub end_axis: u32,
+    pub end_value: f32,
+}
+
+unsafe impl HostSharable for ValueLine {}
+
 /// Selection line rendering config buffer layout.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -110,7 +123,7 @@ pub struct SelectionInfo {
 unsafe impl HostSharable for SelectionInfo {}
 
 /// Collection of buffers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Buffers {
     pub general: GeneralBuffers,
     pub axes: AxesDrawingBuffers,
@@ -126,7 +139,7 @@ impl Buffers {
 }
 
 /// Collection of shared buffers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GeneralBuffers {
     pub matrix: MatrixBuffer,
     pub axes: AxesBuffer,
@@ -142,7 +155,7 @@ impl GeneralBuffers {
 }
 
 /// A uniform buffer containing a [`Matrices`] instance.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MatrixBuffer {
     buffer: Buffer,
 }
@@ -159,6 +172,10 @@ impl MatrixBuffer {
         Self { buffer }
     }
 
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
     pub fn update(&mut self, device: &Device, matrices: &Matrices) {
         device
             .queue()
@@ -167,7 +184,7 @@ impl MatrixBuffer {
 }
 
 /// A storage buffer of [`Axis`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AxesBuffer {
     buffer: Buffer,
 }
@@ -184,12 +201,17 @@ impl AxesBuffer {
         Self { buffer }
     }
 
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
     pub fn len(&self) -> usize {
         self.buffer.size() / std::mem::size_of::<Axis>()
     }
 
     pub fn update(&mut self, device: &Device, axes: &[MaybeUninit<Axis>]) {
         if self.len() != axes.len() {
+            self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
                 label: Some(Cow::Borrowed("axes buffer")),
                 size: std::mem::size_of_val(axes),
@@ -203,7 +225,7 @@ impl AxesBuffer {
 }
 
 /// Collection of buffers for drawing axes lines.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AxesDrawingBuffers {
     pub config: AxesConfigBuffer,
     pub lines: AxesLineBuffer,
@@ -219,7 +241,7 @@ impl AxesDrawingBuffers {
 }
 
 /// A uniform buffer containing a [`LineConfig`] instance.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AxesConfigBuffer {
     buffer: Buffer,
 }
@@ -236,13 +258,17 @@ impl AxesConfigBuffer {
         Self { buffer }
     }
 
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
     pub fn update(&mut self, device: &Device, config: &LineConfig) {
         device.queue().write_buffer_single(&self.buffer, 0, config);
     }
 }
 
 /// A storage buffer containing the information required to draw the axis lines.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AxesLineBuffer {
     buffer: Buffer,
 }
@@ -259,14 +285,96 @@ impl AxesLineBuffer {
         Self { buffer }
     }
 
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
     pub fn len(&self) -> usize {
         self.buffer.size() / std::mem::size_of::<LineInfo>()
     }
 
     pub fn update(&mut self, device: &Device, lines: &[MaybeUninit<LineInfo>]) {
         if self.len() != lines.len() {
+            self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
                 label: Some(Cow::Borrowed("axes line buffer")),
+                size: std::mem::size_of_val(lines),
+                usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
+                mapped_at_creation: None,
+            });
+        }
+
+        device.queue().write_buffer(&self.buffer, 0, lines)
+    }
+}
+
+/// Collection of buffers for drawing values.
+#[derive(Debug, Clone)]
+pub struct ValuesDrawingBuffers {
+    pub config: ValueLineConfigBuffer,
+    pub lines: ValueLineBuffer,
+    pub color_scale: Texture,
+    pub sampler: Sampler,
+}
+
+/// A uniform buffer storing an instance of an [`ValueLineConfig`].
+#[derive(Debug, Clone)]
+pub struct ValueLineConfigBuffer {
+    buffer: Buffer,
+}
+
+impl ValueLineConfigBuffer {
+    fn new(device: &Device) -> Self {
+        let buffer = device.create_buffer(BufferDescriptor {
+            label: Some(Cow::Borrowed("value lines config buffer")),
+            size: std::mem::size_of::<ValueLineConfig>(),
+            usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
+            mapped_at_creation: None,
+        });
+
+        Self { buffer }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    pub fn update(&mut self, device: &Device, config: &ValueLineConfig) {
+        device.queue().write_buffer_single(&self.buffer, 0, config);
+    }
+}
+
+/// A storage buffer containing the information required to draw the value lines.
+#[derive(Debug, Clone)]
+pub struct ValueLineBuffer {
+    buffer: Buffer,
+}
+
+impl ValueLineBuffer {
+    fn new(device: &Device) -> Self {
+        let buffer = device.create_buffer(BufferDescriptor {
+            label: Some(Cow::Borrowed("value lines buffer")),
+            size: 0,
+            usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
+            mapped_at_creation: None,
+        });
+
+        Self { buffer }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    pub fn len(&self) -> usize {
+        self.buffer.size() / std::mem::size_of::<ValueLine>()
+    }
+
+    pub fn update(&mut self, device: &Device, lines: &[MaybeUninit<ValueLine>]) {
+        if self.len() != lines.len() {
+            self.buffer.destroy();
+            self.buffer = device.create_buffer(BufferDescriptor {
+                label: Some(Cow::Borrowed("value lines buffer")),
                 size: std::mem::size_of_val(lines),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
