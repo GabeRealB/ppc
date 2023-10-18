@@ -144,6 +144,18 @@ impl Device {
             module: shader_module,
         }
     }
+
+    pub fn create_texture<const N: usize, const M: usize>(
+        &self,
+        descriptor: TextureDescriptor<'_, N, M>,
+    ) -> Texture {
+        let texture = self.device.create_texture(&descriptor.into());
+        if texture.is_falsy() {
+            panic!("could not create texture");
+        }
+
+        Texture { texture }
+    }
 }
 
 // Wrapper of a [`web_sys::GpuQueue`].
@@ -237,6 +249,10 @@ pub struct Buffer {
 impl Buffer {
     pub fn label(&self) -> String {
         self.buffer.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.buffer.set_label(value);
     }
 
     pub fn size(&self) -> usize {
@@ -396,6 +412,86 @@ impl ShaderModule {
         let promise = self.module.compilation_info();
         let compilation_info = JsFuture::from(promise).await?;
         compilation_info.dyn_into::<web_sys::GpuCompilationInfo>()
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuTexture`].
+#[derive(Debug, Clone)]
+pub struct Texture {
+    texture: web_sys::GpuTexture,
+}
+
+impl Texture {
+    pub fn width(&self) -> u32 {
+        self.texture.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.texture.height()
+    }
+
+    pub fn depth_or_array_layers(&self) -> u32 {
+        self.texture.depth_or_array_layers()
+    }
+
+    pub fn mip_level_count(&self) -> u32 {
+        self.texture.mip_level_count()
+    }
+
+    pub fn sample_count(&self) -> u32 {
+        self.texture.sample_count()
+    }
+
+    pub fn dimension(&self) -> TextureDimension {
+        self.texture.dimension().into()
+    }
+
+    pub fn format(&self) -> TextureFormat {
+        self.texture.format().into()
+    }
+
+    pub fn usage(&self) -> TextureUsage {
+        TextureUsage(self.texture.usage())
+    }
+
+    pub fn label(&self) -> String {
+        self.texture.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.texture.set_label(value);
+    }
+
+    pub fn create_view(&self, descriptor: Option<TextureViewDescriptor>) -> TextureView {
+        let view = if let Some(descriptor) = descriptor {
+            self.texture.create_view_with_descriptor(&descriptor.into())
+        } else {
+            self.texture.create_view()
+        };
+
+        TextureView { view }
+    }
+}
+
+impl Drop for Texture {
+    fn drop(&mut self) {
+        self.texture.destroy()
+    }
+}
+
+/// Wrapper of a [`web_sys::GpuTextureView`].
+#[derive(Debug, Clone)]
+pub struct TextureView {
+    view: web_sys::GpuTextureView,
+}
+
+impl TextureView {
+    pub fn label(&self) -> String {
+        self.view.label()
+    }
+
+    pub fn set_label(&self, value: &str) {
+        self.view.set_label(value);
     }
 }
 
@@ -765,6 +861,35 @@ impl From<TextureSampleType> for web_sys::GpuTextureSampleType {
             TextureSampleType::Depth => web_sys::GpuTextureSampleType::Depth,
             TextureSampleType::SInt => web_sys::GpuTextureSampleType::Sint,
             TextureSampleType::UInt => web_sys::GpuTextureSampleType::Uint,
+        }
+    }
+}
+
+/// Representation of a [`web_sys::GpuTextureDimension`].
+#[derive(Debug)]
+pub enum TextureDimension {
+    D1,
+    D2,
+    D3,
+}
+
+impl From<web_sys::GpuTextureDimension> for TextureDimension {
+    fn from(value: web_sys::GpuTextureDimension) -> Self {
+        match value {
+            web_sys::GpuTextureDimension::N1d => TextureDimension::D1,
+            web_sys::GpuTextureDimension::N2d => TextureDimension::D2,
+            web_sys::GpuTextureDimension::N3d => TextureDimension::D3,
+            _ => panic!("unknown texture dimension"),
+        }
+    }
+}
+
+impl From<TextureDimension> for web_sys::GpuTextureDimension {
+    fn from(value: TextureDimension) -> web_sys::GpuTextureDimension {
+        match value {
+            TextureDimension::D1 => web_sys::GpuTextureDimension::N1d,
+            TextureDimension::D2 => web_sys::GpuTextureDimension::N2d,
+            TextureDimension::D3 => web_sys::GpuTextureDimension::N3d,
         }
     }
 }
@@ -1687,6 +1812,151 @@ impl From<MipMapFilterMode> for web_sys::GpuMipmapFilterMode {
             MipMapFilterMode::Nearest => web_sys::GpuMipmapFilterMode::Nearest,
             MipMapFilterMode::Linear => web_sys::GpuMipmapFilterMode::Linear,
         }
+    }
+}
+
+/// Representation of a [`web_sys::GpuTextureDescriptor`].
+#[derive(Debug)]
+pub struct TextureDescriptor<'a, const N: usize, const M: usize> {
+    pub label: Option<Cow<'a, str>>,
+    pub dimension: Option<TextureDimension>,
+    pub format: TextureFormat,
+    pub mip_level_count: Option<u32>,
+    pub sample_count: Option<u32>,
+    pub size: [usize; N],
+    pub usage: TextureUsage,
+    pub view_formats: Option<[TextureFormat; M]>,
+}
+
+impl<'a, const N: usize, const M: usize> From<TextureDescriptor<'a, N, M>>
+    for web_sys::GpuTextureDescriptor
+{
+    fn from(value: TextureDescriptor<'a, N, M>) -> Self {
+        let format = value.format.into();
+        let size = js_sys::Array::from_iter(
+            value
+                .size
+                .into_iter()
+                .map(|x| js_sys::Number::from(x as u32)),
+        );
+        let usage = value.usage.0;
+
+        let mut descriptor = web_sys::GpuTextureDescriptor::new(format, &size, usage);
+        value.label.map(|x| descriptor.label(&x));
+        value.dimension.map(|x| descriptor.dimension(x.into()));
+        value.mip_level_count.map(|x| descriptor.mip_level_count(x));
+        value.sample_count.map(|x| descriptor.sample_count(x));
+        value.view_formats.map(|x| {
+            let x = js_sys::Array::from_iter(
+                x.map(|x| wasm_bindgen::JsValue::from(web_sys::GpuTextureFormat::from(x))),
+            );
+            descriptor.view_formats(&x)
+        });
+        descriptor
+    }
+}
+
+/// Representation of a [`web_sys::GpuTextureViewDescriptor`].
+#[derive(Debug)]
+pub struct TextureViewDescriptor<'a> {
+    pub label: Option<Cow<'a, str>>,
+    pub array_layer_count: Option<u32>,
+    pub aspect: Option<TextureAspect>,
+    pub base_array_layer: Option<u32>,
+    pub base_mip_level: Option<u32>,
+    pub dimension: Option<TextureViewDimension>,
+    pub format: Option<TextureFormat>,
+    pub mip_level_count: Option<u32>,
+}
+
+impl<'a> From<TextureViewDescriptor<'a>> for web_sys::GpuTextureViewDescriptor {
+    fn from(value: TextureViewDescriptor<'a>) -> Self {
+        let mut descriptor = web_sys::GpuTextureViewDescriptor::new();
+        value.label.map(|x| descriptor.label(&x));
+        value
+            .array_layer_count
+            .map(|x| descriptor.array_layer_count(x));
+        value.aspect.map(|x| descriptor.aspect(x.into()));
+        value
+            .base_array_layer
+            .map(|x| descriptor.base_array_layer(x));
+        value.base_mip_level.map(|x| descriptor.base_mip_level(x));
+        value.dimension.map(|x| descriptor.dimension(x.into()));
+        value.format.map(|x| descriptor.format(x.into()));
+        value.mip_level_count.map(|x| descriptor.mip_level_count(x));
+        descriptor
+    }
+}
+
+/// Representation of a [`web_sys::GpuTextureAspect`].
+#[derive(Debug)]
+pub enum TextureAspect {
+    All,
+    StencilOnly,
+    DepthOnly,
+}
+
+impl From<TextureAspect> for web_sys::GpuTextureAspect {
+    fn from(value: TextureAspect) -> Self {
+        match value {
+            TextureAspect::All => web_sys::GpuTextureAspect::All,
+            TextureAspect::StencilOnly => web_sys::GpuTextureAspect::StencilOnly,
+            TextureAspect::DepthOnly => web_sys::GpuTextureAspect::DepthOnly,
+        }
+    }
+}
+
+/// Representation of a texture usage bitset.
+#[derive(Debug)]
+pub struct TextureUsage(u32);
+
+impl TextureUsage {
+    pub const COPY_SRC: Self = Self(web_sys::gpu_texture_usage::COPY_SRC);
+    pub const COPY_DST: Self = Self(web_sys::gpu_texture_usage::COPY_DST);
+    pub const RENDER_ATTACHMENT: Self = Self(web_sys::gpu_texture_usage::RENDER_ATTACHMENT);
+    pub const STORAGE_BINDING: Self = Self(web_sys::gpu_texture_usage::STORAGE_BINDING);
+    pub const TEXTURE_BINDING: Self = Self(web_sys::gpu_texture_usage::TEXTURE_BINDING);
+}
+
+impl BitAnd for TextureUsage {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for TextureUsage {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl BitOr for TextureUsage {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for TextureUsage {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitXor for TextureUsage {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
+
+impl BitXorAssign for TextureUsage {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        self.0 ^= rhs.0;
     }
 }
 
