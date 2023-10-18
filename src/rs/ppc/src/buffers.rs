@@ -206,12 +206,14 @@ impl AxesBuffer {
 #[derive(Debug)]
 pub struct AxesDrawingBuffers {
     pub config: AxesConfigBuffer,
+    pub lines: AxesLineBuffer,
 }
 
 impl AxesDrawingBuffers {
     fn new(device: &Device) -> Self {
         Self {
             config: AxesConfigBuffer::new(device),
+            lines: AxesLineBuffer::new(device),
         }
     }
 }
@@ -236,5 +238,41 @@ impl AxesConfigBuffer {
 
     pub fn update(&mut self, device: &Device, config: &LineConfig) {
         device.queue().write_buffer_single(&self.buffer, 0, config);
+    }
+}
+
+/// A storage buffer containing the information required to draw the axis lines.
+#[derive(Debug)]
+pub struct AxesLineBuffer {
+    buffer: Buffer,
+}
+
+impl AxesLineBuffer {
+    fn new(device: &Device) -> Self {
+        let buffer = device.create_buffer(BufferDescriptor {
+            label: Some(Cow::Borrowed("axes line buffer")),
+            size: 0,
+            usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
+            mapped_at_creation: None,
+        });
+
+        Self { buffer }
+    }
+
+    pub fn len(&self) -> usize {
+        self.buffer.size() / std::mem::size_of::<LineInfo>()
+    }
+
+    pub fn update(&mut self, device: &Device, lines: &[MaybeUninit<LineInfo>]) {
+        if self.len() != lines.len() {
+            self.buffer = device.create_buffer(BufferDescriptor {
+                label: Some(Cow::Borrowed("axes line buffer")),
+                size: std::mem::size_of_val(lines),
+                usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
+                mapped_at_creation: None,
+            });
+        }
+
+        device.queue().write_buffer(&self.buffer, 0, lines)
     }
 }

@@ -302,6 +302,7 @@ impl Renderer {
         this.update_matrix_buffer();
         this.update_axes_buffer();
         this.update_axes_config_buffer();
+        this.update_axes_lines_buffer();
 
         this
     }
@@ -482,7 +483,7 @@ impl Renderer {
 
         self.update_matrix_buffer();
         self.update_axes_buffer();
-        self.update_axes_line_infos_buffer();
+        self.update_axes_lines_buffer();
     }
 
     async fn resize_drawing_area(&mut self, width: u32, height: u32, device_pixel_ratio: f32) {
@@ -585,8 +586,50 @@ impl Renderer {
         self.redraw = true;
     }
 
-    fn update_axes_line_infos_buffer(&mut self) {
+    fn update_axes_lines_buffer(&mut self) {
         let guard = self.axes.borrow();
+
+        let num_lines = guard.visible_axes().len();
+        let mut lines = Vec::<MaybeUninit<_>>::with_capacity(num_lines);
+        unsafe { lines.set_len(num_lines) };
+
+        for ax in guard.visible_axes() {
+            let index = ax.axis_index().unwrap();
+            let start_args_x = f32::from_ne_bytes((index as u32).to_ne_bytes());
+            let end_args_x = f32::from_ne_bytes((index as u32).to_ne_bytes());
+
+            lines[index].write(buffers::LineInfo {
+                min_expanded_val: 0.0,
+                start_args: wgsl::Vec2([start_args_x, 0.0]),
+                end_args: wgsl::Vec2([end_args_x, 1.0]),
+                offset_start: wgsl::Vec2([0.0, 0.0]),
+                offset_end: wgsl::Vec2([0.0, 0.0]),
+            });
+
+            if ax.is_expanded() {
+                let start_args_x = f32::from_ne_bytes((index as u32 + (1 << 31)).to_ne_bytes());
+                let end_args_x = f32::from_ne_bytes((index as u32 + (1 << 31)).to_ne_bytes());
+                lines.push(MaybeUninit::new(buffers::LineInfo {
+                    min_expanded_val: 1.0,
+                    start_args: wgsl::Vec2([start_args_x, 0.0]),
+                    end_args: wgsl::Vec2([end_args_x, 1.0]),
+                    offset_start: wgsl::Vec2([0.0, 0.0]),
+                    offset_end: wgsl::Vec2([0.0, 0.0]),
+                }));
+
+                let start_args_x = f32::from_ne_bytes((index as u32 + (1 << 29)).to_ne_bytes());
+                let end_args_x = f32::from_ne_bytes((index as u32 + (1 << 29)).to_ne_bytes());
+                lines.push(MaybeUninit::new(buffers::LineInfo {
+                    min_expanded_val: 1.0,
+                    start_args: wgsl::Vec2([start_args_x, 0.0]),
+                    end_args: wgsl::Vec2([end_args_x, 1.0]),
+                    offset_start: wgsl::Vec2([0.0, 0.0]),
+                    offset_end: wgsl::Vec2([0.0, 0.0]),
+                }));
+            }
+        }
+
+        self.buffers.axes.lines.update(&self.device, &lines);
         self.redraw = true;
     }
 }
