@@ -170,6 +170,33 @@ macro_rules! indirect_transform {
     };
 }
 
+macro_rules! to_unknown {
+    ($T:ty) => {
+        impl ColorSpaceTransform<UnknownColorSpace> for $T {
+            fn transform(self) -> UnknownColorSpace {
+                let values = <$T as ColorSpace>::to_f32(self);
+                <UnknownColorSpace as ColorSpace>::from_f32(values)
+            }
+        }
+    };
+}
+
+/// An unknown color space.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct UnknownColorSpace {
+    pub values: [f32; 3],
+}
+
+impl ColorSpace for UnknownColorSpace {
+    fn to_f32(self) -> [f32; 3] {
+        self.values
+    }
+
+    fn from_f32(values: [f32; 3]) -> Self {
+        Self { values }
+    }
+}
+
 /// The sRGB color space with a D65 white point and 8-bit values.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SRgb {
@@ -212,6 +239,7 @@ impl ColorSpaceTransform<SRgbLinear> for SRgb {
     }
 }
 
+to_unknown! {SRgb}
 indirect_transform! {SRgb, SRgbLinear, Xyz}
 indirect_transform! {SRgb, SRgbLinear, CieLab}
 indirect_transform! {SRgb, SRgbLinear, CieLch}
@@ -274,6 +302,7 @@ impl ColorSpaceTransform<Xyz> for SRgbLinear {
     }
 }
 
+to_unknown! {SRgbLinear}
 indirect_transform! {SRgbLinear, Xyz, CieLab}
 indirect_transform! {SRgbLinear, Xyz, CieLch}
 
@@ -296,6 +325,7 @@ impl ColorSpace for Xyz {
     }
 }
 
+to_unknown! {Xyz}
 indirect_transform! {Xyz, SRgbLinear, SRgb}
 
 impl ColorSpaceTransform<SRgbLinear> for Xyz {
@@ -359,6 +389,7 @@ impl ColorSpace for CieLab {
     }
 }
 
+to_unknown! {CieLab}
 indirect_transform! {CieLab, Xyz, SRgb}
 indirect_transform! {CieLab, Xyz, SRgbLinear}
 
@@ -420,6 +451,7 @@ impl ColorSpace for CieLch {
     }
 }
 
+to_unknown! {CieLch}
 indirect_transform! {CieLch, CieLab, SRgb}
 indirect_transform! {CieLch, CieLab, SRgbLinear}
 indirect_transform! {CieLch, CieLab, Xyz}

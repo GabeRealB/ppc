@@ -1,5 +1,5 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, Ref, RefCell, RefMut},
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
     marker::PhantomData,
@@ -10,18 +10,26 @@ use wasm_bindgen::JsCast;
 
 use crate::{
     coordinates::{
-        Aabb, ComponentAccessible, CoordinateSystem, CoordinateSystemTransformer, Length,
-        LocalSpace, Offset, Position, ScreenSpace, ScreenViewTransformer, ViewSpace,
-        ViewWorldTransformer, WorldLocalTransformer, WorldSpace,
+        Aabb, CoordinateSystem, CoordinateSystemTransformer, Length, LocalSpace, Offset, Position,
+        ScreenSpace, ScreenViewTransformer, ViewSpace, ViewWorldTransformer, WorldLocalTransformer,
+        WorldSpace,
     },
     lerp::{InverseLerp, Lerp},
+    selection::{SelectionCurve, SelectionCurveBuilder},
 };
 
 const AXIS_LOCAL_Y_SCALE: f32 = 1.0;
-const AXIS_LINE_WIDTH_REM: f32 = 0.05;
-const AXIS_LINE_PADDING_REM: f32 = 0.0;
+const AXIS_LINE_SIZE_REM: f32 = 0.05;
+const AXIS_LINE_PADDING_REM: f32 = 0.1;
 const AXIS_TOP_PADDING: f32 = 1.0;
 const LOCAL_AXIS_HEIGHT: f32 = 1.0;
+
+const SELECTION_LINE_SIZE_REM: f32 = 0.1;
+const SELECTION_LINE_PADDING_REM: f32 = 0.15;
+const SELECTION_LINE_MARGIN_REM: f32 = 1.0;
+
+const CURVE_LINE_SIZE: f32 = 0.075;
+const DATUMS_LINE_SIZE_REM: f32 = 0.1;
 
 const LABEL_PADDING_REM: f32 = 1.0;
 const LABEL_MARGIN_REM: f32 = 1.0;
@@ -135,6 +143,9 @@ pub struct Axis {
     visible_datums_range: (f32, f32),
     visible_datums_range_normalized: (f32, f32),
 
+    selection_curves: RefCell<Vec<SelectionCurve>>,
+    curve_builders: RefCell<Vec<SelectionCurveBuilder>>,
+
     world_offset: Cell<f32>,
 
     get_rem_length: Rc<dyn Fn(f32) -> (Length<LocalSpace>, Length<LocalSpace>)>,
@@ -190,6 +201,13 @@ impl Axis {
         let max_label = max_label.as_string().unwrap().into();
         let axes = Rc::downgrade(axes);
 
+        let selection = crate::selection::Selection::new([0.4, 0.5], [0.7, 1.0]);
+        let mut curve_builder = SelectionCurveBuilder::new();
+        curve_builder.add_selection(selection);
+
+        let mut active_curve = SelectionCurve::new(visible_datums_range_normalized.into());
+        active_curve.set_curve(curve_builder.build(visible_datums_range_normalized.into()));
+
         Self {
             key: key.into(),
             label,
@@ -202,6 +220,8 @@ impl Axis {
             datums_range,
             visible_datums_range,
             visible_datums_range_normalized,
+            selection_curves: RefCell::new(vec![active_curve]),
+            curve_builders: RefCell::new(vec![curve_builder]),
             world_offset: Cell::new(world_offset),
             get_rem_length,
             get_text_length,
@@ -302,9 +322,44 @@ impl Axis {
         self.visible_datums_range_normalized
     }
 
+    /// Borrows the selection curve.
+    pub fn borrow_selection_curve(&self, active_label_idx: usize) -> Ref<'_, SelectionCurve> {
+        Ref::map(self.selection_curves.borrow(), |x| &x[active_label_idx])
+    }
+
+    /// Borrows the selection curve mutably.
+    pub fn borrow_selection_curve_mut(
+        &self,
+        active_label_idx: usize,
+    ) -> RefMut<'_, SelectionCurve> {
+        RefMut::map(self.selection_curves.borrow_mut(), |x| {
+            &mut x[active_label_idx]
+        })
+    }
+
+    /// Borrows the curve builder.
+    pub fn borrow_selection_curve_builder(
+        &self,
+        active_label_idx: usize,
+    ) -> Ref<'_, SelectionCurveBuilder> {
+        Ref::map(self.curve_builders.borrow(), |x| &x[active_label_idx])
+    }
+
+    /// Borrows the curve builder mutably.
+    pub fn borrow_selection_curve_builder_mut(
+        &self,
+        active_label_idx: usize,
+    ) -> RefMut<'_, SelectionCurveBuilder> {
+        RefMut::map(self.curve_builders.borrow_mut(), |x| {
+            &mut x[active_label_idx]
+        })
+    }
+
     /// Returns the bounding box of the axis.
-    pub fn bounding_box(&self) -> Aabb<LocalSpace> {
-        let (axis_width, _) = (self.get_rem_length)(AXIS_LINE_PADDING_REM + AXIS_LINE_WIDTH_REM);
+    pub fn bounding_box(&self, active_label_idx: usize) -> Aabb<LocalSpace> {
+        let (axis_width, _) = (self.get_rem_length)(
+            AXIS_LINE_PADDING_REM + AXIS_LINE_PADDING_REM + AXIS_LINE_SIZE_REM,
+        );
         let (label_width, _) = (self.get_text_length)(&self.label);
         let (padding_width, _) = (self.get_rem_length)(AXIS_LINE_PADDING_REM);
         let label_width = label_width + padding_width + padding_width;
@@ -318,20 +373,20 @@ impl Axis {
         let half_width = width / Length::new(2.0);
         let width_offset = Offset::<LocalSpace>::new((1.0, 0.0)) * half_width;
 
-        let mut start = Position::<LocalSpace>::new((0.5, 0.0));
-        let mut end = Position::<LocalSpace>::new((0.5, 1.0));
+        let mut start = Position::<LocalSpace>::new((0.0, 0.0));
+        let mut end = Position::<LocalSpace>::new((0.0, 1.0));
 
         start -= width_offset;
         end += width_offset;
 
         if self.is_expanded() {
-            start.x = 0.0;
-
-            // TODO: Handle selection curves.
+            let expanded_extends = self.expanded_extends(active_label_idx);
+            start.x = expanded_extends.start().x.min(start.x);
+            end.x = expanded_extends.end().x.max(end.x);
         }
 
-        start.x = start.x.clamp(0.0, 1.0);
-        end.x = end.x.clamp(0.0, 1.0);
+        start.x = start.x.clamp(-0.4, 0.4);
+        end.x = end.x.clamp(-0.4, 0.4);
 
         Aabb::new(start, end)
     }
@@ -340,7 +395,9 @@ impl Axis {
     pub fn axis_line_bounding_box(&self) -> Aabb<LocalSpace> {
         let (mut start, mut end) = self.axis_line_range();
 
-        let (axis_width, _) = (self.get_rem_length)(AXIS_LINE_PADDING_REM + AXIS_LINE_WIDTH_REM);
+        let (axis_width, _) = (self.get_rem_length)(
+            AXIS_LINE_PADDING_REM + AXIS_LINE_PADDING_REM + AXIS_LINE_SIZE_REM,
+        );
         let half_width = axis_width / Length::new(2.0);
         let width_offset = Offset::<LocalSpace>::new((1.0, 0.0)) * half_width;
 
@@ -350,9 +407,32 @@ impl Axis {
         Aabb::new(start, end)
     }
 
+    pub fn curves_bounding_box(&self) -> Aabb<LocalSpace> {
+        let start = Position::new((-0.4, 0.0));
+        let end = Position::new((0.0, 1.0));
+        Aabb::new(start, end)
+    }
+
+    pub fn selections_bounding_box(&self, active_label_idx: usize) -> Aabb<LocalSpace> {
+        let curve_builders = self.curve_builders.borrow();
+        let max_rank = curve_builders[active_label_idx].max_rank();
+
+        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
+        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
+        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
+
+        let start_x = -(width.0 / 2.0) - padding.0;
+        let mut end_x = (width.0 / 2.0) + padding.0;
+        end_x += max_rank as f32 * (margin + width + padding).0;
+
+        let start = Position::new((start_x, 0.0));
+        let end = Position::new((end_x, 1.0));
+        Aabb::new(start, end)
+    }
+
     /// Returns the bounding box of the axis label.
     pub fn label_bounding_box(&self) -> Aabb<LocalSpace> {
-        const POSITION_X: f32 = 0.5;
+        const POSITION_X: f32 = 0.0;
 
         let (label_width, label_height) = (self.get_text_length)(&self.label);
         let (_, top_padding) = (self.get_rem_length)(AXIS_TOP_PADDING);
@@ -374,9 +454,66 @@ impl Axis {
         Aabb::new(start, end)
     }
 
+    pub fn selection_offset_at_rank(&self, rank: usize) -> Offset<LocalSpace> {
+        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
+        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
+        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
+
+        let x_offset = (rank as f32) * (width + padding + padding + margin).0;
+        Offset::new((x_offset, 0.0))
+    }
+
+    pub fn selection_rank_at_position(
+        &self,
+        position: &Position<LocalSpace>,
+        active_label_idx: usize,
+    ) -> Option<usize> {
+        let curve_builders = self.curve_builders.borrow();
+        let max_rank = curve_builders[active_label_idx].max_rank();
+
+        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
+        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
+        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
+
+        let zero_rank_start = -(width.0 / 2.0) - padding.0;
+        if position.x < zero_rank_start {
+            return None;
+        }
+
+        for i in 0..=max_rank {
+            let rank_start =
+                zero_rank_start + ((i as f32) * (margin + width + padding + padding).0);
+            let rank_end =
+                zero_rank_start + (((i + 1) as f32) * (margin + width + padding + padding).0);
+
+            if (rank_start..=rank_end).contains(&position.x) {
+                return Some(i);
+            }
+        }
+
+        None
+    }
+
+    /// Returns the extends of the expanded axis lines.
+    pub fn expanded_extends(&self, active_label_idx: usize) -> Aabb<LocalSpace> {
+        let curve_builders = self.curve_builders.borrow();
+        let max_rank = curve_builders[active_label_idx].max_rank();
+
+        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
+        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
+        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
+
+        let mut end_x = (width.0 / 2.0) + padding.0;
+        end_x += max_rank as f32 * (margin + width + padding).0;
+
+        let start = Position::new((-0.4, 0.0));
+        let end = Position::new((end_x, 1.0));
+        Aabb::new(start, end)
+    }
+
     /// Returns the range of the axis line.
     pub fn axis_line_range(&self) -> (Position<LocalSpace>, Position<LocalSpace>) {
-        const POSITION_X: f32 = 0.5;
+        const POSITION_X: f32 = 0.0;
         let (_, top_padding) = (self.get_rem_length)(AXIS_TOP_PADDING);
         let (_, label_padding) = (self.get_rem_length)(LABEL_PADDING_REM);
         let (_, label_margin) = (self.get_rem_length)(LABEL_MARGIN_REM);
@@ -405,7 +542,7 @@ impl Axis {
 
     /// Returns the local position of the label.
     pub fn label_position(&self) -> Position<LocalSpace> {
-        const POSITION_X: f32 = 0.5;
+        const POSITION_X: f32 = 0.0;
 
         let (_, top_padding) = (self.get_rem_length)(AXIS_TOP_PADDING);
         let (_, label_height) = (self.get_text_length)(&self.label);
@@ -447,13 +584,11 @@ impl Axis {
 
     /// Sets the world offset of the axis.
     pub fn set_world_offset(&self, offset: f32) {
-        // Clamp the offset.
-
         self.world_offset.set(offset)
     }
 
     /// Returns the world offset of the axis.
-    pub fn get_world_offset(&self) -> f32 {
+    pub fn world_offset(&self) -> f32 {
         self.world_offset.get()
     }
 
@@ -484,6 +619,78 @@ impl Axis {
             *self.right.borrow_mut() = Some(Rc::downgrade(axis));
         } else {
             *self.right.borrow_mut() = None;
+        }
+    }
+
+    pub fn swap_axis_order_left(this: &Rc<Self>) -> bool {
+        if let Some(left) = this.left_neighbor() {
+            let left_left = left.left_neighbor();
+            let right = this.right_neighbor();
+
+            if let Some(left_left) = &left_left {
+                left_left.set_right_neighbor(Some(this));
+            }
+
+            this.set_left_neighbor(left_left.as_ref());
+            this.set_right_neighbor(Some(&left));
+
+            left.set_world_offset(left.world_offset() + 1.0);
+            left.set_left_neighbor(Some(this));
+            left.set_right_neighbor(right.as_ref());
+
+            if let Some(right) = right {
+                right.set_left_neighbor(Some(&left));
+            }
+
+            let axes = this.axes();
+            let mut axes = axes.borrow_mut();
+            if axes.is_first_visible_axis(&left) {
+                axes.set_first_visible_axis(this.clone());
+            }
+
+            if axes.is_last_visible_axis(this) {
+                axes.set_last_visible_axis(left.clone());
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn swap_axis_order_right(this: &Rc<Self>) -> bool {
+        if let Some(right) = this.right_neighbor() {
+            let left = this.left_neighbor();
+            let right_right = right.right_neighbor();
+
+            if let Some(left) = &left {
+                left.set_right_neighbor(Some(&right));
+            }
+
+            right.set_world_offset(right.world_offset() - 1.0);
+            right.set_left_neighbor(left.as_ref());
+            right.set_right_neighbor(Some(this));
+
+            this.set_left_neighbor(Some(&right));
+            this.set_right_neighbor(right_right.as_ref());
+
+            if let Some(right_right) = right_right {
+                right_right.set_left_neighbor(Some(this));
+            }
+
+            let axes = this.axes();
+            let mut axes = axes.borrow_mut();
+            if axes.is_first_visible_axis(this) {
+                axes.set_first_visible_axis(right.clone());
+            }
+
+            if axes.is_last_visible_axis(&right) {
+                axes.set_last_visible_axis(this.clone());
+            }
+
+            true
+        } else {
+            false
         }
     }
 
@@ -576,7 +783,7 @@ impl Axes {
             view_width,
             world_width: 1.0,
             view_bounding_box,
-            world_bounding_box: Aabb::new(Position::zero(), Position::new((1.0, 1.0))),
+            world_bounding_box: Aabb::new(Position::new((-0.5, 0.0)), Position::new((1.0, 1.0))),
         }));
 
         let get_rem_length_world = {
@@ -599,6 +806,7 @@ impl Axes {
                     mappings.view_height,
                     mappings.view_width,
                     mappings.world_width,
+                    0.5,
                 );
                 let p0 = p0.transform(&mapper);
                 let p1 = p1.transform(&mapper);
@@ -631,6 +839,7 @@ impl Axes {
                     mappings.view_height,
                     mappings.view_width,
                     mappings.world_width,
+                    0.5,
                 );
                 let p0 = p0.transform(&mapper);
                 let p1 = p1.transform(&mapper);
@@ -668,6 +877,7 @@ impl Axes {
                     mappings.view_height,
                     mappings.view_width,
                     mappings.world_width,
+                    0.5,
                 );
                 let p0 = p0.transform(&mapper);
                 let p1 = p1.transform(&mapper);
@@ -700,6 +910,7 @@ impl Axes {
                     mappings.view_height,
                     mappings.view_width,
                     mappings.world_width,
+                    0.5,
                 );
                 let p0 = p0.transform(&mapper);
                 let p1 = p1.transform(&mapper);
@@ -748,6 +959,16 @@ impl Axes {
         )))
     }
 
+    /// Returns the number of datums for each axis.
+    pub fn num_datums(&self) -> usize {
+        self.num_datums.unwrap_or(0)
+    }
+
+    /// Returns the number of visible axes.
+    pub fn num_visible_axes(&self) -> usize {
+        self.num_visible_axes
+    }
+
     /// Removes all axes that are not specified.
     pub fn retain_axes(&mut self, axes: BTreeSet<&str>) {
         self.axes.retain(|k, _| axes.contains(k as &str));
@@ -780,10 +1001,10 @@ impl Axes {
         }
 
         let mut mappings = self.coordinate_mappings.borrow_mut();
-        mappings.world_width = (self.num_visible_axes as f32).max(1.0);
+        mappings.world_width = ((self.num_visible_axes + 1) as f32).max(1.0);
         mappings.world_bounding_box = Aabb::new(
-            Position::zero(),
-            Position::new((self.num_visible_axes as f32, 1.0)),
+            Position::new((-0.5, 0.0)),
+            Position::new((mappings.world_width, 1.0)),
         );
     }
 
@@ -847,10 +1068,10 @@ impl Axes {
         if !axis.is_hidden() {
             self.num_visible_axes += 1;
             let mut mappings = self.coordinate_mappings.borrow_mut();
-            mappings.world_width = (self.num_visible_axes as f32).max(1.0);
+            mappings.world_width = ((self.num_visible_axes + 1) as f32).max(1.0);
             mappings.world_bounding_box = Aabb::new(
-                Position::zero(),
-                Position::new((self.num_visible_axes as f32, 1.0)),
+                Position::new((-0.5, 0.0)),
+                Position::new((mappings.world_width, 1.0)),
             );
             drop(mappings);
 
@@ -865,7 +1086,7 @@ impl Axes {
                 let last_axis = self.visible_axis_end.as_ref().unwrap();
                 last_axis.set_right_neighbor(Some(&axis));
 
-                let last_axis_offset = last_axis.get_world_offset();
+                let last_axis_offset = last_axis.world_offset();
                 let axis_offset = last_axis_offset.floor() + 1.0;
                 axis.set_world_offset(axis_offset);
 
@@ -930,7 +1151,83 @@ impl Axes {
 
     /// Returns the axis line size.
     pub fn axis_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
-        (self.get_rem_length_world)(AXIS_LINE_WIDTH_REM)
+        (self.get_rem_length_world)(AXIS_LINE_SIZE_REM)
+    }
+
+    /// Returns the datums line size.
+    pub fn datums_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
+        (self.get_rem_length_world)(DATUMS_LINE_SIZE_REM)
+    }
+
+    /// Returns the selections line size.
+    pub fn selections_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
+        (self.get_rem_length_world)(SELECTION_LINE_SIZE_REM)
+    }
+
+    /// Returns the curve line size.
+    pub fn curve_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
+        (self.get_rem_length_world)(CURVE_LINE_SIZE)
+    }
+
+    pub fn element_at_position(
+        &self,
+        position: Position<ScreenSpace>,
+        active_label_idx: usize,
+    ) -> Option<Element> {
+        let position = position.transform(&self.space_transformer());
+        {
+            let mappings = self.coordinate_mappings.borrow();
+            if !mappings.world_bounding_box.contains_point(&position) {
+                return None;
+            }
+        }
+
+        for ax in self.visible_axes() {
+            let position = position.transform(&ax.space_transformer());
+
+            // Check if we are inside the bounding box of the axis.
+            let bounding_box = ax.bounding_box(active_label_idx);
+            if !bounding_box.contains_point(&position) {
+                continue;
+            }
+
+            // Check if we are hovering the label.
+            let bounding_box = ax.label_bounding_box();
+            if bounding_box.contains_point(&position) {
+                return Some(Element::Label { axis: ax });
+            }
+
+            // Check if we are hovering a selection.
+            let bounding_box = ax.selections_bounding_box(active_label_idx);
+            if bounding_box.contains_point(&position) {
+                if let Some(rank) = ax.selection_rank_at_position(&position, active_label_idx) {
+                    let range = ax.axis_line_range();
+                    let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+
+                    let selection = {
+                        let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                        curve_builder.get_selection_containing(axis_value, rank)
+                    };
+
+                    if let Some(selection) = selection {
+                        return Some(Element::Selection {
+                            axis: ax,
+                            selection_idx: selection,
+                        });
+                    }
+                }
+            }
+
+            // Check if we are hovering the axis line.
+            let bounding_box = ax.axis_line_bounding_box();
+            if bounding_box.contains_point(&position) {
+                return Some(Element::AxisLine { axis: ax });
+            }
+
+            return None;
+        }
+
+        None
     }
 
     /// Returns the width of the world space.
@@ -1015,6 +1312,7 @@ impl Axes {
             mappings.view_height,
             mappings.view_width,
             mappings.world_width,
+            0.5,
         );
 
         ScreenWorldTransformer { screen, world }
@@ -1034,6 +1332,30 @@ impl Axes {
             _phantom: PhantomData,
         }
     }
+
+    fn is_first_visible_axis(&self, axis: &Rc<Axis>) -> bool {
+        if let Some(start) = &self.visible_axis_start {
+            Rc::ptr_eq(axis, start)
+        } else {
+            false
+        }
+    }
+
+    fn is_last_visible_axis(&self, axis: &Rc<Axis>) -> bool {
+        if let Some(end) = &self.visible_axis_end {
+            Rc::ptr_eq(axis, end)
+        } else {
+            false
+        }
+    }
+
+    fn set_first_visible_axis(&mut self, axis: Rc<Axis>) {
+        self.visible_axis_start = Some(axis);
+    }
+
+    fn set_last_visible_axis(&mut self, axis: Rc<Axis>) {
+        self.visible_axis_end = Some(axis);
+    }
 }
 
 impl Debug for Axes {
@@ -1048,6 +1370,21 @@ impl Debug for Axes {
             .field("coordinate_mappings", &self.coordinate_mappings)
             .finish_non_exhaustive()
     }
+}
+
+/// An element inside an [`Axes`] instance.
+#[derive(Debug, Clone)]
+pub enum Element {
+    Label {
+        axis: Rc<Axis>,
+    },
+    Selection {
+        axis: Rc<Axis>,
+        selection_idx: usize,
+    },
+    AxisLine {
+        axis: Rc<Axis>,
+    },
 }
 
 /// An iterator over the visible axes.

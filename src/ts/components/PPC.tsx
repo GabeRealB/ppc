@@ -9,20 +9,50 @@ type Axis = {
     hidden?: boolean
 };
 
+type ColorSpace = "srgb" | "xyz" | "cie_lab" | "cie lch";
+
+type Color = {
+    color_space: ColorSpace,
+    values: number[]
+};
+
+type ColorScale = {
+    color_space: ColorSpace,
+    gradient: [number, Color][]
+}
+
+type SelectedColor = {
+    scale: string | Color | ColorScale,
+    color: number | string | { type: "probability" }
+}
+
+type Colors = {
+    background?: string | Color
+    brush?: string | Color
+    unselected?: string | Color
+    selected: SelectedColor
+};
+
 type Props = {
     axes?: { [id: string]: Axis },
-    order?: string[]
+    order?: string[],
+    colors?: Colors
 } & DashComponentProps;
 
 enum MessageKind {
     Shutdown,
-    UpdateData
+    UpdateData,
+    SetColors,
 }
 
 type UpdateDataMsgPayload = {
     axes?: { [id: string]: Axis },
     order?: string[]
 };
+
+type SetColorsMsgPayload = {
+    colors?: Colors
+}
 
 interface Message {
     kind: MessageKind,
@@ -44,7 +74,7 @@ const PPC = (props: Props) => {
 
     useEffect(() => {
         async function eventLoop() {
-            const { EventQueue, Renderer, UpdateDataPayload } = await (await import('../../../pkg')).default;
+            const { Renderer, UpdateDataPayload, ColorScaleDescription, ColorDescription, Element } = await (await import('../../../pkg')).default;
 
             const canvasGPU = canvasGPURef.current;
             const canvas2D = canvas2DRef.current;
@@ -142,6 +172,89 @@ const PPC = (props: Props) => {
 
                 rendererState.queue.update_data(payload);
             }
+            const setColors = (data: SetColorsMsgPayload) => {
+                const colors = data.colors;
+
+                if (rendererState.exited) {
+                    return;
+                }
+
+                if (!colors) {
+                    rendererState.queue.set_default_color(Element.Background);
+                    rendererState.queue.set_default_color(Element.Brush);
+                    rendererState.queue.set_default_color(Element.Unselected);
+                    rendererState.queue.set_default_color_scale_color();
+                    rendererState.queue.set_default_selected_datum_coloring();
+                    return;
+                }
+
+                const set_color = (element: number, color?: any) => {
+                    if (!color) {
+                        rendererState.queue.set_default_color(element);
+                        return;
+                    }
+
+                    if (color instanceof String) {
+                        rendererState.queue.set_color_named(element, color.toString());
+                    } else if (typeof color === 'string') {
+                        rendererState.queue.set_color_named(element, color);
+                    } else {
+                        const c = new ColorDescription(color.color_space, new Float32Array(color.values));
+                        rendererState.queue.set_color_value(element, c);
+                    }
+                }
+
+                const set_selected = (colors?: SelectedColor) => {
+                    if (!colors) {
+                        rendererState.queue.set_default_color_scale_color();
+                        rendererState.queue.set_default_selected_datum_coloring();
+                        return;
+                    }
+
+                    if (!colors.scale) {
+                        rendererState.queue.set_default_color_scale_color();
+                    } else {
+                        if (colors.scale instanceof String) {
+                            rendererState.queue.set_color_scale_named(colors.scale.toString());
+                        } else if (typeof colors.scale === 'string') {
+                            rendererState.queue.set_color_scale_named(colors.scale);
+                        } else if ('values' in colors.scale) {
+                            const color: Color = colors.scale;
+                            const c = new ColorDescription(color.color_space, new Float32Array(color.values));
+                            rendererState.queue.set_color_scale_constant(c);
+                        } else if ('gradient' in colors.scale) {
+                            const scale: ColorScale = colors.scale;
+                            const s = new ColorScaleDescription(scale.color_space);
+                            for (let [sample, color] of scale.gradient) {
+                                const c = new ColorDescription(color.color_space, new Float32Array(color.values));
+                                s.with_sample(sample, c);
+                            }
+                            rendererState.queue.set_color_scale_gradient(s);
+                        }
+                    }
+
+                    if (!colors.color) {
+                        rendererState.queue.set_default_selected_datum_coloring();
+                    } else {
+                        if (colors.color instanceof String) {
+                            rendererState.queue.set_selected_datum_coloring_attribute(colors.color.toString());
+                        } else if (typeof colors.color === 'string') {
+                            rendererState.queue.set_selected_datum_coloring_attribute(colors.color);
+                        } else if (typeof colors.color === 'number') {
+                            rendererState.queue.set_selected_datum_coloring_constant(colors.color);
+                        } else if ('type' in colors.color && colors.color.type === 'probability') {
+                            rendererState.queue.set_selected_datum_coloring_by_probability();
+                        } else {
+                            throw new Error("Unknown color scale color provided");
+                        }
+                    }
+                }
+
+                set_color(Element.Background, colors.background);
+                set_color(Element.Brush, colors.brush);
+                set_color(Element.Unselected, colors.unselected);
+                set_selected(colors.selected);
+            }
             const messageListener = (e) => {
                 const data: Message = e.data;
 
@@ -151,6 +264,9 @@ const PPC = (props: Props) => {
                         break;
                     case MessageKind.UpdateData:
                         updateData(data.payload);
+                        break;
+                    case MessageKind.SetColors:
+                        setColors(data.payload);
                         break;
                 }
             };
@@ -211,6 +327,15 @@ const PPC = (props: Props) => {
             }
         });
     }, [props.axes, props.order]);
+
+    // Color update
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.SetColors, payload: {
+                colors: props.colors
+            }
+        });
+    }, [props.colors]);
 
     return (
         <div id={id} style={{ position: "relative", width: "100%", height: "100%" }}>

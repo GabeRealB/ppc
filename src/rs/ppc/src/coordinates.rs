@@ -642,6 +642,16 @@ impl<T: CoordinateSystem> Aabb<T> {
         }
     }
 
+    /// Returns the start of the bounding box.
+    pub fn start(&self) -> Position<T> {
+        self.start
+    }
+
+    /// Returns the end of the bounding box.
+    pub fn end(&self) -> Position<T> {
+        self.end
+    }
+
     /// Returns the size of the bounding box.
     pub fn size(&self) -> Offset<T> {
         self.end - self.start
@@ -823,16 +833,18 @@ impl CoordinateSystemTransformer<ViewSpace, ScreenSpace> for ScreenViewTransform
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ViewWorldTransformer {
     view_max_y: f32,
+    world_offset: f32,
     view_world_width_ratio: f32,
 }
 
 impl ViewWorldTransformer {
     /// Constructs a new instance.
-    pub fn new(view_height: f32, view_width: f32, world_width: f32) -> Self {
+    pub fn new(view_height: f32, view_width: f32, world_width: f32, world_offset: f32) -> Self {
         let view_world_width_ratio = (view_width - 1.0) / (world_width - 1.0);
 
         Self {
             view_max_y: view_height - 1.0,
+            world_offset,
             view_world_width_ratio,
         }
     }
@@ -844,7 +856,7 @@ impl CoordinateSystemTransformer<ViewSpace, WorldSpace> for ViewWorldTransformer
         position: <ViewSpace as CoordinateSystem>::Position,
     ) -> <WorldSpace as CoordinateSystem>::Position {
         CartesianPosition {
-            x: position.x / self.view_world_width_ratio,
+            x: (position.x / self.view_world_width_ratio) - self.world_offset,
             y: position.y / self.view_max_y,
         }
     }
@@ -866,7 +878,7 @@ impl CoordinateSystemTransformer<WorldSpace, ViewSpace> for ViewWorldTransformer
         position: <WorldSpace as CoordinateSystem>::Position,
     ) -> <ViewSpace as CoordinateSystem>::Position {
         CartesianPosition {
-            x: position.x * self.view_world_width_ratio,
+            x: (position.x + self.world_offset) * self.view_world_width_ratio,
             y: position.y * self.view_max_y,
         }
     }

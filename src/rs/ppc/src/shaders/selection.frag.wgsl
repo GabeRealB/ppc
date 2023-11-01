@@ -7,15 +7,19 @@ struct Config {
     // padding: 4 bytes
 }
 
-struct SelectionInfo {
+struct SelectionLineInfo {
     axis: u32,
     use_color: u32,
     use_left: u32,
     offset_x: f32,
+    color_idx: u32,
+    use_low_color: u32,
     range: vec2<f32>,
-    // padding: 8 bytes
-    color: vec3<f32>,
-    // padding: 4 bytes
+}
+
+struct LabelColor {
+    color_high: vec4<f32>,
+    color_low: vec4<f32>,
 }
 
 fn get_line_alpha(normal: vec2<f32>) -> f32 {
@@ -52,12 +56,15 @@ fn xyz_to_srgb(color: vec3<f32>) -> vec3<f32> {
 var<uniform> config: Config;
 
 @group(0) @binding(3)
-var<storage> selections: array<SelectionInfo>;
+var<storage> selections: array<SelectionLineInfo>;
 
 @group(0) @binding(4)
-var probability_curves: texture_2d_array<f32>;
+var<storage> colors: array<LabelColor>;
 
 @group(0) @binding(5)
+var probability_curves: texture_2d_array<f32>;
+
+@group(0) @binding(6)
 var probability_sampler: sampler;
 
 @fragment
@@ -75,7 +82,8 @@ fn main(
     let sample = textureSample(probability_curves, probability_sampler, texture_position, texture_array_index).r;
 
     if selection.use_color != 0u {
-        let color = xyz_to_srgb(selection.color);
+        let color_xyz = select(colors[selection.color_idx].color_high, colors[selection.color_idx].color_low, selection.use_low_color == 1u);
+        let color = xyz_to_srgb(color_xyz.rgb);
         return vec4<f32>(color * alpha, alpha);
     } else {
         let gradient = xyz_to_srgb(mix(config.low_color, config.high_color, sample));

@@ -330,6 +330,14 @@ impl RenderPipelines {
                 BindGroupLayoutEntry {
                     binding: 4,
                     visibility: ShaderStage::FRAGMENT,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                        ..Default::default()
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: ShaderStage::FRAGMENT,
                     resource: BindGroupLayoutEntryResource::Texture(TextureBindingLayout {
                         multisampled: None,
                         sample_type: Some(TextureSampleType::UnfilterableFloat),
@@ -337,7 +345,7 @@ impl RenderPipelines {
                     }),
                 },
                 BindGroupLayoutEntry {
-                    binding: 5,
+                    binding: 6,
                     visibility: ShaderStage::FRAGMENT,
                     resource: BindGroupLayoutEntryResource::Sampler(SamplerBindingLayout {
                         r#type: Some(SamplerBindingType::NonFiltering),
@@ -522,7 +530,8 @@ pub struct ComputePipelines {
     pub create_curves: (BindGroupLayout, ComputePipeline),
     pub create_curves_segments: (BindGroupLayout, ComputePipeline),
     pub compute_probability: ProbabilityComputationPipeline,
-    pub create_color_scale: (BindGroupLayout, ComputePipeline),
+    pub sample_color_scale: (BindGroupLayout, ComputePipeline),
+    pub transform_color_scale: (BindGroupLayout, ComputePipeline),
 }
 
 pub struct ProbabilityComputationPipeline {
@@ -538,14 +547,16 @@ impl ComputePipelines {
         let create_curves = Self::init_curve_creation_pipeline(device).await;
         let create_curves_segments = Self::init_curve_segment_creation_pipeline(device).await;
         let compute_probability = Self::init_probability_computation_pipeline(device).await;
-        let create_color_scale = Self::init_color_scale_creation_pipeline(device).await;
+        let sample_color_scale = Self::init_color_scale_sampling_pipeline(device).await;
+        let transform_color_scale = Self::init_color_scale_transformation_pipeline(device).await;
 
         Self {
             sample_curves,
             create_curves,
             create_curves_segments,
             compute_probability,
-            create_color_scale,
+            sample_color_scale,
+            transform_color_scale,
         }
     }
 
@@ -818,11 +829,11 @@ impl ComputePipelines {
         }
     }
 
-    async fn init_color_scale_creation_pipeline(
+    async fn init_color_scale_sampling_pipeline(
         device: &Device,
     ) -> (BindGroupLayout, ComputePipeline) {
         let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("color scale creation bind group layout".into()),
+            label: Some("color scale sampling bind group layout".into()),
             entries: [
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -849,18 +860,80 @@ impl ComputePipelines {
 
         let pipeline = device
             .create_compute_pipeline_async(ComputePipelineDescriptor {
-                label: Some("color scale creation compute pipeline".into()),
+                label: Some("color scale sampling compute pipeline".into()),
                 layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
                     PipelineLayoutDescriptor {
-                        label: Some("curve creation pipeline layout".into()),
+                        label: Some("color scale sampling pipeline layout".into()),
                         layouts: [bind_layout.clone()],
                     },
                 )),
                 compute: ProgrammableStage {
                     entry_point: "main",
                     module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("color scale creation compute shader".into()),
-                        code: include_str!("./shaders/create_color_scale.comp.wgsl").into(),
+                        label: Some("color scale sampling compute shader".into()),
+                        code: include_str!("./shaders/color_scale/sample_color_scale.comp.wgsl")
+                            .into(),
+                    }),
+                },
+            })
+            .await;
+
+        (bind_layout, pipeline)
+    }
+
+    async fn init_color_scale_transformation_pipeline(
+        device: &Device,
+    ) -> (BindGroupLayout, ComputePipeline) {
+        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("color scale transformation bind group layout".into()),
+            entries: [
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::Texture(TextureBindingLayout {
+                        multisampled: None,
+                        sample_type: Some(TextureSampleType::UnfilterableFloat),
+                        view_dimension: Some(TextureViewDimension::D2),
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::StorageTexture(
+                        StorageTextureBindingLayout {
+                            access: Some(StorageTextureAccess::WriteOnly),
+                            format: TextureFormat::Rgba32float,
+                            view_dimension: Some(TextureViewDimension::D2),
+                        },
+                    ),
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        has_dynamic_offset: None,
+                        min_binding_size: None,
+                        r#type: Some(BufferBindingType::Uniform),
+                    }),
+                },
+            ],
+        });
+
+        let pipeline = device
+            .create_compute_pipeline_async(ComputePipelineDescriptor {
+                label: Some("color scale transformation compute pipeline".into()),
+                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
+                    PipelineLayoutDescriptor {
+                        label: Some("color scale transformation pipeline layout".into()),
+                        layouts: [bind_layout.clone()],
+                    },
+                )),
+                compute: ProgrammableStage {
+                    entry_point: "main",
+                    module: device.create_shader_module(ShaderModuleDescriptor {
+                        label: Some("color scale transformation compute shader".into()),
+                        code: include_str!("./shaders/color_scale/transform_color_scale.comp.wgsl")
+                            .into(),
                     }),
                 },
             })

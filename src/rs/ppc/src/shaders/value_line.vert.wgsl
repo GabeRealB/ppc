@@ -6,7 +6,7 @@ struct Matrices {
 struct Config {
     line_width: vec2<f32>,
     selection_threshold: f32,
-    // padding: 4 bytes
+    color_probabilities: u32,
     unselected_color: vec4<f32>,
 }
 

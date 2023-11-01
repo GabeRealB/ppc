@@ -139,7 +139,8 @@ impl Device {
         &self,
         descriptor: RenderPipelineDescriptor<'_, N>,
     ) -> RenderPipeline {
-        let promise = self.device.create_render_pipeline_async(&descriptor.into());
+        let descriptor: web_sys::GpuRenderPipelineDescriptor = descriptor.into();
+        let promise = self.device.create_render_pipeline_async(&descriptor);
         let pipeline = JsFuture::from(promise)
             .await
             .expect("could not create render pipeline")
@@ -211,9 +212,6 @@ impl Queue {
         assert!(data_offset <= u32::MAX as usize);
         assert!(data_size <= u32::MAX as usize);
 
-        // let data_offset = data_offset as u32;
-        // let data_size = data_size as u32;
-
         // Due to padding it is unsound to simply cast the slice to
         // a `[u8]`, as the padding bytes are uninitialized.
         // A workaround is to copy the data manually into a new buffer
@@ -231,7 +229,6 @@ impl Queue {
             .unwrap();
         let memory_data = memory.buffer().dyn_into::<js_sys::ArrayBuffer>().unwrap();
         let memory_data = js_sys::DataView::new(&memory_data, data_offset, data_size);
-
         self.queue.write_buffer_with_u32_and_buffer_source_and_u32(
             &buffer.buffer,
             buffer_offset,
@@ -797,12 +794,6 @@ impl Texture {
         };
 
         TextureView { view }
-    }
-}
-
-impl Drop for Texture {
-    fn drop(&mut self) {
-        self.texture.destroy()
     }
 }
 
@@ -1904,7 +1895,7 @@ impl From<FragmentStateBlendEntry> for js_sys::Object {
         }
 
         if let Some(operation) = value.operation {
-            object.set("srcFactor".into(), operation.into());
+            object.set("operation".into(), operation.into());
         }
 
         if let Some(factor) = value.src_factor {
@@ -1985,14 +1976,12 @@ pub struct MultisampleState {
 
 impl From<MultisampleState> for web_sys::GpuMultisampleState {
     fn from(value: MultisampleState) -> Self {
-        let alpha_to_coverage_enabled = value.alpha_to_coverage_enabled.unwrap_or(false);
-        let count = value.count.unwrap_or(1);
-        let mask = value.mask.unwrap_or(0xFFFFFFFF);
-
         let mut state = web_sys::GpuMultisampleState::new();
-        state.alpha_to_coverage_enabled(alpha_to_coverage_enabled);
-        state.count(count);
-        state.mask(mask);
+        value
+            .alpha_to_coverage_enabled
+            .map(|x| state.alpha_to_coverage_enabled(x));
+        value.count.map(|x| state.count(x));
+        value.mask.map(|x| state.mask(x));
         state
     }
 }

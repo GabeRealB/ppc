@@ -1,7 +1,7 @@
 struct Config {
     line_width: vec2<f32>,
     selection_threshold: f32,
-    // padding: 4 bytes
+    color_probabilities: u32,
     unselected_color: vec4<f32>,
 }
 
@@ -65,7 +65,7 @@ fn main(
     let color_value = color_values[instance_idx];
     let probability = probabilities[instance_idx];
 
-    let texture_position = vec2<f32>(probability, 0.0);
+    let texture_position = vec2<f32>(select(color_value, probability, config.color_probabilities == 1u), 0.0);
     let color_scale_color = textureSample(color_scale, color_scale_sampler, texture_position);
 
     let color_selection = vec4<bool>(probability >= config.selection_threshold);
@@ -73,7 +73,6 @@ fn main(
 
     let color_alpha = color.a;
     let color_srgb = xyz_to_srgb(color.rgb);
-
 
     return vec4<f32>(color_srgb * alpha * color_alpha, alpha * color_alpha);
 }

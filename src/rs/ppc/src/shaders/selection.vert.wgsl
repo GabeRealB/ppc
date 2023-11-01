@@ -19,15 +19,14 @@ struct Axes {
     range_y: vec2<f32>,
 }
 
-struct SelectionInfo {
+struct SelectionLineInfo {
     axis: u32,
     use_color: u32,
     use_left: u32,
     offset_x: f32,
+    color_idx: u32,
+    use_low_color: u32,
     range: vec2<f32>,
-    // padding: 8 bytes
-    color: vec3<f32>,
-    // padding: 4 bytes
 }
 
 @group(0) @binding(0)
@@ -40,7 +39,7 @@ var<uniform> config: Config;
 var<storage, read> axes: array<Axes>;
 
 @group(0) @binding(3)
-var<storage, read> selections: array<SelectionInfo>;
+var<storage, read> selections: array<SelectionLineInfo>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,

@@ -67,6 +67,20 @@ pub struct ColorScale<T: ColorSpace> {
 }
 
 impl<T: ColorSpace> ColorScale<T> {
+    /// Transforms the color scale into another color space.
+    pub fn transform<U: ColorSpace>(&self) -> ColorScale<U>
+    where
+        T: ColorSpaceTransform<U>,
+    {
+        let scale = self
+            .scale
+            .iter()
+            .copied()
+            .map(|(x, y)| (x, y.transform()))
+            .collect();
+        ColorScale { scale }
+    }
+
     /// Returns the unsampled representation of the scale.
     ///
     /// The scale is sorted in strictly ascending order of the `t` value and is
