@@ -1,14 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { DashComponentProps } from '../props';
 
-type Axis = {
-    label: string,
-    datums: number[],
-    range?: [number, number],
-    visibleRange?: [number, number],
-    hidden?: boolean
-};
-
 type ColorSpace = "srgb" | "xyz" | "cie_lab" | "cie lch";
 
 type Color = {
@@ -33,16 +25,32 @@ type Colors = {
     selected: SelectedColor
 };
 
+type Axis = {
+    label: string,
+    datums: number[],
+    range?: [number, number],
+    visibleRange?: [number, number],
+    hidden?: boolean
+};
+
+type LabelInfo = {
+    color?: Color,
+    selection_threshold?: number
+}
+
 type Props = {
     axes?: { [id: string]: Axis },
     order?: string[],
-    colors?: Colors
+    colors?: Colors,
+    labels: { [id: string]: LabelInfo },
+    active_label: string
 } & DashComponentProps;
 
 enum MessageKind {
     Shutdown,
     UpdateData,
     SetColors,
+    SetLabels,
 }
 
 type UpdateDataMsgPayload = {
@@ -52,6 +60,13 @@ type UpdateDataMsgPayload = {
 
 type SetColorsMsgPayload = {
     colors?: Colors
+}
+
+type SetLabelsMsgPayload = {
+    labels: { [id: string]: LabelInfo }
+    active_label: string,
+    previous_labels?: { [id: string]: LabelInfo }
+    previous_active_label?: string,
 }
 
 interface Message {
@@ -68,9 +83,9 @@ const PPC = (props: Props) => {
     const canvas2DRef = useRef<HTMLCanvasElement>(null);
 
     // Create a channel to asynchronously communicate with the js event loop.
-    const channel = new MessageChannel();
-    const sx = channel.port1;
-    const rx = channel.port2;
+    const channelRef = useRef<MessageChannel>(new MessageChannel());
+    const sx = channelRef.current.port1;
+    const rx = channelRef.current.port2;
 
     useEffect(() => {
         async function eventLoop() {
@@ -255,6 +270,51 @@ const PPC = (props: Props) => {
                 set_color(Element.Unselected, colors.unselected);
                 set_selected(colors.selected);
             }
+            const set_labels = (data: SetLabelsMsgPayload) => {
+                if (rendererState.exited) {
+                    return;
+                }
+
+                let labels = data.labels;
+                let previous_labels = data.previous_labels ? data.previous_labels : {};
+
+                // Remove old labels.
+                for (let id in previous_labels) {
+                    if (id in labels === false) {
+                        rendererState.queue.remove_label(id);
+                    }
+                }
+
+                // Update existing labels and add new ones.
+                for (let id in labels) {
+                    const label = labels[id];
+                    if (id in previous_labels === true) {
+                        const previous = previous_labels[id];
+
+                        if (label.color !== previous.color) {
+                            const color = label.color;
+                            if (color) {
+                                const c = new ColorDescription(color.color_space, new Float32Array(color.values));
+                                rendererState.queue.set_label_color(id, c);
+                            } else {
+                                rendererState.queue.set_label_color(id, null);
+                            }
+                        }
+
+                        if (label.selection_threshold !== previous.selection_threshold) {
+                            rendererState.queue.set_label_selection_threshold(id, label.selection_threshold);
+                        }
+                    } else {
+                        let color = label.color ? new ColorDescription(label.color.color_space, new Float32Array(label.color.values)) : null;
+                        let selection_threshold = label.selection_threshold;
+                        rendererState.queue.add_label(id, color, selection_threshold);
+                    }
+                }
+
+                if (data.active_label !== data.previous_active_label) {
+                    rendererState.queue.switch_active_label(data.active_label);
+                }
+            };
             const messageListener = (e) => {
                 const data: Message = e.data;
 
@@ -268,6 +328,11 @@ const PPC = (props: Props) => {
                     case MessageKind.SetColors:
                         setColors(data.payload);
                         break;
+                    case MessageKind.SetLabels:
+                        set_labels(data.payload);
+                        break;
+                    default:
+                        console.log("unknown message", data);
                 }
             };
 
@@ -337,6 +402,23 @@ const PPC = (props: Props) => {
         });
     }, [props.colors]);
 
+    // Labels update
+    const previous_labels = useRef<{ [id: string]: LabelInfo }>(null);
+    const previous_active_label = useRef<string>(null);
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.SetLabels, payload: {
+                labels: props.labels,
+                active_label: props.active_label,
+                previous_labels: previous_labels.current,
+                previous_active_label: previous_active_label.current,
+            }
+        });
+
+        previous_labels.current = props.labels;
+        previous_active_label.current = props.active_label;
+    }, [props.labels, props.active_label]);
+
     return (
         <div id={id} style={{ position: "relative", width: "100%", height: "100%" }}>
             <canvas ref={canvasGPURef} style={{ position: "absolute", left: 0, top: 0, zIndex: 0, width: "100%", height: "100%" }}></canvas>
@@ -345,6 +427,11 @@ const PPC = (props: Props) => {
     )
 }
 
-PPC.defaultProps = {};
+PPC.defaultProps = {
+    labels: {
+        "unknown": {}
+    },
+    active_label: "unknown"
+};
 
 export default PPC;

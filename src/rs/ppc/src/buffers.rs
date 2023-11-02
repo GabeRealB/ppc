@@ -445,7 +445,7 @@ pub struct ValuesDrawingBuffers {
     pub lines: ValueLineBuffer,
     pub datums: ValueDatumBuffer,
     pub color_values: ColorValuesBuffer,
-    pub probabilities: ProbabilitiesBuffer,
+    probabilities: Vec<ProbabilitiesBuffer>,
     pub color_scale: ColorScaleTexture,
 }
 
@@ -456,9 +456,25 @@ impl ValuesDrawingBuffers {
             lines: ValueLineBuffer::new(device),
             datums: ValueDatumBuffer::new(device),
             color_values: ColorValuesBuffer::new(device),
-            probabilities: ProbabilitiesBuffer::new(device),
+            probabilities: vec![],
             color_scale: ColorScaleTexture::new(device),
         }
+    }
+
+    pub fn probabilities(&self, label_idx: usize) -> &ProbabilitiesBuffer {
+        &self.probabilities[label_idx]
+    }
+
+    pub fn probabilities_mut(&mut self, label_idx: usize) -> &mut ProbabilitiesBuffer {
+        &mut self.probabilities[label_idx]
+    }
+
+    pub fn push_label(&mut self, device: &Device) {
+        self.probabilities.push(ProbabilitiesBuffer::new(device))
+    }
+
+    pub fn remove_label(&mut self, label_idx: usize) {
+        self.probabilities.remove(label_idx);
     }
 }
 
@@ -634,6 +650,17 @@ impl ProbabilitiesBuffer {
         Self { buffer }
     }
 
+    pub fn empty(device: &Device) -> Self {
+        let buffer = device.create_buffer(BufferDescriptor {
+            label: Some(Cow::Borrowed("probabilities buffer")),
+            size: std::mem::size_of::<f32>(),
+            usage: BufferUsage::STORAGE | BufferUsage::COPY_SRC,
+            mapped_at_creation: None,
+        });
+
+        Self { buffer }
+    }
+
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
@@ -697,26 +724,50 @@ impl ColorScaleTexture {
 /// Collection of buffers for drawing the probability curves.
 #[derive(Debug, Clone)]
 pub struct CurvesBuffers {
-    pub config: CurvesConfigBuffer,
-    pub sample_textures: Vec<ProbabilitySampleTexture>,
-    pub lines: Vec<CurveLinesInfoBuffer>,
+    config: CurvesConfigBuffer,
+    sample_textures: Vec<ProbabilitySampleTexture>,
+    lines: Vec<CurveLinesInfoBuffer>,
 }
 
 impl CurvesBuffers {
     fn new(device: &Device) -> Self {
         Self {
             config: CurvesConfigBuffer::new(device),
-            sample_textures: vec![ProbabilitySampleTexture::new(device)],
-            lines: vec![CurveLinesInfoBuffer::new(device)],
+            sample_textures: vec![],
+            lines: vec![],
         }
     }
 
-    pub fn remove_idx(&mut self, index: usize) {
+    pub fn config(&self) -> &CurvesConfigBuffer {
+        &self.config
+    }
+
+    pub fn config_mut(&mut self) -> &mut CurvesConfigBuffer {
+        &mut self.config
+    }
+
+    pub fn sample_texture(&self, label_idx: usize) -> &ProbabilitySampleTexture {
+        &self.sample_textures[label_idx]
+    }
+
+    pub fn sample_texture_mut(&mut self, label_idx: usize) -> &mut ProbabilitySampleTexture {
+        &mut self.sample_textures[label_idx]
+    }
+
+    pub fn lines(&self, label_idx: usize) -> &CurveLinesInfoBuffer {
+        &self.lines[label_idx]
+    }
+
+    pub fn lines_mut(&mut self, label_idx: usize) -> &mut CurveLinesInfoBuffer {
+        &mut self.lines[label_idx]
+    }
+
+    pub fn remove_label(&mut self, index: usize) {
         self.sample_textures.remove(index);
         self.lines.remove(index);
     }
 
-    pub fn push(&mut self, device: &Device) {
+    pub fn push_label(&mut self, device: &Device) {
         self.sample_textures
             .push(ProbabilitySampleTexture::new(device));
         self.lines.push(CurveLinesInfoBuffer::new(device));
@@ -856,7 +907,7 @@ impl CurveLinesInfoBuffer {
 /// Collection of buffers for drawing the selections.
 #[derive(Debug, Clone)]
 pub struct SelectionsBuffers {
-    pub config: SelectionsConfigBuffer,
+    config: SelectionsConfigBuffer,
     lines: Vec<SelectionLinesBuffer>,
 }
 
@@ -864,7 +915,7 @@ impl SelectionsBuffers {
     fn new(device: &Device) -> Self {
         Self {
             config: SelectionsConfigBuffer::new(device),
-            lines: vec![SelectionLinesBuffer::new(device)],
+            lines: vec![],
         }
     }
 

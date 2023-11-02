@@ -26,7 +26,7 @@ impl Action {
     pub fn new_move_axis_action(
         axis: Rc<Axis>,
         event: PointerEvent,
-        active_label_idx: usize,
+        active_label_idx: Option<usize>,
     ) -> Self {
         Self {
             inner: ActionInner::MoveAxis(MoveAxisAction::new(axis, event, active_label_idx)),
@@ -82,12 +82,12 @@ impl Action {
 struct MoveAxisAction {
     axis: Rc<Axis>,
     moved: bool,
-    active_label_idx: usize,
+    active_label_idx: Option<usize>,
     start_position: Position<ScreenSpace>,
 }
 
 impl MoveAxisAction {
-    fn new(axis: Rc<Axis>, event: PointerEvent, active_label_idx: usize) -> Self {
+    fn new(axis: Rc<Axis>, event: PointerEvent, active_label_idx: Option<usize>) -> Self {
         let position =
             Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
 
@@ -111,7 +111,7 @@ impl MoveAxisAction {
             let axes = self.axis.axes();
             let axes = axes.borrow();
             let position = position.transform(&axes.space_transformer());
-            position.x.clamp(0.0, axes.num_visible_axes() as f32)
+            position.x.clamp(-0.5, axes.num_visible_axes() as f32)
         };
 
         self.axis.set_world_offset(offset);

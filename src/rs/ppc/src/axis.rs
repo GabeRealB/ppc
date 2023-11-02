@@ -201,13 +201,6 @@ impl Axis {
         let max_label = max_label.as_string().unwrap().into();
         let axes = Rc::downgrade(axes);
 
-        let selection = crate::selection::Selection::new([0.4, 0.5], [0.7, 1.0]);
-        let mut curve_builder = SelectionCurveBuilder::new();
-        curve_builder.add_selection(selection);
-
-        let mut active_curve = SelectionCurve::new(visible_datums_range_normalized.into());
-        active_curve.set_curve(curve_builder.build(visible_datums_range_normalized.into()));
-
         Self {
             key: key.into(),
             label,
@@ -220,8 +213,8 @@ impl Axis {
             datums_range,
             visible_datums_range,
             visible_datums_range_normalized,
-            selection_curves: RefCell::new(vec![active_curve]),
-            curve_builders: RefCell::new(vec![curve_builder]),
+            selection_curves: RefCell::new(vec![]),
+            curve_builders: RefCell::new(vec![]),
             world_offset: Cell::new(world_offset),
             get_rem_length,
             get_text_length,
@@ -355,8 +348,24 @@ impl Axis {
         })
     }
 
+    /// Signals that the axis must allocate another selection curve and selection curve builder for the new label.
+    pub fn push_label(&self) {
+        self.selection_curves.borrow_mut().push(SelectionCurve::new(
+            self.visible_datums_range_normalized.into(),
+        ));
+        self.curve_builders
+            .borrow_mut()
+            .push(SelectionCurveBuilder::new());
+    }
+
+    /// Removes the selection curve and selection curve builder assigned to a label.
+    pub fn remove_label(&self, label_idx: usize) {
+        self.selection_curves.borrow_mut().remove(label_idx);
+        self.curve_builders.borrow_mut().remove(label_idx);
+    }
+
     /// Returns the bounding box of the axis.
-    pub fn bounding_box(&self, active_label_idx: usize) -> Aabb<LocalSpace> {
+    pub fn bounding_box(&self, active_label_idx: Option<usize>) -> Aabb<LocalSpace> {
         let (axis_width, _) = (self.get_rem_length)(
             AXIS_LINE_PADDING_REM + AXIS_LINE_PADDING_REM + AXIS_LINE_SIZE_REM,
         );
@@ -495,9 +504,11 @@ impl Axis {
     }
 
     /// Returns the extends of the expanded axis lines.
-    pub fn expanded_extends(&self, active_label_idx: usize) -> Aabb<LocalSpace> {
+    pub fn expanded_extends(&self, active_label_idx: Option<usize>) -> Aabb<LocalSpace> {
         let curve_builders = self.curve_builders.borrow();
-        let max_rank = curve_builders[active_label_idx].max_rank();
+        let max_rank = active_label_idx
+            .map(|active_label_idx| curve_builders[active_label_idx].max_rank())
+            .unwrap_or(0);
 
         let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
         let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
@@ -1172,7 +1183,7 @@ impl Axes {
     pub fn element_at_position(
         &self,
         position: Position<ScreenSpace>,
-        active_label_idx: usize,
+        active_label_idx: Option<usize>,
     ) -> Option<Element> {
         let position = position.transform(&self.space_transformer());
         {
@@ -1198,22 +1209,24 @@ impl Axes {
             }
 
             // Check if we are hovering a selection.
-            let bounding_box = ax.selections_bounding_box(active_label_idx);
-            if bounding_box.contains_point(&position) {
-                if let Some(rank) = ax.selection_rank_at_position(&position, active_label_idx) {
-                    let range = ax.axis_line_range();
-                    let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+            if let Some(active_label_idx) = active_label_idx {
+                let bounding_box = ax.selections_bounding_box(active_label_idx);
+                if bounding_box.contains_point(&position) {
+                    if let Some(rank) = ax.selection_rank_at_position(&position, active_label_idx) {
+                        let range = ax.axis_line_range();
+                        let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
 
-                    let selection = {
-                        let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                        curve_builder.get_selection_containing(axis_value, rank)
-                    };
+                        let selection = {
+                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                            curve_builder.get_selection_containing(axis_value, rank)
+                        };
 
-                    if let Some(selection) = selection {
-                        return Some(Element::Selection {
-                            axis: ax,
-                            selection_idx: selection,
-                        });
+                        if let Some(selection) = selection {
+                            return Some(Element::Selection {
+                                axis: ax,
+                                selection_idx: selection,
+                            });
+                        }
                     }
                 }
             }

@@ -290,6 +290,78 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    pub fn add_label(
+        &self,
+        id: String,
+        color: Option<ColorDescription>,
+        selection_threshold: Option<f32>,
+    ) {
+        let color = color.map(|color| {
+            let ColorDescription {
+                color_space,
+                values,
+                alpha,
+            } = color;
+
+            match color_space {
+                ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
+                ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
+                ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
+                ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
+            }
+        });
+
+        self.sender
+            .send_blocking(Event::AddLabel {
+                id,
+                color,
+                selection_threshold,
+            })
+            .expect("the channel should be open");
+    }
+
+    pub fn remove_label(&self, id: String) {
+        self.sender
+            .send_blocking(Event::RemoveLabel { id })
+            .expect("the channel should be open");
+    }
+
+    pub fn switch_active_label(&self, id: String) {
+        self.sender
+            .send_blocking(Event::SwitchActiveLabel { id })
+            .expect("the channel should be open");
+    }
+
+    pub fn set_label_color(&self, id: String, color: Option<ColorDescription>) {
+        let color = color.map(|color| {
+            let ColorDescription {
+                color_space,
+                values,
+                alpha,
+            } = color;
+
+            match color_space {
+                ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
+                ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
+                ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
+                ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
+            }
+        });
+
+        self.sender
+            .send_blocking(Event::SetLabelColor { id, color })
+            .expect("the channel should be open");
+    }
+
+    pub fn set_label_selection_threshold(&self, id: String, selection_threshold: Option<f32>) {
+        self.sender
+            .send_blocking(Event::SetLabelThreshold {
+                id,
+                selection_threshold,
+            })
+            .expect("the channel should be open");
+    }
+
     /// Spawns a `draw` event.
     pub async fn draw(&self) {
         let (sx, rx) = async_channel::bounded(1);
@@ -431,6 +503,7 @@ enum Event {
     AddLabel {
         id: String,
         color: Option<colors::ColorQuery<'static>>,
+        selection_threshold: Option<f32>,
     },
     RemoveLabel {
         id: String,
@@ -444,7 +517,7 @@ enum Event {
     },
     SetLabelThreshold {
         id: String,
-        threshold: f32,
+        selection_threshold: Option<f32>,
     },
     Draw {
         completion: Sender<()>,
@@ -532,8 +605,7 @@ pub struct Renderer {
     axes: Rc<RefCell<axis::Axes>>,
     events: Vec<event::Event>,
     active_action: Option<action::Action>,
-    labeling_threshold: f32,
-    active_label_idx: usize,
+    active_label_idx: Option<usize>,
     labels: Vec<LabelInfo>,
     label_color_generator: LabelColorGenerator,
     datums_coloring: DatumsColoring,
@@ -596,11 +668,11 @@ struct StagingData {
     color_scale: Vec<(ColorSpace, color_scale::ColorScaleDescriptor<'static>)>,
     datums_coloring: Vec<DatumsColoring>,
     resize: Vec<(u32, u32, f32)>,
-    label_additions: Vec<(String, Option<ColorQuery<'static>>)>,
+    label_additions: Vec<(String, Option<ColorQuery<'static>>, Option<f32>)>,
     label_removals: Vec<String>,
     active_label: Vec<String>,
     label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
-    label_threshold_changes: Vec<(String, f32)>,
+    label_threshold_changes: Vec<(String, Option<f32>)>,
 }
 
 #[wasm_bindgen]
@@ -709,15 +781,6 @@ impl Renderer {
             get_text_length_screen,
         );
 
-        let (color, color_dimmed) = LabelColorGenerator::default().next();
-        let labels = vec![LabelInfo {
-            id: "default".into(),
-            threshold_changed: true,
-            selection_threshold: f32::EPSILON,
-            color,
-            color_dimmed,
-        }];
-
         let mut this = Self {
             canvas_gpu,
             canvas_2d,
@@ -731,9 +794,8 @@ impl Renderer {
             axes,
             events: Vec::default(),
             active_action: None,
-            labeling_threshold: 0.0,
-            active_label_idx: 0,
-            labels,
+            active_label_idx: None,
+            labels: vec![],
             label_color_generator: LabelColorGenerator::default(),
             datums_coloring: DEFAULT_DATUMS_COLORING(),
             background_color: DEFAULT_BACKGROUND_COLOR(),
@@ -825,8 +887,14 @@ impl Renderer {
                     self.staging_data.datums_coloring.push(coloring);
                     self.events.push(event::Event::DATUMS_COLORING_CHANGE);
                 }
-                Event::AddLabel { id, color } => {
-                    self.staging_data.label_additions.push((id, color));
+                Event::AddLabel {
+                    id,
+                    color,
+                    selection_threshold,
+                } => {
+                    self.staging_data
+                        .label_additions
+                        .push((id, color, selection_threshold));
                     self.events.push(event::Event::LABEL_ADDITION);
                 }
                 Event::RemoveLabel { id } => {
@@ -841,10 +909,13 @@ impl Renderer {
                     self.staging_data.label_color_changes.push((id, color));
                     self.events.push(event::Event::LABEL_COLOR_CHANGE);
                 }
-                Event::SetLabelThreshold { id, threshold } => {
+                Event::SetLabelThreshold {
+                    id,
+                    selection_threshold,
+                } => {
                     self.staging_data
                         .label_threshold_changes
-                        .push((id, threshold));
+                        .push((id, selection_threshold));
                     self.events.push(event::Event::LABEL_THRESHOLD_CHANGE);
                 }
                 Event::Draw { completion } => self.render(completion).await,
@@ -881,6 +952,18 @@ impl Renderer {
                 view: msaa_texture.clone(),
             }],
             max_draw_count: None,
+        };
+
+        let probabilities_buffer = if let Some(active_label_idx) = self.active_label_idx {
+            self.buffers
+                .values
+                .probabilities(active_label_idx)
+                .buffer()
+                .clone()
+        } else {
+            buffers::ProbabilitiesBuffer::empty(&self.device)
+                .buffer()
+                .clone()
         };
 
         let color_scale = self.buffers.values.color_scale.view();
@@ -930,7 +1013,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 5,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.values.probabilities.buffer().clone(),
+                        buffer: probabilities_buffer,
                         offset: None,
                         size: None,
                     }),
@@ -1029,7 +1112,12 @@ impl Renderer {
         msaa_texture: &webgpu::TextureView,
         resolve_target: &webgpu::TextureView,
     ) {
-        let lines_buffer = self.buffers.selections.lines(self.active_label_idx);
+        if self.active_label_idx.is_none() {
+            return;
+        }
+        let active_label_idx = self.active_label_idx.unwrap();
+
+        let lines_buffer = self.buffers.selections.lines(active_label_idx);
         let num_lines = lines_buffer.len();
         if num_lines == 0 {
             return;
@@ -1047,9 +1135,11 @@ impl Renderer {
             max_draw_count: None,
         };
 
-        let active_curve_idx = self.active_label_idx;
-        let probability_curve_samples =
-            self.buffers.curves.sample_textures[active_curve_idx].array_view();
+        let probability_curve_samples = self
+            .buffers
+            .curves
+            .sample_texture(active_label_idx)
+            .array_view();
         let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
             label: Some(Cow::Borrowed("datum lines bind group")),
             entries: [
@@ -1064,7 +1154,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 1,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.selections.config.buffer().clone(),
+                        buffer: self.buffers.selections.config().buffer().clone(),
                         offset: None,
                         size: None,
                     }),
@@ -1122,8 +1212,13 @@ impl Renderer {
         msaa_texture: &webgpu::TextureView,
         resolve_target: &webgpu::TextureView,
     ) {
-        let active_curve_idx = self.active_label_idx;
-        let num_lines = self.buffers.curves.lines[active_curve_idx].len();
+        if self.active_label_idx.is_none() {
+            return;
+        }
+        let active_label_idx = self.active_label_idx.unwrap();
+
+        let lines_buffer = self.buffers.curves.lines(active_label_idx);
+        let num_lines = lines_buffer.len();
         if num_lines == 0 {
             return;
         }
@@ -1154,7 +1249,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 1,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.curves.config.buffer().clone(),
+                        buffer: self.buffers.curves.config().buffer().clone(),
                         offset: None,
                         size: None,
                     }),
@@ -1170,7 +1265,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 3,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.curves.lines[active_curve_idx].buffer().clone(),
+                        buffer: lines_buffer.buffer().clone(),
                         offset: None,
                         size: None,
                     }),
@@ -1290,11 +1385,17 @@ impl Renderer {
         self.render_labels();
         self.render_min_max_labels();
 
-        if probabilities_changed {
-            let (probabilities, attributions) =
-                self.extract_label_attribution_and_probability().await;
-            web_sys::console::log_1(&format!("{probabilities:?}").into());
-            web_sys::console::log_1(&format!("{attributions:?}").into());
+        let mut probabilities_change = Vec::new();
+        for label_idx in probabilities_changed.iter().copied() {
+            let id = self.labels[label_idx].id.clone();
+            let (probabilities, attributions) = self
+                .extract_label_attribution_and_probability(label_idx)
+                .await;
+            probabilities_change.push((id, probabilities, attributions));
+        }
+
+        if !probabilities_change.is_empty() {
+            // web_sys::console::log_1(&format!("{probabilities_change:?}").into());
         }
 
         completion
@@ -1313,6 +1414,10 @@ impl Renderer {
 
         let events = std::mem::take(&mut self.events);
         for events in events {
+            if events.is_empty() {
+                continue;
+            }
+
             // External events.
             if events.signaled(event::Event::RESIZE) {
                 let (width, height, device_pixel_ratio) = self.staging_data.resize.pop().unwrap();
@@ -1350,23 +1455,30 @@ impl Renderer {
             }
 
             if events.signaled(event::Event::LABEL_ADDITION) {
-                todo!()
+                let (id, color, selection_threshold) =
+                    self.staging_data.label_additions.pop().unwrap();
+                self.add_label(id, color, selection_threshold);
             }
 
             if events.signaled(event::Event::LABEL_REMOVAL) {
-                todo!()
+                let id = self.staging_data.label_removals.pop().unwrap();
+                self.remove_label(id);
             }
 
             if events.signaled(event::Event::ACTIVE_LABEL_CHANGE) {
-                todo!()
+                let id = self.staging_data.active_label.pop().unwrap();
+                self.change_active_label(id);
             }
 
             if events.signaled(event::Event::LABEL_COLOR_CHANGE) {
-                todo!()
+                let (id, color) = self.staging_data.label_color_changes.pop().unwrap();
+                self.change_label_color(id, color);
             }
 
             if events.signaled(event::Event::LABEL_THRESHOLD_CHANGE) {
-                todo!()
+                let (id, selection_threshold) =
+                    self.staging_data.label_threshold_changes.pop().unwrap();
+                self.change_label_threshold(id, selection_threshold);
             }
 
             // Internal events.
@@ -1532,6 +1644,133 @@ impl Renderer {
         self.update_axes_buffer();
     }
 
+    fn add_label(
+        &mut self,
+        id: String,
+        color: Option<ColorQuery<'_>>,
+        selection_threshold: Option<f32>,
+    ) {
+        if self.labels.iter().any(|l| l.id == id) {
+            panic!("id already exists");
+        }
+
+        let (color, color_dimmed) = if let Some(color) = color {
+            let c = color.resolve();
+            let c2 = LabelColorGenerator::dim(c);
+            (c, c2)
+        } else {
+            self.label_color_generator.next()
+        };
+
+        let selection_threshold = selection_threshold.unwrap_or(std::f32::EPSILON);
+
+        let label = LabelInfo {
+            id,
+            threshold_changed: true,
+            selection_threshold,
+            color,
+            color_dimmed,
+        };
+
+        self.active_label_idx = Some(self.labels.len());
+        self.labels.push(label);
+        self.buffers.values.push_label(&self.device);
+        self.buffers.curves.push_label(&self.device);
+        self.buffers.selections.push_label(&self.device);
+
+        let axes = self.axes.borrow();
+        for axis in axes.visible_axes() {
+            axis.push_label();
+        }
+        drop(axes);
+
+        self.update_selections_config_buffer();
+        self.update_selection_lines_buffer();
+        self.update_label_colors_buffer();
+    }
+
+    fn remove_label(&mut self, id: String) {
+        let label_idx = self
+            .labels
+            .iter()
+            .position(|l| l.id == id)
+            .expect("no label with a matching id found");
+
+        self.labels.remove(label_idx);
+        self.buffers.values.remove_label(label_idx);
+        self.buffers.curves.remove_label(label_idx);
+        self.buffers.selections.remove_label(label_idx);
+
+        if self.labels.is_empty() {
+            self.active_label_idx = None;
+        } else {
+            self.active_label_idx = Some(self.labels.len() - 1);
+        }
+
+        let axes = self.axes.borrow();
+        for axis in axes.visible_axes() {
+            axis.remove_label(label_idx);
+        }
+        drop(axes);
+
+        self.update_selections_config_buffer();
+        self.update_selection_lines_buffer();
+        self.update_label_colors_buffer();
+    }
+
+    fn change_active_label(&mut self, id: String) {
+        let label_idx = self
+            .labels
+            .iter()
+            .position(|l| l.id == id)
+            .expect("no label with a matching id found");
+        self.active_label_idx = Some(label_idx);
+
+        self.update_selections_config_buffer();
+        self.update_selection_lines_buffer();
+    }
+
+    fn change_label_color(&mut self, id: String, color: Option<ColorQuery<'_>>) {
+        let label_idx = self
+            .labels
+            .iter()
+            .position(|l| l.id == id)
+            .expect("no label with a matching id found");
+
+        let (color, color_dimmed) = if let Some(color) = color {
+            let c = color.resolve();
+            let c2 = LabelColorGenerator::dim(c);
+            (c, c2)
+        } else {
+            self.label_color_generator.next()
+        };
+
+        self.labels[label_idx].color = color;
+        self.labels[label_idx].color_dimmed = color_dimmed;
+
+        self.update_selections_config_buffer();
+        self.update_label_colors_buffer();
+    }
+
+    fn change_label_threshold(&mut self, id: String, selection_threshold: Option<f32>) {
+        let label_idx = self
+            .labels
+            .iter()
+            .position(|l| l.id == id)
+            .expect("no label with a matching id found");
+
+        let selection_threshold = selection_threshold.unwrap_or(std::f32::EPSILON);
+
+        self.labels[label_idx].threshold_changed = true;
+        self.labels[label_idx].selection_threshold = selection_threshold;
+
+        if let Some(active_label_idx) = self.active_label_idx {
+            if label_idx == active_label_idx {
+                self.update_selections_config_buffer();
+            }
+        }
+    }
+
     fn pointer_down(&mut self, event: web_sys::PointerEvent) {
         if !event.is_primary() || event.button() != 0 {
             return;
@@ -1541,7 +1780,7 @@ impl Renderer {
     }
 
     fn pointer_up(&mut self, event: web_sys::PointerEvent) {
-        if !event.is_primary() || event.button() != 0 {
+        if !event.is_primary() || (event.button() != 0 && event.button() != -1) {
             return;
         }
 
@@ -1580,18 +1819,22 @@ impl Renderer {
                     axis,
                     selection_idx,
                 } => {
-                    self.active_action = Some(action::Action::new_select_selection_action(
-                        axis,
-                        selection_idx,
-                        self.active_label_idx,
-                    ))
+                    if let Some(active_label_idx) = self.active_label_idx {
+                        self.active_action = Some(action::Action::new_select_selection_action(
+                            axis,
+                            selection_idx,
+                            active_label_idx,
+                        ))
+                    }
                 }
                 axis::Element::AxisLine { axis } => {
-                    self.active_action = Some(action::Action::new_create_selection_action(
-                        axis,
-                        event,
-                        self.active_label_idx,
-                    ))
+                    if let Some(active_label_idx) = self.active_label_idx {
+                        self.active_action = Some(action::Action::new_create_selection_action(
+                            axis,
+                            event,
+                            active_label_idx,
+                        ))
+                    }
                 }
             }
         }
@@ -1635,19 +1878,11 @@ impl Renderer {
                 range.0.extract::<(f32, f32)>().1,
                 range.1.extract::<(f32, f32)>().1,
             ];
+
             let extends = ax
                 .expanded_extends(self.active_label_idx)
                 .transform(&ax.space_transformer());
             let extends = [extends.start().x, extends.end().x];
-            // web_sys::console::log_1(
-            //     &format!(
-            //         "Axis: expanded '{}', center '{}', position '{extends:?}', range '{range:?}', id {}",
-            //         ax.is_expanded(),
-            //         ax.world_offset(),
-            //         ax.axis_index().unwrap()
-            //     )
-            //     .into(),
-            // );
 
             axes[ax.axis_index().unwrap()].write(buffers::Axis {
                 expanded_val: if ax.is_expanded() { 1.0 } else { 0.0 },
@@ -1736,6 +1971,12 @@ impl Renderer {
 // Values buffers
 impl Renderer {
     fn update_values_config_buffer(&mut self) {
+        let selection_threshold = if let Some(active_label_idx) = self.active_label_idx {
+            self.labels[active_label_idx].selection_threshold
+        } else {
+            1.0
+        };
+
         let guard = self.axes.borrow();
         let color_probabilities =
             matches!(self.datums_coloring, DatumsColoring::Probability) as u32;
@@ -1744,7 +1985,7 @@ impl Renderer {
             &self.device,
             &buffers::ValueLineConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
-                selection_threshold: self.labeling_threshold,
+                selection_threshold,
                 color_probabilities,
                 unselected_color: wgsl::Vec4(self.unselected_color.to_f32_with_alpha()),
             },
@@ -1988,7 +2229,7 @@ impl Renderer {
     fn update_curves_config_buffer(&mut self) {
         let guard = self.axes.borrow();
         let (width, height) = guard.curve_line_size();
-        self.buffers.curves.config.update(
+        self.buffers.curves.config_mut().update(
             &self.device,
             &buffers::LineConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
@@ -2005,7 +2246,7 @@ impl Renderer {
     fn update_selections_config_buffer(&mut self) {
         let guard = self.axes.borrow();
         let (width, height) = guard.selections_line_size();
-        self.buffers.selections.config.update(
+        self.buffers.selections.config_mut().update(
             &self.device,
             &buffers::SelectionConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
@@ -2016,6 +2257,11 @@ impl Renderer {
     }
 
     fn update_selection_lines_buffer(&mut self) {
+        if self.active_label_idx.is_none() {
+            return;
+        }
+        let active_label_idx = self.active_label_idx.unwrap();
+
         let guard = self.axes.borrow();
 
         let mut segments = Vec::new();
@@ -2025,7 +2271,7 @@ impl Renderer {
                 .axis_index()
                 .expect("all visible axes must have an index");
             let datums_range = axis.visible_datums_range_normalized().into();
-            let curve_builder = axis.borrow_selection_curve_builder(self.active_label_idx);
+            let curve_builder = axis.borrow_selection_curve_builder(active_label_idx);
 
             if is_expanded {
                 for segment in curve_builder
@@ -2046,7 +2292,7 @@ impl Renderer {
                         use_color: 1,
                         use_left: 0,
                         offset_x,
-                        color_idx: self.active_label_idx as u32,
+                        color_idx: active_label_idx as u32,
                         use_low_color,
                         range: wgsl::Vec2(range),
                     });
@@ -2085,22 +2331,27 @@ impl Renderer {
         }
         self.buffers
             .selections
-            .lines_mut(self.active_label_idx)
+            .lines_mut(active_label_idx)
             .update(&self.device, &segments);
     }
 }
 
 // Probability
 impl Renderer {
-    fn sample_probability_curve(&mut self, encoder: &webgpu::CommandEncoder) -> bool {
-        let active_curve_idx = self.active_label_idx;
+    fn sample_probability_curve(
+        &mut self,
+        encoder: &webgpu::CommandEncoder,
+        label_idx: usize,
+    ) -> bool {
         let axes = self.axes.borrow();
-        self.buffers.curves.sample_textures[active_curve_idx]
+        self.buffers
+            .curves
+            .sample_texture_mut(label_idx)
             .set_num_curves(&self.device, axes.num_visible_axes());
 
         let mut changed = false;
         for axis in axes.visible_axes() {
-            let mut selection_curve = axis.borrow_selection_curve_mut(self.active_label_idx);
+            let mut selection_curve = axis.borrow_selection_curve_mut(label_idx);
             let spline = match selection_curve.get_changed_curve() {
                 Some(s) => s,
                 None => continue,
@@ -2122,8 +2373,11 @@ impl Renderer {
             let axis_idx = axis
                 .axis_index()
                 .expect("all visible axes must have an index");
-            let probability_texture =
-                self.buffers.curves.sample_textures[active_curve_idx].axis_view(axis_idx);
+            let probability_texture = self
+                .buffers
+                .curves
+                .sample_texture(label_idx)
+                .axis_view(axis_idx);
 
             // Sample the curve.
             let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
@@ -2161,17 +2415,23 @@ impl Renderer {
         changed
     }
 
-    fn create_probability_curve_lines(&mut self, encoder: &webgpu::CommandEncoder) {
+    fn create_probability_curve_lines(
+        &mut self,
+        encoder: &webgpu::CommandEncoder,
+        label_idx: usize,
+    ) {
         let axes = self.axes.borrow();
-        let active_curve_idx = self.active_label_idx;
 
         // Ensure that the buffer is large enough.
         let num_lines = axes.num_visible_axes()
             * buffers::ProbabilitySampleTexture::PROBABILITY_CURVE_RESOLUTION;
-        self.buffers.curves.lines[active_curve_idx].set_len(&self.device, num_lines);
+        self.buffers
+            .curves
+            .lines_mut(label_idx)
+            .set_len(&self.device, num_lines);
 
-        let lines_buffer = self.buffers.curves.lines[active_curve_idx].buffer().clone();
-        let samples = self.buffers.curves.sample_textures[active_curve_idx].array_view();
+        let lines_buffer = self.buffers.curves.lines(label_idx).buffer().clone();
+        let samples = self.buffers.curves.sample_texture(label_idx).array_view();
 
         // Fill the buffer using the compute pipeline.
         let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
@@ -2202,15 +2462,14 @@ impl Renderer {
         pass.end();
     }
 
-    fn apply_probability_curves(&mut self, encoder: &webgpu::CommandEncoder) {
+    fn apply_probability_curves(&mut self, encoder: &webgpu::CommandEncoder, label_idx: usize) {
         let axes = self.axes.borrow();
         let num_datums = axes.num_datums();
-        let active_curve_idx = self.active_label_idx;
 
         // Ensure that the buffer is large enough.
         self.buffers
             .values
-            .probabilities
+            .probabilities_mut(label_idx)
             .set_len(&self.device, num_datums);
 
         // If there are no datums we can skip the rest.
@@ -2228,7 +2487,7 @@ impl Renderer {
             .queue()
             .write_buffer_single(&num_datums_buffer, 0, &(num_datums as u32));
 
-        let curve_samples = self.buffers.curves.sample_textures[active_curve_idx].array_view();
+        let curve_samples = self.buffers.curves.sample_texture(label_idx).array_view();
         let output_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
             label: Some(Cow::Borrowed("curve application output")),
             size: std::mem::size_of::<u32>() * self.buffers.values.datums.len(),
@@ -2298,7 +2557,12 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 0,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.values.probabilities.buffer().clone(),
+                        buffer: self
+                            .buffers
+                            .values
+                            .probabilities(label_idx)
+                            .buffer()
+                            .clone(),
                         offset: None,
                         size: None,
                     }),
@@ -2343,7 +2607,10 @@ impl Renderer {
         pass.end();
     }
 
-    async fn extract_label_attribution_and_probability(&self) -> (Box<[f32]>, Box<[usize]>) {
+    async fn extract_label_attribution_and_probability(
+        &self,
+        label_idx: usize,
+    ) -> (Box<[f32]>, Box<[usize]>) {
         {
             let axes = self.axes.borrow();
             if axes.num_datums() == 0 {
@@ -2357,12 +2624,12 @@ impl Renderer {
             .create_command_encoder(webgpu::CommandEncoderDescriptor { label: None });
         let staging_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
             label: Some(Cow::Borrowed("probability staging buffer")),
-            size: self.buffers.values.probabilities.size(),
+            size: self.buffers.values.probabilities(label_idx).size(),
             usage: webgpu::BufferUsage::MAP_READ | webgpu::BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
         encoder.copy_buffer_to_buffer(
-            self.buffers.values.probabilities.buffer(),
+            self.buffers.values.probabilities(label_idx).buffer(),
             0,
             &staging_buffer,
             0,
@@ -2376,22 +2643,32 @@ impl Renderer {
         let attribution = probabilities
             .iter()
             .enumerate()
-            .filter(|(_, &p)| p >= self.labeling_threshold)
+            .filter(|(_, &p)| p >= self.labels[label_idx].selection_threshold)
             .map(|(i, _)| i)
             .collect::<Box<[_]>>();
 
         (probabilities, attribution)
     }
 
-    fn update_probabilities(&mut self, encoder: &webgpu::CommandEncoder) -> bool {
-        let curve_changed = self.sample_probability_curve(encoder);
+    fn update_probabilities(&mut self, encoder: &webgpu::CommandEncoder) -> Box<[usize]> {
+        let mut changed = Vec::new();
+        for i in 0..self.labels.len() {
+            let curve_changed = self.sample_probability_curve(encoder, i);
 
-        if !curve_changed {
-            return false;
+            let threshold_changed = std::mem::replace(&mut self.labels[i].threshold_changed, false);
+            if !curve_changed {
+                if threshold_changed {
+                    changed.push(i);
+                }
+
+                continue;
+            }
+
+            changed.push(i);
+            self.create_probability_curve_lines(encoder, i);
+            self.apply_probability_curves(encoder, i);
         }
 
-        self.create_probability_curve_lines(encoder);
-        self.apply_probability_curves(encoder);
-        true
+        changed.into()
     }
 }
