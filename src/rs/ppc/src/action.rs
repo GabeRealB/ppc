@@ -447,7 +447,7 @@ impl SelectSelectionControlPointAction {
             (selection.lower_bound(segment_idx) + selection.upper_bound(segment_idx)) / 2.0;
         let lower_bound = axis_value < middle;
 
-        if event.ctrl_key() {
+        if event.shift_key() {
             if !lower_bound {
                 segment_idx += 1;
             }
