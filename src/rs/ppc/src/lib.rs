@@ -1724,8 +1724,8 @@ impl Renderer {
             }
         }
 
-        let width = self.canvas_gpu.width();
-        let height = self.canvas_gpu.height();
+        let width = self.canvas_gpu.width() as f32 / self.pixel_ratio;
+        let height = self.canvas_gpu.height() as f32 / self.pixel_ratio;
         if self.color_bar.is_visible() {
             let bounding_box = self.color_bar.bounding_box();
             let world_end_x = bounding_box.start().x;
@@ -1733,15 +1733,13 @@ impl Renderer {
             let guard = self.axes.borrow();
             guard.set_view_bounding_box(Aabb::new(
                 Position::zero(),
-                Position::new((world_end_x, height as f32)),
+                Position::new((world_end_x, height)),
             ));
             drop(guard);
         } else {
             let guard = self.axes.borrow();
-            guard.set_view_bounding_box(Aabb::new(
-                Position::zero(),
-                Position::new((width as f32, height as f32)),
-            ));
+            guard
+                .set_view_bounding_box(Aabb::new(Position::zero(), Position::new((width, height))));
             drop(guard);
         }
 
@@ -1750,8 +1748,8 @@ impl Renderer {
     }
 
     fn set_color_bar_visibility(&mut self, visible: bool) {
-        let width = self.canvas_gpu.width();
-        let height = self.canvas_gpu.height();
+        let width = self.canvas_gpu.width() as f32 / self.pixel_ratio;
+        let height = self.canvas_gpu.height() as f32 / self.pixel_ratio;
 
         self.color_bar.set_visible(visible);
         if self.color_bar.is_visible() {
@@ -1761,15 +1759,13 @@ impl Renderer {
             let guard = self.axes.borrow();
             guard.set_view_bounding_box(Aabb::new(
                 Position::zero(),
-                Position::new((world_end_x, height as f32)),
+                Position::new((world_end_x, height)),
             ));
             drop(guard);
         } else {
             let guard = self.axes.borrow();
-            guard.set_view_bounding_box(Aabb::new(
-                Position::zero(),
-                Position::new((width as f32, height as f32)),
-            ));
+            guard
+                .set_view_bounding_box(Aabb::new(Position::zero(), Position::new((width, height))));
             drop(guard);
         }
     }
@@ -1788,6 +1784,8 @@ impl Renderer {
             .scale(device_pixel_ratio as f64, device_pixel_ratio as f64)
             .unwrap();
 
+        web_sys::console::log_2(&scaled_width.into(), &scaled_height.into());
+        web_sys::console::log_2(&width.into(), &height.into());
         self.render_texture = self
             .device
             .create_texture(webgpu::TextureDescriptor::<'_, 2, 0> {
@@ -1796,10 +1794,7 @@ impl Renderer {
                 format: self.render_texture.format(),
                 mip_level_count: None,
                 sample_count: Some(MSAA_SAMPLES),
-                size: [
-                    self.canvas_gpu.width() as usize,
-                    self.canvas_gpu.height() as usize,
-                ],
+                size: [scaled_width as usize, scaled_height as usize],
                 usage: webgpu::TextureUsage::RENDER_ATTACHMENT,
                 view_formats: None,
             });
