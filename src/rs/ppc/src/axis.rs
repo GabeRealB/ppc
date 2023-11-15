@@ -28,11 +28,18 @@ const SELECTION_LINE_SIZE_REM: f32 = 0.1;
 const SELECTION_LINE_PADDING_REM: f32 = 0.15;
 const SELECTION_LINE_MARGIN_REM: f32 = 1.0;
 
-const CURVE_LINE_SIZE: f32 = 0.075;
+const CURVE_LINE_SIZE_REM: f32 = 0.075;
 const DATUMS_LINE_SIZE_REM: f32 = 0.1;
+const CONTROL_POINTS_RADIUS_REM: f32 = 0.3;
 
 const LABEL_PADDING_REM: f32 = 1.0;
 const LABEL_MARGIN_REM: f32 = 1.0;
+
+const SELECTION_CONTROL_POINT_PADDING_REL: f32 = 0.2;
+const MAX_SELECTION_CONTROL_POINT_PADDING: f32 = 0.02;
+
+const MIN_CURVE_T: f32 = 0.1;
+const MAX_CURVE_T: f32 = 0.95;
 
 #[derive(Debug)]
 pub struct AxisArgs {
@@ -461,6 +468,12 @@ impl Axis {
         ));
 
         Aabb::new(start, end)
+    }
+
+    pub fn curve_offset_at_curve_value(&self, curve_value: f32) -> Offset<LocalSpace> {
+        let t = MIN_CURVE_T.lerp(MAX_CURVE_T, curve_value);
+        let x_offset = 0.0.lerp(-0.4, t);
+        Offset::new((x_offset, 0.0))
     }
 
     pub fn selection_offset_at_rank(&self, rank: usize) -> Offset<LocalSpace> {
@@ -1177,7 +1190,11 @@ impl Axes {
 
     /// Returns the curve line size.
     pub fn curve_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
-        (self.get_rem_length_world)(CURVE_LINE_SIZE)
+        (self.get_rem_length_world)(CURVE_LINE_SIZE_REM)
+    }
+
+    pub fn control_points_radius(&self) -> Length<ScreenSpace> {
+        (self.get_rem_length_screen)(CONTROL_POINTS_RADIUS_REM)
     }
 
     pub fn element_at_position(
@@ -1222,10 +1239,91 @@ impl Axes {
                         };
 
                         if let Some(selection) = selection {
-                            return Some(Element::Selection {
-                                axis: ax,
-                                selection_idx: selection,
-                            });
+                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                            let sel = curve_builder.get_selection(selection);
+                            let segment = sel.segment_containing(axis_value).unwrap();
+
+                            let lower_bound = sel.lower_bound(segment);
+                            let upper_bound = sel.upper_bound(segment);
+                            drop(curve_builder);
+
+                            let segment_length = upper_bound - lower_bound;
+                            let segment_padding = (SELECTION_CONTROL_POINT_PADDING_REL
+                                * segment_length)
+                                .min(MAX_SELECTION_CONTROL_POINT_PADDING);
+
+                            let lower_range = lower_bound..=lower_bound + segment_padding;
+                            let upper_range = upper_bound - segment_padding..=upper_bound;
+
+                            if lower_range.contains(&axis_value)
+                                || upper_range.contains(&axis_value)
+                            {
+                                return Some(Element::SelectionControlPoint {
+                                    axis: ax,
+                                    selection_idx: selection,
+                                    segment_idx: segment,
+                                });
+                            } else {
+                                return Some(Element::Selection {
+                                    axis: ax,
+                                    selection_idx: selection,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if ax.is_expanded() {
+                    let control_points_radius = self.control_points_radius();
+                    let bounding_box = ax.curves_bounding_box();
+                    if bounding_box.contains_point(&position) {
+                        let range = ax.axis_line_range();
+                        let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+
+                        let selection = {
+                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                            curve_builder.get_visible_selection_containing(axis_value)
+                        };
+
+                        if let Some(selection) = selection {
+                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                            let sel = curve_builder.get_selection(selection);
+                            let segment = sel.segment_containing(axis_value).unwrap();
+
+                            let lower_bound = sel.lower_bound(segment);
+                            let upper_bound = sel.upper_bound(segment);
+
+                            let lower_value = sel.lower_value(segment);
+                            let upper_value = sel.upper_value(segment);
+                            drop(curve_builder);
+
+                            let lower_position = range.0.lerp(range.1, lower_bound)
+                                + ax.curve_offset_at_curve_value(lower_value);
+                            let upper_position = range.0.lerp(range.1, upper_bound)
+                                + ax.curve_offset_at_curve_value(upper_value);
+
+                            let offset = Offset::<ScreenSpace>::new((
+                                control_points_radius.0,
+                                control_points_radius.0,
+                            ))
+                            .transform(&self.space_transformer())
+                            .transform(&ax.space_transformer());
+
+                            let lower_bb =
+                                Aabb::new(lower_position - offset, lower_position + offset);
+                            let upper_bb =
+                                Aabb::new(upper_position - offset, upper_position + offset);
+
+                            if lower_bb.contains_point(&position)
+                                || upper_bb.contains_point(&position)
+                            {
+                                return Some(Element::CurveControlPoint {
+                                    axis: ax,
+                                    selection_idx: selection,
+                                    segment_idx: segment,
+                                    is_upper: upper_bb.contains_point(&position),
+                                });
+                            }
                         }
                     }
                 }
@@ -1241,6 +1339,11 @@ impl Axes {
         }
 
         None
+    }
+
+    /// Return the t range of the probability curve.
+    pub fn curve_t_range(&self) -> (f32, f32) {
+        (MIN_CURVE_T, MAX_CURVE_T)
     }
 
     /// Returns the width of the world space.
@@ -1346,6 +1449,25 @@ impl Axes {
         }
     }
 
+    pub fn viewport(&self, pixel_ratio: f32) -> ((f32, f32), (f32, f32)) {
+        let mappings = self.coordinate_mappings.borrow();
+        let (start_x, start_y) = mappings.view_bounding_box.start().extract();
+        let (end_x, end_y) = mappings.view_bounding_box.end().extract();
+
+        let width = end_x - start_x;
+        let height = end_y - start_y;
+
+        let start = (
+            (start_x * pixel_ratio).floor(),
+            ((mappings.view_height - end_y) * pixel_ratio).floor(),
+        );
+        let size = (
+            (width * pixel_ratio).floor(),
+            (height * pixel_ratio).floor(),
+        );
+        (start, size)
+    }
+
     fn is_first_visible_axis(&self, axis: &Rc<Axis>) -> bool {
         if let Some(start) = &self.visible_axis_start {
             Rc::ptr_eq(axis, start)
@@ -1394,6 +1516,17 @@ pub enum Element {
     Selection {
         axis: Rc<Axis>,
         selection_idx: usize,
+    },
+    SelectionControlPoint {
+        axis: Rc<Axis>,
+        selection_idx: usize,
+        segment_idx: usize,
+    },
+    CurveControlPoint {
+        axis: Rc<Axis>,
+        selection_idx: usize,
+        segment_idx: usize,
+        is_upper: bool,
     },
     AxisLine {
         axis: Rc<Axis>,

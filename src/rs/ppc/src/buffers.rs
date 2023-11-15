@@ -63,30 +63,32 @@ pub struct LabelColor {
 
 unsafe impl HostSharable for LabelColor {}
 
-/// Line rendering config buffer layout.
+/// Config for rendering the axes lines.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct LineConfig {
+pub struct AxesConfig {
     pub line_width: Vec2<f32>,
-    pub line_type: u32,
-    pub color_mode: u32,
     pub color: Vec3<f32>,
 }
 
-unsafe impl HostSharable for LineConfig {}
+unsafe impl HostSharable for AxesConfig {}
 
-/// Representation of an entry for the line info buffer.
+/// Representation of an axis line.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct LineInfo {
+pub struct AxisLineInfo {
+    pub axis: u32,
+    pub axis_position: u32,
     pub min_expanded_val: f32,
-    pub start_args: Vec2<f32>,
-    pub end_args: Vec2<f32>,
-    pub offset_start: Vec2<f32>,
-    pub offset_end: Vec2<f32>,
 }
 
-unsafe impl HostSharable for LineInfo {}
+impl AxisLineInfo {
+    pub const LEFT: u32 = 0;
+    pub const CENTER: u32 = 1;
+    pub const RIGHT: u32 = 2;
+}
+
+unsafe impl HostSharable for AxisLineInfo {}
 
 /// Value line rendering config buffer layout.
 #[repr(C)]
@@ -112,6 +114,60 @@ pub struct ValueLine {
 }
 
 unsafe impl HostSharable for ValueLine {}
+
+/// Config for rendering probability curves.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct CurvesConfig {
+    pub line_width: Vec2<f32>,
+    pub color: Vec3<f32>,
+}
+
+unsafe impl HostSharable for CurvesConfig {}
+
+/// Representation of a probability curve line segment.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct CurveLineInfo {
+    pub x_t_values: Vec2<f32>,
+    pub y_t_values: Vec2<f32>,
+    pub axis: u32,
+}
+
+unsafe impl HostSharable for CurveLineInfo {}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct CurveSegmentConfig {
+    pub label: u32,
+    pub active_label: u32,
+    pub min_curve_t: f32,
+}
+
+unsafe impl HostSharable for CurveSegmentConfig {}
+
+#[derive(Debug, Clone)]
+pub struct CurveSegmentConfigBuffer {
+    buffer: Buffer,
+}
+
+impl CurveSegmentConfigBuffer {
+    pub fn new(device: &Device, config: CurveSegmentConfig) -> Self {
+        let buffer = device.create_buffer(BufferDescriptor {
+            label: Some(Cow::Borrowed("curve segment config buffer")),
+            size: std::mem::size_of_val(&config),
+            usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
+            mapped_at_creation: None,
+        });
+        device.queue().write_buffer_single(&buffer, 0, &config);
+
+        Self { buffer }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+}
 
 /// Selection line rendering config buffer layout.
 #[repr(C)]
@@ -206,50 +262,124 @@ impl SplineSegmentsBuffer {
 /// Collection of buffers.
 #[derive(Debug, Clone)]
 pub struct Buffers {
-    pub general: GeneralBuffers,
-    pub axes: AxesBuffers,
-    pub values: ValuesDrawingBuffers,
-    pub curves: CurvesBuffers,
-    pub selections: SelectionsBuffers,
+    shared: SharedBuffers,
+    axes: AxesBuffers,
+    datums: DatumsBuffers,
+    curves: CurvesBuffers,
+    selections: SelectionsBuffers,
 }
 
 impl Buffers {
     pub fn new(device: &Device) -> Self {
         Self {
-            general: GeneralBuffers::new(device),
+            shared: SharedBuffers::new(device),
             axes: AxesBuffers::new(device),
-            values: ValuesDrawingBuffers::new(device),
+            datums: DatumsBuffers::new(device),
             curves: CurvesBuffers::new(device),
             selections: SelectionsBuffers::new(device),
         }
+    }
+
+    pub fn shared(&self) -> &SharedBuffers {
+        &self.shared
+    }
+
+    pub fn shared_mut(&mut self) -> &mut SharedBuffers {
+        &mut self.shared
+    }
+
+    pub fn axes(&self) -> &AxesBuffers {
+        &self.axes
+    }
+
+    pub fn axes_mut(&mut self) -> &mut AxesBuffers {
+        &mut self.axes
+    }
+
+    pub fn datums(&self) -> &DatumsBuffers {
+        &self.datums
+    }
+
+    pub fn datums_mut(&mut self) -> &mut DatumsBuffers {
+        &mut self.datums
+    }
+
+    pub fn curves(&self) -> &CurvesBuffers {
+        &self.curves
+    }
+
+    pub fn curves_mut(&mut self) -> &mut CurvesBuffers {
+        &mut self.curves
+    }
+
+    pub fn selections(&self) -> &SelectionsBuffers {
+        &self.selections
+    }
+
+    pub fn selections_mut(&mut self) -> &mut SelectionsBuffers {
+        &mut self.selections
     }
 }
 
 /// Collection of shared buffers.
 #[derive(Debug, Clone)]
-pub struct GeneralBuffers {
-    pub matrix: MatrixBuffer,
-    pub axes: AxesBuffer,
-    pub colors: LabelColorBuffer,
+pub struct SharedBuffers {
+    matrix: MatricesBuffer,
+    axes: AxesBuffer,
+    colors: LabelColorBuffer,
+    color_scale: ColorScaleTexture,
 }
 
-impl GeneralBuffers {
+impl SharedBuffers {
     fn new(device: &Device) -> Self {
         Self {
-            matrix: MatrixBuffer::new(device),
+            matrix: MatricesBuffer::new(device),
             axes: AxesBuffer::new(device),
             colors: LabelColorBuffer::new(device),
+            color_scale: ColorScaleTexture::new(device),
         }
+    }
+
+    pub fn matrices(&self) -> &MatricesBuffer {
+        &self.matrix
+    }
+
+    pub fn matrices_mut(&mut self) -> &mut MatricesBuffer {
+        &mut self.matrix
+    }
+
+    pub fn axes(&self) -> &AxesBuffer {
+        &self.axes
+    }
+
+    pub fn axes_mut(&mut self) -> &mut AxesBuffer {
+        &mut self.axes
+    }
+
+    pub fn label_colors(&self) -> &LabelColorBuffer {
+        &self.colors
+    }
+
+    pub fn label_colors_mut(&mut self) -> &mut LabelColorBuffer {
+        &mut self.colors
+    }
+
+    pub fn color_scale(&self) -> &ColorScaleTexture {
+        &self.color_scale
+    }
+
+    pub fn color_scale_mut(&mut self) -> &mut ColorScaleTexture {
+        &mut self.color_scale
     }
 }
 
 /// A uniform buffer containing a [`Matrices`] instance.
 #[derive(Debug, Clone)]
-pub struct MatrixBuffer {
+pub struct MatricesBuffer {
     buffer: Buffer,
 }
 
-impl MatrixBuffer {
+impl MatricesBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
             label: Some(Cow::Borrowed("matrix buffer")),
@@ -354,23 +484,77 @@ impl LabelColorBuffer {
     }
 }
 
+/// A texture for storing a sampled color scale.
+#[derive(Debug, Clone)]
+pub struct ColorScaleTexture {
+    texture: Texture,
+}
+
+impl ColorScaleTexture {
+    pub const COLOR_SCALE_RESOLUTION: usize = 2048;
+
+    pub fn new(device: &Device) -> Self {
+        let texture = device.create_texture(TextureDescriptor::<2, 0> {
+            label: Some(Cow::Borrowed("color scale texture")),
+            dimension: Some(TextureDimension::D2),
+            format: TextureFormat::Rgba32float,
+            mip_level_count: None,
+            sample_count: None,
+            size: [Self::COLOR_SCALE_RESOLUTION, 1],
+            usage: TextureUsage::STORAGE_BINDING | TextureUsage::TEXTURE_BINDING,
+            view_formats: None,
+        });
+
+        Self { texture }
+    }
+
+    pub fn view(&self) -> TextureView {
+        self.texture.create_view(Some(TextureViewDescriptor {
+            label: Some(Cow::Borrowed("color scale texture view")),
+            array_layer_count: None,
+            aspect: None,
+            base_array_layer: None,
+            base_mip_level: None,
+            dimension: Some(TextureViewDimension::D2),
+            format: None,
+            mip_level_count: None,
+        }))
+    }
+}
+
 /// Collection of buffers for drawing axes lines.
 #[derive(Debug, Clone)]
 pub struct AxesBuffers {
-    pub config: AxesConfigBuffer,
-    pub lines: AxesLineBuffer,
+    config: AxesConfigBuffer,
+    lines: AxisLinesBuffer,
 }
 
 impl AxesBuffers {
     fn new(device: &Device) -> Self {
         Self {
             config: AxesConfigBuffer::new(device),
-            lines: AxesLineBuffer::new(device),
+            lines: AxisLinesBuffer::new(device),
         }
+    }
+
+    pub fn config(&self) -> &AxesConfigBuffer {
+        &self.config
+    }
+
+    pub fn config_mut(&mut self) -> &mut AxesConfigBuffer {
+        &mut self.config
+    }
+
+    pub fn lines(&self) -> &AxisLinesBuffer {
+        &self.lines
+    }
+
+    pub fn lines_mut(&mut self) -> &mut AxisLinesBuffer {
+        &mut self.lines
     }
 }
 
-/// A uniform buffer containing a [`LineConfig`] instance.
+/// A uniform buffer containing a [`AxesConfig`] instance.
 #[derive(Debug, Clone)]
 pub struct AxesConfigBuffer {
     buffer: Buffer,
@@ -380,7 +564,7 @@ impl AxesConfigBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
             label: Some(Cow::Borrowed("axes config buffer")),
-            size: std::mem::size_of::<LineConfig>(),
+            size: std::mem::size_of::<AxesConfig>(),
             usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
@@ -392,21 +576,21 @@ impl AxesConfigBuffer {
         &self.buffer
     }
 
-    pub fn update(&mut self, device: &Device, config: &LineConfig) {
+    pub fn update(&mut self, device: &Device, config: &AxesConfig) {
         device.queue().write_buffer_single(&self.buffer, 0, config);
     }
 }
 
 /// A storage buffer containing the information required to draw the axis lines.
 #[derive(Debug, Clone)]
-pub struct AxesLineBuffer {
+pub struct AxisLinesBuffer {
     buffer: Buffer,
 }
 
-impl AxesLineBuffer {
+impl AxisLinesBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("axes line buffer")),
+            label: Some(Cow::Borrowed("axis lines buffer")),
             size: 0,
             usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -420,14 +604,14 @@ impl AxesLineBuffer {
     }
 
     pub fn len(&self) -> usize {
-        self.buffer.size() / std::mem::size_of::<LineInfo>()
+        self.buffer.size() / std::mem::size_of::<AxisLineInfo>()
     }
 
-    pub fn update(&mut self, device: &Device, lines: &[MaybeUninit<LineInfo>]) {
+    pub fn update(&mut self, device: &Device, lines: &[MaybeUninit<AxisLineInfo>]) {
         if self.len() != lines.len() {
             self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
-                label: Some(Cow::Borrowed("axes line buffer")),
+                label: Some(Cow::Borrowed("axis lines buffer")),
                 size: std::mem::size_of_val(lines),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
@@ -440,25 +624,55 @@ impl AxesLineBuffer {
 
 /// Collection of buffers for drawing values.
 #[derive(Debug, Clone)]
-pub struct ValuesDrawingBuffers {
-    pub config: ValueLineConfigBuffer,
-    pub lines: ValueLineBuffer,
-    pub datums: ValueDatumBuffer,
-    pub color_values: ColorValuesBuffer,
+pub struct DatumsBuffers {
+    config: DatumsConfigBuffer,
+    lines: DatumLinesBuffer,
+    datums: DatumBuffer,
+    color_values: ColorValuesBuffer,
     probabilities: Vec<ProbabilitiesBuffer>,
-    pub color_scale: ColorScaleTexture,
 }
 
-impl ValuesDrawingBuffers {
+impl DatumsBuffers {
     fn new(device: &Device) -> Self {
         Self {
-            config: ValueLineConfigBuffer::new(device),
-            lines: ValueLineBuffer::new(device),
-            datums: ValueDatumBuffer::new(device),
+            config: DatumsConfigBuffer::new(device),
+            lines: DatumLinesBuffer::new(device),
+            datums: DatumBuffer::new(device),
             color_values: ColorValuesBuffer::new(device),
             probabilities: vec![],
-            color_scale: ColorScaleTexture::new(device),
         }
+    }
+
+    pub fn config(&self) -> &DatumsConfigBuffer {
+        &self.config
+    }
+
+    pub fn config_mut(&mut self) -> &mut DatumsConfigBuffer {
+        &mut self.config
+    }
+
+    pub fn lines(&self) -> &DatumLinesBuffer {
+        &self.lines
+    }
+
+    pub fn lines_mut(&mut self) -> &mut DatumLinesBuffer {
+        &mut self.lines
+    }
+
+    pub fn datums(&self) -> &DatumBuffer {
+        &self.datums
+    }
+
+    pub fn datums_mut(&mut self) -> &mut DatumBuffer {
+        &mut self.datums
+    }
+
+    pub fn color_values(&self) -> &ColorValuesBuffer {
+        &self.color_values
+    }
+
+    pub fn color_values_mut(&mut self) -> &mut ColorValuesBuffer {
+        &mut self.color_values
     }
 
     pub fn probabilities(&self, label_idx: usize) -> &ProbabilitiesBuffer {
@@ -480,14 +694,14 @@ impl ValuesDrawingBuffers {
 
 /// A uniform buffer storing an instance of an [`ValueLineConfig`].
 #[derive(Debug, Clone)]
-pub struct ValueLineConfigBuffer {
+pub struct DatumsConfigBuffer {
     buffer: Buffer,
 }
 
-impl ValueLineConfigBuffer {
+impl DatumsConfigBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("value lines config buffer")),
+            label: Some(Cow::Borrowed("datums config buffer")),
             size: std::mem::size_of::<ValueLineConfig>(),
             usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -507,14 +721,14 @@ impl ValueLineConfigBuffer {
 
 /// A storage buffer containing the information required to draw the value lines.
 #[derive(Debug, Clone)]
-pub struct ValueLineBuffer {
+pub struct DatumLinesBuffer {
     buffer: Buffer,
 }
 
-impl ValueLineBuffer {
+impl DatumLinesBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("value lines buffer")),
+            label: Some(Cow::Borrowed("datum lines buffer")),
             size: 0,
             usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -535,7 +749,7 @@ impl ValueLineBuffer {
         if self.len() != lines.len() {
             self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
-                label: Some(Cow::Borrowed("value lines buffer")),
+                label: Some(Cow::Borrowed("datum lines buffer")),
                 size: std::mem::size_of_val(lines),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
@@ -547,14 +761,14 @@ impl ValueLineBuffer {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValueDatumBuffer {
+pub struct DatumBuffer {
     buffer: Buffer,
 }
 
-impl ValueDatumBuffer {
+impl DatumBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("value datums buffer")),
+            label: Some(Cow::Borrowed("datums buffer")),
             size: 0,
             usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -575,7 +789,7 @@ impl ValueDatumBuffer {
         if self.len() != num_datums * num_axes {
             self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
-                label: Some(Cow::Borrowed("value datums buffer")),
+                label: Some(Cow::Borrowed("datums buffer")),
                 size: num_datums * num_axes * std::mem::size_of::<f32>(),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
@@ -683,44 +897,6 @@ impl ProbabilitiesBuffer {
     }
 }
 
-/// A texture for storing a sampled color scale.
-#[derive(Debug, Clone)]
-pub struct ColorScaleTexture {
-    texture: Texture,
-}
-
-impl ColorScaleTexture {
-    pub const COLOR_SCALE_RESOLUTION: usize = 2048;
-
-    pub fn new(device: &Device) -> Self {
-        let texture = device.create_texture(TextureDescriptor::<2, 0> {
-            label: Some(Cow::Borrowed("color scale texture")),
-            dimension: Some(TextureDimension::D2),
-            format: TextureFormat::Rgba32float,
-            mip_level_count: None,
-            sample_count: None,
-            size: [Self::COLOR_SCALE_RESOLUTION, 1],
-            usage: TextureUsage::STORAGE_BINDING | TextureUsage::TEXTURE_BINDING,
-            view_formats: None,
-        });
-
-        Self { texture }
-    }
-
-    pub fn view(&self) -> TextureView {
-        self.texture.create_view(Some(TextureViewDescriptor {
-            label: Some(Cow::Borrowed("color scale texture view")),
-            array_layer_count: None,
-            aspect: None,
-            base_array_layer: None,
-            base_mip_level: None,
-            dimension: Some(TextureViewDimension::D2),
-            format: None,
-            mip_level_count: None,
-        }))
-    }
-}
-
 /// Collection of buffers for drawing the probability curves.
 #[derive(Debug, Clone)]
 pub struct CurvesBuffers {
@@ -774,7 +950,7 @@ impl CurvesBuffers {
     }
 }
 
-/// A uniform buffer containing a [`LineConfig`] instance.
+/// A uniform buffer containing a [`CurvesConfig`] instance.
 #[derive(Debug, Clone)]
 pub struct CurvesConfigBuffer {
     buffer: Buffer,
@@ -784,7 +960,7 @@ impl CurvesConfigBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
             label: Some(Cow::Borrowed("curves config buffer")),
-            size: std::mem::size_of::<LineConfig>(),
+            size: std::mem::size_of::<CurvesConfig>(),
             usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
@@ -796,7 +972,7 @@ impl CurvesConfigBuffer {
         &self.buffer
     }
 
-    pub fn update(&mut self, device: &Device, config: &LineConfig) {
+    pub fn update(&mut self, device: &Device, config: &CurvesConfig) {
         device.queue().write_buffer_single(&self.buffer, 0, config);
     }
 }
@@ -891,13 +1067,13 @@ impl CurveLinesInfoBuffer {
     }
 
     pub fn len(&self) -> usize {
-        self.buffer.size() / std::mem::size_of::<LineInfo>()
+        self.buffer.size() / std::mem::size_of::<CurveLineInfo>()
     }
 
     pub fn set_len(&mut self, device: &Device, len: usize) {
         self.buffer = device.create_buffer(BufferDescriptor {
             label: Some(Cow::Borrowed("curve lines info buffer")),
-            size: len * std::mem::size_of::<LineInfo>(),
+            size: len * std::mem::size_of::<CurveLineInfo>(),
             usage: BufferUsage::STORAGE,
             mapped_at_creation: None,
         });

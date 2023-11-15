@@ -4,6 +4,7 @@ use async_channel::{Receiver, Sender};
 use color_scale::ColorScaleDescriptor;
 use colors::{Color, ColorOpaque, ColorQuery, ColorTransparent, SRgb, SRgbLinear, Xyz};
 use coordinates::ScreenSpace;
+use lerp::Lerp;
 use wasm_bindgen::prelude::*;
 
 use crate::coordinates::{Aabb, Length, Position};
@@ -14,6 +15,7 @@ mod wgsl;
 mod action;
 mod axis;
 mod buffers;
+mod color_bar;
 mod color_scale;
 mod colors;
 mod coordinates;
@@ -59,6 +61,7 @@ impl EventQueue {
     }
 
     /// Updates the data of the renderer.
+    #[wasm_bindgen(js_name = updateData)]
     pub fn update_data(&self, payload: UpdateDataPayload) {
         let axes = if payload.axes.is_empty() {
             None
@@ -89,6 +92,7 @@ impl EventQueue {
     }
 
     /// Spawns a `pointer_down` event.
+    #[wasm_bindgen(js_name = pointerDown)]
     pub fn pointer_down(&self, event: web_sys::PointerEvent) {
         self.sender
             .send_blocking(Event::PointerDown { event })
@@ -96,6 +100,7 @@ impl EventQueue {
     }
 
     /// Spawns a `pointer_up` event.
+    #[wasm_bindgen(js_name = pointerUp)]
     pub fn pointer_up(&self, event: web_sys::PointerEvent) {
         self.sender
             .send_blocking(Event::PointerUp { event })
@@ -103,6 +108,7 @@ impl EventQueue {
     }
 
     /// Spawns a `pointer_move` event.
+    #[wasm_bindgen(js_name = pointerMove)]
     pub fn pointer_move(&self, event: web_sys::PointerEvent) {
         self.sender
             .send_blocking(Event::PointerMove { event })
@@ -110,6 +116,7 @@ impl EventQueue {
     }
 
     /// Sets an element to the default color.
+    #[wasm_bindgen(js_name = setDefaultColor)]
     pub fn set_default_color(&self, element: Element) {
         let color = match element {
             Element::Background => {
@@ -137,6 +144,7 @@ impl EventQueue {
     }
 
     /// Sets the color of an element from a color name string.
+    #[wasm_bindgen(js_name = setColorNamed)]
     pub fn set_color_named(&self, element: Element, color: &str) {
         let color = ColorQuery::Named(color.to_string().into());
         let event = match element {
@@ -151,6 +159,7 @@ impl EventQueue {
     }
 
     /// Sets the color of an element from a color value.
+    #[wasm_bindgen(js_name = setColorValue)]
     pub fn set_color_value(&self, element: Element, color: ColorDescription) {
         let ColorDescription {
             color_space,
@@ -175,6 +184,7 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setDefaultColorScaleColor)]
     pub fn set_default_color_scale_color(&self) {
         let descriptor = DEFAULT_COLOR_SCALE();
 
@@ -186,17 +196,19 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setColorScaleNamed)]
     pub fn set_color_scale_named(&self, name: &str) {
         let descriptor = ColorScaleDescriptor::Named(name.to_string().into());
 
         self.sender
             .send_blocking(Event::SetColorScale {
-                color_space: ColorSpace::SRgb,
+                color_space: ColorSpace::Xyz,
                 scale: descriptor,
             })
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setColorScaleConstant)]
     pub fn set_color_scale_constant(&self, color: ColorDescription) {
         let ColorDescription {
             color_space,
@@ -220,6 +232,7 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setColorScaleGradient)]
     pub fn set_color_scale_gradient(&self, scale: ColorScaleDescription) {
         let ColorScaleDescription {
             color_space,
@@ -254,6 +267,7 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setDefaultSelectedDatumColoring)]
     pub fn set_default_selected_datum_coloring(&self) {
         self.sender
             .send_blocking(Event::SetDatumsColoring {
@@ -262,6 +276,7 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setSelectedDatumColoringConstant)]
     pub fn set_selected_datum_coloring_constant(&self, value: f32) {
         if !(0.0..=1.0).contains(&value) {
             panic!("constant must lie in the interval [0, 1], got '{value}'");
@@ -274,6 +289,7 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setSelectedDatumColoringAttribute)]
     pub fn set_selected_datum_coloring_attribute(&self, id: &str) {
         self.sender
             .send_blocking(Event::SetDatumsColoring {
@@ -282,6 +298,7 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setSelectedDatumColoringByProbability)]
     pub fn set_selected_datum_coloring_by_probability(&self) {
         self.sender
             .send_blocking(Event::SetDatumsColoring {
@@ -290,6 +307,16 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setColorBarVisibility)]
+    pub fn set_color_bar_visibility(&self, visible: bool) {
+        self.sender
+            .send_blocking(Event::SetColorBarVisibility {
+                visibility: visible,
+            })
+            .expect("the channel should be open");
+    }
+
+    #[wasm_bindgen(js_name = addLabel)]
     pub fn add_label(
         &self,
         id: String,
@@ -316,22 +343,26 @@ impl EventQueue {
                 id,
                 color,
                 selection_threshold,
+                easing: selection::EasingType::Linear,
             })
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = removeLabel)]
     pub fn remove_label(&self, id: String) {
         self.sender
             .send_blocking(Event::RemoveLabel { id })
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = switchActiveLabel)]
     pub fn switch_active_label(&self, id: String) {
         self.sender
             .send_blocking(Event::SwitchActiveLabel { id })
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setLabelColor)]
     pub fn set_label_color(&self, id: String, color: Option<ColorDescription>) {
         let color = color.map(|color| {
             let ColorDescription {
@@ -353,12 +384,31 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setLabelSelectionThreshold)]
     pub fn set_label_selection_threshold(&self, id: String, selection_threshold: Option<f32>) {
         self.sender
             .send_blocking(Event::SetLabelThreshold {
                 id,
                 selection_threshold,
             })
+            .expect("the channel should be open");
+    }
+
+    #[wasm_bindgen(js_name = setLabelEasing)]
+    pub fn set_label_easing(&self, easing_type: Option<String>) {
+        let easing = match easing_type.as_deref() {
+            Some("linear") | None => selection::EasingType::Linear,
+            Some("in") => selection::EasingType::EaseIn,
+            Some("out") => selection::EasingType::EaseOut,
+            Some("inout") => selection::EasingType::EaseInOut,
+            _ => {
+                web_sys::console::warn_1(&format!("unknown easing {easing_type:?}").into());
+                selection::EasingType::Linear
+            }
+        };
+
+        self.sender
+            .send_blocking(Event::SetLabelEasing { easing })
             .expect("the channel should be open");
     }
 
@@ -381,7 +431,7 @@ impl EventQueue {
 
 pub struct ColorScaleDescription {
     color_space: ColorSpace,
-    gradient: Vec<(f32, ColorDescription)>,
+    gradient: Vec<(Option<f32>, ColorDescription)>,
 }
 
 #[wasm_bindgen]
@@ -417,22 +467,19 @@ impl ColorScaleDescription {
         }
     }
 
-    pub fn with_sample(&mut self, sample: f32, color: ColorDescription) {
-        if !(0.0..=1.0).contains(&sample) {
-            panic!("sample must lie in the [0, 1] range");
-        }
+    #[wasm_bindgen(js_name = withSample)]
+    pub fn with_sample(&mut self, sample: Option<f32>, color: ColorDescription) {
+        if let Some(sample) = sample {
+            if self.gradient.is_empty() && sample != 0.0 {
+                panic!("the first sample must be at position 0.0");
+            }
 
-        if self.gradient.is_empty() {
-            self.gradient.push((sample, color));
-        } else {
-            match self
-                .gradient
-                .binary_search_by(|&(a, _)| a.partial_cmp(&sample).unwrap())
-            {
-                Ok(_) => panic!("sample is already contained in the color scale gradient"),
-                Err(p) => self.gradient.insert(p, (sample, color)),
+            if !(0.0..=1.0).contains(&sample) {
+                panic!("sample must lie in the [0, 1] range");
             }
         }
+
+        self.gradient.push((sample, color));
     }
 }
 
@@ -500,10 +547,14 @@ enum Event {
     SetDatumsColoring {
         coloring: DatumsColoring,
     },
+    SetColorBarVisibility {
+        visibility: bool,
+    },
     AddLabel {
         id: String,
         color: Option<colors::ColorQuery<'static>>,
         selection_threshold: Option<f32>,
+        easing: selection::EasingType,
     },
     RemoveLabel {
         id: String,
@@ -518,6 +569,9 @@ enum Event {
     SetLabelThreshold {
         id: String,
         selection_threshold: Option<f32>,
+    },
+    SetLabelEasing {
+        easing: selection::EasingType,
     },
     Draw {
         completion: Sender<()>,
@@ -566,6 +620,7 @@ impl UpdateDataPayload {
         }
     }
 
+    #[wasm_bindgen(js_name = newAxis)]
     pub fn new_axis(
         &mut self,
         key: &str,
@@ -585,6 +640,7 @@ impl UpdateDataPayload {
         });
     }
 
+    #[wasm_bindgen(js_name = addOrder)]
     pub fn add_order(&mut self, key: &str) {
         self.order.push(key.into())
     }
@@ -593,6 +649,7 @@ impl UpdateDataPayload {
 /// Implementation of the renderer for the parallel coordinates.
 #[wasm_bindgen]
 pub struct Renderer {
+    callback: js_sys::Function,
     canvas_gpu: web_sys::HtmlCanvasElement,
     canvas_2d: web_sys::HtmlCanvasElement,
     context_gpu: web_sys::GpuCanvasContext,
@@ -603,6 +660,7 @@ pub struct Renderer {
     render_texture: webgpu::Texture,
     event_queue: Option<Receiver<Event>>,
     axes: Rc<RefCell<axis::Axes>>,
+    color_bar: color_bar::ColorBar,
     events: Vec<event::Event>,
     active_action: Option<action::Action>,
     active_label_idx: Option<usize>,
@@ -612,6 +670,7 @@ pub struct Renderer {
     background_color: ColorTransparent<SRgb>,
     brush_color: ColorOpaque<Xyz>,
     unselected_color: ColorTransparent<Xyz>,
+    pixel_ratio: f32,
     staging_data: StagingData,
 }
 
@@ -619,6 +678,7 @@ struct LabelInfo {
     id: String,
     threshold_changed: bool,
     selection_threshold: f32,
+    easing: selection::EasingType,
     color: ColorOpaque<Xyz>,
     color_dimmed: ColorOpaque<Xyz>,
 }
@@ -631,18 +691,14 @@ struct LabelColorGenerator {
 impl LabelColorGenerator {
     fn next(&mut self) -> (ColorOpaque<Xyz>, ColorOpaque<Xyz>) {
         let css_string = match self.idx {
-            0 => "rgb(166 206 227)",
-            1 => "rgb(31 120 180)",
-            2 => "rgb(178 223 138)",
-            3 => "rgb(51 160 44)",
-            4 => "rgb(251 154 153)",
-            5 => "rgb(227 26 28)",
-            6 => "rgb(253 191 111)",
-            7 => "rgb(255 127 0)",
-            8 => "rgb(202 178 214)",
-            9 => "rgb(106 61 154)",
-            10 => "rgb(255 255 153)",
-            11 => "rgb(177 89 40)",
+            0 => "rgb(228 26 28)",
+            1 => "rgb(55 126 184)",
+            2 => "rgb(77 175 74)",
+            3 => "rgb(152 78 163)",
+            4 => "rgb(255 127 0)",
+            5 => "rgb(255 255 51)",
+            6 => "rgb(166 86 40)",
+            7 => "rgb(247 129 191)",
             _ => unreachable!(),
         };
 
@@ -667,12 +723,19 @@ struct StagingData {
     unselected_color: Vec<ColorQuery<'static>>,
     color_scale: Vec<(ColorSpace, color_scale::ColorScaleDescriptor<'static>)>,
     datums_coloring: Vec<DatumsColoring>,
+    color_bar_visibility: Vec<bool>,
     resize: Vec<(u32, u32, f32)>,
-    label_additions: Vec<(String, Option<ColorQuery<'static>>, Option<f32>)>,
+    label_additions: Vec<(
+        String,
+        Option<ColorQuery<'static>>,
+        Option<f32>,
+        selection::EasingType,
+    )>,
     label_removals: Vec<String>,
     active_label: Vec<String>,
     label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
     label_threshold_changes: Vec<(String, Option<f32>)>,
+    label_easing_changes: Vec<selection::EasingType>,
 }
 
 #[wasm_bindgen]
@@ -680,6 +743,7 @@ impl Renderer {
     /// Constructs a new renderer.
     #[wasm_bindgen(constructor)]
     pub async fn new(
+        callback: js_sys::Function,
         canvas_gpu: web_sys::HtmlCanvasElement,
         canvas_2d: web_sys::HtmlCanvasElement,
     ) -> Self {
@@ -777,11 +841,19 @@ impl Renderer {
 
         let axes = axis::Axes::new_rc(
             view_bounding_box,
-            get_rem_length_screen,
-            get_text_length_screen,
+            get_rem_length_screen.clone(),
+            get_text_length_screen.clone(),
+        );
+
+        let color_bar = color_bar::ColorBar::new(
+            client_width,
+            client_height,
+            get_rem_length_screen.clone(),
+            get_text_length_screen.clone(),
         );
 
         let mut this = Self {
+            callback,
             canvas_gpu,
             canvas_2d,
             context_gpu,
@@ -792,11 +864,13 @@ impl Renderer {
             buffers,
             event_queue: None,
             axes,
+            color_bar,
             events: Vec::default(),
             active_action: None,
             active_label_idx: None,
             labels: vec![],
             label_color_generator: LabelColorGenerator::default(),
+            pixel_ratio: window.device_pixel_ratio() as f32,
             datums_coloring: DEFAULT_DATUMS_COLORING(),
             background_color: DEFAULT_BACKGROUND_COLOR(),
             brush_color: DEFAULT_BRUSH_COLOR(),
@@ -821,6 +895,7 @@ impl Renderer {
     /// # Panics
     ///
     /// Panics if called multiple times.
+    #[wasm_bindgen(js_name = constructEventQueue)]
     pub fn construct_event_queue(&mut self) -> EventQueue {
         if self.event_queue.is_some() {
             panic!("EventQueue was already constructed.");
@@ -828,15 +903,7 @@ impl Renderer {
 
         let (sx, rx) = async_channel::unbounded();
         self.event_queue = Some(rx);
-
-        let queue = EventQueue { sender: sx };
-        queue.set_default_color(Element::Background);
-        queue.set_default_color(Element::Brush);
-        queue.set_default_color(Element::Unselected);
-        queue.set_default_color_scale_color();
-        queue.set_default_selected_datum_coloring();
-
-        queue
+        EventQueue { sender: sx }
     }
 
     /// Starts the event loop of the renderer.
@@ -844,6 +911,7 @@ impl Renderer {
     /// # Panics
     ///
     /// Panics if no [`EventQueue`] is associated with the renderer.
+    #[wasm_bindgen(js_name = enterEventLoop)]
     pub async fn enter_event_loop(&mut self) {
         if self.event_queue.is_none() {
             panic!("EventQueue was not initialized.");
@@ -887,14 +955,22 @@ impl Renderer {
                     self.staging_data.datums_coloring.push(coloring);
                     self.events.push(event::Event::DATUMS_COLORING_CHANGE);
                 }
+                Event::SetColorBarVisibility { visibility } => {
+                    self.staging_data.color_bar_visibility.push(visibility);
+                    self.events.push(event::Event::COLOR_BAR_VISIBILITY_CHANGE);
+                }
                 Event::AddLabel {
                     id,
                     color,
                     selection_threshold,
+                    easing,
                 } => {
-                    self.staging_data
-                        .label_additions
-                        .push((id, color, selection_threshold));
+                    self.staging_data.label_additions.push((
+                        id,
+                        color,
+                        selection_threshold,
+                        easing,
+                    ));
                     self.events.push(event::Event::LABEL_ADDITION);
                 }
                 Event::RemoveLabel { id } => {
@@ -918,6 +994,10 @@ impl Renderer {
                         .push((id, selection_threshold));
                     self.events.push(event::Event::LABEL_THRESHOLD_CHANGE);
                 }
+                Event::SetLabelEasing { easing } => {
+                    self.staging_data.label_easing_changes.push(easing);
+                    self.events.push(event::Event::LABEL_EASING_CHANGE);
+                }
                 Event::Draw { completion } => self.render(completion).await,
                 Event::PointerDown { event } => self.pointer_down(event),
                 Event::PointerUp { event } => self.pointer_up(event),
@@ -937,106 +1017,33 @@ impl Renderer {
         msaa_texture: &webgpu::TextureView,
         resolve_target: &webgpu::TextureView,
     ) {
-        let num_lines = self.buffers.values.lines.len();
-        if num_lines == 0 {
-            return;
-        }
-
-        let descriptor = webgpu::RenderPassDescriptor {
-            label: Some(Cow::Borrowed("datums render pass descriptor")),
-            color_attachments: [webgpu::RenderPassColorAttachments {
-                clear_value: Some(self.background_color.to_f32_with_alpha()),
-                load_op: webgpu::RenderPassLoadOp::Clear,
-                store_op: webgpu::RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
-        let probabilities_buffer = if let Some(active_label_idx) = self.active_label_idx {
+        let axes = self.axes.borrow();
+        let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
+        let probabilities = if let Some(active_label_idx) = self.active_label_idx {
             self.buffers
-                .values
+                .datums()
                 .probabilities(active_label_idx)
-                .buffer()
                 .clone()
         } else {
             buffers::ProbabilitiesBuffer::empty(&self.device)
-                .buffer()
-                .clone()
         };
 
-        let color_scale = self.buffers.values.color_scale.view();
-        let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-            label: Some(Cow::Borrowed("datum lines bind group")),
-            entries: [
-                webgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.matrix.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.values.config.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.axes.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.values.lines.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.values.color_values.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: probabilities_buffer,
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: webgpu::BindGroupEntryResource::TextureView(color_scale),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: webgpu::BindGroupEntryResource::Sampler(
-                        self.pipelines.render_pipelines.draw_value_lines.2.clone(),
-                    ),
-                },
-            ],
-            layout: self.pipelines.render_pipelines.draw_value_lines.0.clone(),
-        });
-
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipelines.render_pipelines.draw_value_lines.1);
-        pass.set_bind_group(0, &bind_group);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        self.pipelines.render().datum_lines().render(
+            self.background_color,
+            self.buffers.shared().matrices(),
+            self.buffers.datums().config(),
+            self.buffers.shared().axes(),
+            self.buffers.datums().lines(),
+            self.buffers.datums().color_values(),
+            &probabilities,
+            self.buffers.shared().color_scale(),
+            viewport_start,
+            viewport_size,
+            &self.device,
+            encoder,
+            msaa_texture,
+            resolve_target,
+        );
     }
 
     fn render_axes(
@@ -1045,65 +1052,21 @@ impl Renderer {
         msaa_texture: &webgpu::TextureView,
         resolve_target: &webgpu::TextureView,
     ) {
-        let num_lines = self.buffers.axes.lines.len();
-        if num_lines == 0 {
-            return;
-        }
+        let axes = self.axes.borrow();
+        let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
 
-        let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-            label: Some(Cow::Borrowed("axes lines bind group")),
-            entries: [
-                webgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.matrix.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.axes.config.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.axes.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.axes.lines.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-            ],
-            layout: self.pipelines.render_pipelines.draw_lines.0.clone(),
-        });
-
-        let pass = encoder.begin_render_pass(webgpu::RenderPassDescriptor {
-            label: Some(Cow::Borrowed("axes render pass")),
-            color_attachments: [webgpu::RenderPassColorAttachments {
-                clear_value: None,
-                load_op: webgpu::RenderPassLoadOp::Load,
-                store_op: webgpu::RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        });
-        pass.set_pipeline(&self.pipelines.render_pipelines.draw_lines.1);
-        pass.set_bind_group(0, &bind_group);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        self.pipelines.render().axis_lines().render(
+            self.buffers.shared().matrices(),
+            self.buffers.axes().config(),
+            self.buffers.shared().axes(),
+            self.buffers.axes().lines(),
+            viewport_start,
+            viewport_size,
+            &self.device,
+            encoder,
+            msaa_texture,
+            resolve_target,
+        );
     }
 
     fn render_selections(
@@ -1117,93 +1080,65 @@ impl Renderer {
         }
         let active_label_idx = self.active_label_idx.unwrap();
 
-        let lines_buffer = self.buffers.selections.lines(active_label_idx);
-        let num_lines = lines_buffer.len();
-        if num_lines == 0 {
+        let axes = self.axes.borrow();
+        let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
+
+        self.pipelines.render().selections().render(
+            self.buffers.shared().matrices(),
+            self.buffers.selections().config(),
+            self.buffers.shared().axes(),
+            self.buffers.selections().lines(active_label_idx),
+            self.buffers.shared().label_colors(),
+            self.buffers.curves().sample_texture(active_label_idx),
+            viewport_start,
+            viewport_size,
+            &self.device,
+            encoder,
+            msaa_texture,
+            resolve_target,
+        );
+    }
+
+    fn render_curve_segments(
+        &self,
+        encoder: &webgpu::CommandEncoder,
+        msaa_texture: &webgpu::TextureView,
+        resolve_target: &webgpu::TextureView,
+    ) {
+        if self.active_label_idx.is_none() {
             return;
         }
+        let active_label_idx = self.active_label_idx.unwrap();
 
-        let descriptor = webgpu::RenderPassDescriptor {
-            label: Some(Cow::Borrowed("selections render pass descriptor")),
-            color_attachments: [webgpu::RenderPassColorAttachments {
-                clear_value: None,
-                load_op: webgpu::RenderPassLoadOp::Load,
-                store_op: webgpu::RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
+        let axes = self.axes.borrow();
+        let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
+        let (min_curve_t, _) = axes.curve_t_range();
+
+        let render = |label| {
+            self.pipelines.render().curve_segments().render(
+                label,
+                active_label_idx,
+                min_curve_t,
+                self.buffers.shared().matrices(),
+                self.buffers.shared().axes(),
+                self.buffers.curves().lines(label),
+                self.buffers.shared().label_colors(),
+                viewport_start,
+                viewport_size,
+                &self.device,
+                encoder,
+                msaa_texture,
+                resolve_target,
+            );
         };
 
-        let probability_curve_samples = self
-            .buffers
-            .curves
-            .sample_texture(active_label_idx)
-            .array_view();
-        let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-            label: Some(Cow::Borrowed("datum lines bind group")),
-            entries: [
-                webgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.matrix.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.selections.config().buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.axes.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: lines_buffer.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.colors.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: webgpu::BindGroupEntryResource::TextureView(
-                        probability_curve_samples,
-                    ),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: webgpu::BindGroupEntryResource::Sampler(
-                        self.pipelines.render_pipelines.draw_selections.2.clone(),
-                    ),
-                },
-            ],
-            layout: self.pipelines.render_pipelines.draw_selections.0.clone(),
-        });
-
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipelines.render_pipelines.draw_selections.1);
-        pass.set_bind_group(0, &bind_group);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        for i in 0..self.labels.len() {
+            if i == active_label_idx {
+                continue;
+            }
+            render(i)
+        }
+        render(active_label_idx)
     }
 
     fn render_curves(
@@ -1217,68 +1152,45 @@ impl Renderer {
         }
         let active_label_idx = self.active_label_idx.unwrap();
 
-        let lines_buffer = self.buffers.curves.lines(active_label_idx);
-        let num_lines = lines_buffer.len();
-        if num_lines == 0 {
+        let axes = self.axes.borrow();
+        let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
+
+        self.pipelines.render().curve_lines().render(
+            self.buffers.shared().matrices(),
+            self.buffers.curves().config(),
+            self.buffers.shared().axes(),
+            self.buffers.curves().lines(active_label_idx),
+            viewport_start,
+            viewport_size,
+            &self.device,
+            encoder,
+            msaa_texture,
+            resolve_target,
+        );
+    }
+
+    fn render_color_bar(
+        &self,
+        encoder: &webgpu::CommandEncoder,
+        msaa_texture: &webgpu::TextureView,
+        resolve_target: &webgpu::TextureView,
+    ) {
+        if !self.color_bar.is_visible() {
             return;
         }
 
-        let descriptor = webgpu::RenderPassDescriptor {
-            label: Some(Cow::Borrowed("curves render pass descriptor")),
-            color_attachments: [webgpu::RenderPassColorAttachments {
-                clear_value: None,
-                load_op: webgpu::RenderPassLoadOp::Load,
-                store_op: webgpu::RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
+        let (viewport_start, viewport_size) = self.color_bar.bar_viewport(self.pixel_ratio);
 
-        let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-            label: Some(Cow::Borrowed("datum lines bind group")),
-            entries: [
-                webgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.matrix.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.curves.config().buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.general.axes.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: lines_buffer.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-            ],
-            layout: self.pipelines.render_pipelines.draw_lines.0.clone(),
-        });
-
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipelines.render_pipelines.draw_lines.1);
-        pass.set_bind_group(0, &bind_group);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        self.pipelines.render().color_bar().render(
+            self.buffers.shared().color_scale(),
+            self.background_color,
+            viewport_start,
+            viewport_size,
+            &self.device,
+            encoder,
+            msaa_texture,
+            resolve_target,
+        );
     }
 
     fn render_labels(&self) {
@@ -1347,6 +1259,166 @@ impl Renderer {
         self.context_2d.restore();
     }
 
+    fn render_control_points(&self) {
+        let active_label_idx = match self.active_label_idx {
+            Some(x) => x,
+            None => return,
+        };
+
+        self.context_2d.save();
+        self.context_2d.set_fill_style(&"rgb(178 178 178)".into());
+
+        let guard = self.axes.borrow();
+        let radius = guard.control_points_radius().extract::<f32>() as f64;
+        let screen_mapper = guard.space_transformer();
+
+        for ax in guard.visible_axes() {
+            if !ax.is_expanded() {
+                continue;
+            }
+
+            let world_mapper = ax.space_transformer();
+            let (sel_control_points, curve_control_points) = {
+                let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                (
+                    Vec::from(curve_builder.get_selection_control_points()),
+                    Vec::from(curve_builder.get_curve_control_points()),
+                )
+            };
+
+            let (axis_start, axis_end) = ax.axis_line_range();
+            for (rank, axis_value) in sel_control_points {
+                if !(0.0..=1.0).contains(&axis_value) {
+                    continue;
+                }
+
+                let rank_offset = ax.selection_offset_at_rank(rank);
+                let position = axis_start.lerp(axis_end, axis_value) + rank_offset;
+                let (x, y) = position
+                    .transform(&world_mapper)
+                    .transform(&screen_mapper)
+                    .extract();
+
+                self.context_2d.begin_path();
+                self.context_2d
+                    .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
+                    .unwrap();
+                self.context_2d.fill();
+            }
+
+            for [axis_value, curve_value] in curve_control_points {
+                if !(0.0..=1.0).contains(&axis_value) {
+                    continue;
+                }
+
+                let curve_offset = ax.curve_offset_at_curve_value(curve_value);
+                let position = axis_start.lerp(axis_end, axis_value) + curve_offset;
+                let (x, y) = position
+                    .transform(&world_mapper)
+                    .transform(&screen_mapper)
+                    .extract();
+
+                self.context_2d.begin_path();
+                self.context_2d
+                    .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
+                    .unwrap();
+                self.context_2d.fill();
+            }
+        }
+
+        self.context_2d.restore();
+    }
+
+    fn render_color_bar_label(&self) {
+        self.context_2d.save();
+        self.context_2d.set_text_align("center");
+
+        if !self.color_bar.is_visible() {
+            return;
+        }
+
+        let label = self.color_bar.label();
+        if label.is_empty() {
+            return;
+        }
+
+        let position = self.color_bar.label_position();
+        let (x, y) = position.extract();
+        self.context_2d
+            .fill_text(&label, x as f64, y as f64)
+            .unwrap();
+    }
+
+    fn render_bounding_boxes(&self) {
+        let axes = self.axes.borrow();
+        let ((x, y), (w, h)) = axes.viewport(self.pixel_ratio);
+        self.context_2d
+            .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+
+        for axis in axes.visible_axes() {
+            let bounding_box = axis
+                .bounding_box(self.active_label_idx)
+                .transform(&axis.space_transformer())
+                .transform(&axes.space_transformer());
+            let x = bounding_box.start().x;
+            let y = bounding_box.end().y;
+            let (w, h) = bounding_box.size().extract();
+            self.context_2d
+                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+
+            let bounding_box = axis
+                .label_bounding_box()
+                .transform(&axis.space_transformer())
+                .transform(&axes.space_transformer());
+            let x = bounding_box.start().x;
+            let y = bounding_box.end().y;
+            let (w, h) = bounding_box.size().extract();
+            self.context_2d
+                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+
+            let bounding_box = axis
+                .curves_bounding_box()
+                .transform(&axis.space_transformer())
+                .transform(&axes.space_transformer());
+            let x = bounding_box.start().x;
+            let y = bounding_box.end().y;
+            let (w, h) = bounding_box.size().extract();
+            self.context_2d
+                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+
+            let bounding_box = axis
+                .axis_line_bounding_box()
+                .transform(&axis.space_transformer())
+                .transform(&axes.space_transformer());
+            let x = bounding_box.start().x;
+            let y = bounding_box.end().y;
+            let (w, h) = bounding_box.size().extract();
+            self.context_2d
+                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+
+            if let Some(active_label_idx) = self.active_label_idx {
+                let bounding_box = axis
+                    .selections_bounding_box(active_label_idx)
+                    .transform(&axis.space_transformer())
+                    .transform(&axes.space_transformer());
+                let x = bounding_box.start().x;
+                let y = bounding_box.end().y;
+                let (w, h) = bounding_box.size().extract();
+                self.context_2d
+                    .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+            }
+        }
+
+        if self.color_bar.is_visible() {
+            let bounding_box = self.color_bar.bounding_box();
+            let x = bounding_box.start().x;
+            let y = bounding_box.end().y;
+            let (w, h) = bounding_box.size().extract();
+            self.context_2d
+                .stroke_rect(x as f64, y as f64, w as f64, h as f64)
+        }
+    }
+
     async fn render(&mut self, completion: Sender<()>) {
         let redraw = self.handle_events();
         if !redraw {
@@ -1371,7 +1443,9 @@ impl Renderer {
         self.render_datums(&command_encoder, &msaa_texture_view, &texture_view);
         self.render_axes(&command_encoder, &msaa_texture_view, &texture_view);
         self.render_selections(&command_encoder, &msaa_texture_view, &texture_view);
+        self.render_curve_segments(&command_encoder, &msaa_texture_view, &texture_view);
         self.render_curves(&command_encoder, &msaa_texture_view, &texture_view);
+        self.render_color_bar(&command_encoder, &msaa_texture_view, &texture_view);
 
         self.device.queue().submit(&[command_encoder.finish(None)]);
 
@@ -1384,6 +1458,10 @@ impl Renderer {
         );
         self.render_labels();
         self.render_min_max_labels();
+        self.render_control_points();
+        self.render_color_bar_label();
+
+        // self.render_bounding_boxes();
 
         let mut probabilities_change = Vec::new();
         for label_idx in probabilities_changed.iter().copied() {
@@ -1454,10 +1532,15 @@ impl Renderer {
                 self.set_datums_coloring(coloring);
             }
 
+            if events.signaled(event::Event::COLOR_BAR_VISIBILITY_CHANGE) {
+                let visible = self.staging_data.color_bar_visibility.pop().unwrap();
+                self.set_color_bar_visibility(visible);
+            }
+
             if events.signaled(event::Event::LABEL_ADDITION) {
-                let (id, color, selection_threshold) =
+                let (id, color, selection_threshold, easing_type) =
                     self.staging_data.label_additions.pop().unwrap();
-                self.add_label(id, color, selection_threshold);
+                self.add_label(id, color, selection_threshold, easing_type);
             }
 
             if events.signaled(event::Event::LABEL_REMOVAL) {
@@ -1479,6 +1562,11 @@ impl Renderer {
                 let (id, selection_threshold) =
                     self.staging_data.label_threshold_changes.pop().unwrap();
                 self.change_label_threshold(id, selection_threshold);
+            }
+
+            if events.signaled(event::Event::LABEL_EASING_CHANGE) {
+                let easing = self.staging_data.label_easing_changes.pop().unwrap();
+                self.change_label_easing(easing);
             }
 
             // Internal events.
@@ -1504,11 +1592,30 @@ impl Renderer {
                 event::Event::AXIS_ORDER_CHANGE,
             ]);
             if update_datum_lines_buffer {
-                self.update_value_lines_buffer();
+                self.update_datum_lines_buffer();
             }
         }
 
         true
+    }
+}
+
+// Callback events
+impl Renderer {
+    fn notify_easing_change(&self) {
+        if let Some(active_label_idx) = self.active_label_idx {
+            let easing = match self.labels[active_label_idx].easing {
+                selection::EasingType::Linear => "linear",
+                selection::EasingType::EaseIn => "in",
+                selection::EasingType::EaseOut => "out",
+                selection::EasingType::EaseInOut => "inout",
+            };
+
+            let this = JsValue::null();
+            self.callback
+                .call2(&this, &"easing".into(), &easing.into())
+                .unwrap();
+        }
     }
 }
 
@@ -1539,15 +1646,21 @@ impl Renderer {
         if let Some(order) = order {
             guard.set_axes_order(&order);
         }
+
+        if let DatumsColoring::Attribute(id) = &self.datums_coloring {
+            let axis = guard.axis(id).unwrap();
+            self.color_bar.set_to_axis(&axis);
+        }
+
         drop(guard);
 
         self.update_axes_config_buffer();
-        self.update_values_config_buffer();
+        self.update_datums_config_buffer();
 
         self.update_matrix_buffer();
         self.update_axes_buffer();
         self.update_axes_lines_buffer();
-        self.update_value_lines_buffer();
+        self.update_datum_lines_buffer();
         self.update_datums_buffer();
         self.update_color_values_buffer();
 
@@ -1571,7 +1684,7 @@ impl Renderer {
     fn set_unselected_color(&mut self, color: ColorQuery<'_>) {
         let color = color.resolve_with_alpha::<Xyz>();
         self.unselected_color = color;
-        self.update_values_config_buffer();
+        self.update_datums_config_buffer();
     }
 
     fn set_color_scale(&mut self, color_space: ColorSpace, scale: ColorScaleDescriptor<'_>) {
@@ -1596,14 +1709,76 @@ impl Renderer {
     fn set_datums_coloring(&mut self, coloring: DatumsColoring) {
         self.datums_coloring = coloring;
 
+        match &self.datums_coloring {
+            DatumsColoring::Constant(_) => self.color_bar.set_to_empty(),
+            DatumsColoring::Attribute(id) => {
+                let axes = self.axes.borrow();
+                let axis = axes.axis(id).unwrap();
+                self.color_bar.set_to_axis(&axis);
+            }
+            DatumsColoring::Probability => {
+                if let Some(active_label_idx) = self.active_label_idx {
+                    let label = &self.labels[active_label_idx].id;
+                    self.color_bar.set_to_label_probability(label);
+                }
+            }
+        }
+
+        let width = self.canvas_gpu.width();
+        let height = self.canvas_gpu.height();
+        if self.color_bar.is_visible() {
+            let bounding_box = self.color_bar.bounding_box();
+            let world_end_x = bounding_box.start().x;
+
+            let guard = self.axes.borrow();
+            guard.set_view_bounding_box(Aabb::new(
+                Position::zero(),
+                Position::new((world_end_x, height as f32)),
+            ));
+            drop(guard);
+        } else {
+            let guard = self.axes.borrow();
+            guard.set_view_bounding_box(Aabb::new(
+                Position::zero(),
+                Position::new((width as f32, height as f32)),
+            ));
+            drop(guard);
+        }
+
         self.update_color_values_buffer();
-        self.update_values_config_buffer();
+        self.update_datums_config_buffer();
+    }
+
+    fn set_color_bar_visibility(&mut self, visible: bool) {
+        let width = self.canvas_gpu.width();
+        let height = self.canvas_gpu.height();
+
+        self.color_bar.set_visible(visible);
+        if self.color_bar.is_visible() {
+            let bounding_box = self.color_bar.bounding_box();
+            let world_end_x = bounding_box.start().x;
+
+            let guard = self.axes.borrow();
+            guard.set_view_bounding_box(Aabb::new(
+                Position::zero(),
+                Position::new((world_end_x, height as f32)),
+            ));
+            drop(guard);
+        } else {
+            let guard = self.axes.borrow();
+            guard.set_view_bounding_box(Aabb::new(
+                Position::zero(),
+                Position::new((width as f32, height as f32)),
+            ));
+            drop(guard);
+        }
     }
 
     fn resize_drawing_area(&mut self, width: u32, height: u32, device_pixel_ratio: f32) {
         let scaled_width = (width as f32 * device_pixel_ratio) as u32;
         let scaled_height = (height as f32 * device_pixel_ratio) as u32;
 
+        self.pixel_ratio = device_pixel_ratio;
         self.canvas_gpu.set_width(scaled_width);
         self.canvas_gpu.set_height(scaled_height);
 
@@ -1629,15 +1804,28 @@ impl Renderer {
                 view_formats: None,
             });
 
-        let guard = self.axes.borrow();
-        guard.set_view_bounding_box(Aabb::new(
-            Position::zero(),
-            Position::new((width as f32, height as f32)),
-        ));
-        drop(guard);
+        self.color_bar.set_screen_size(width as f32, height as f32);
+        if self.color_bar.is_visible() {
+            let bounding_box = self.color_bar.bounding_box();
+            let world_end_x = bounding_box.start().x;
+
+            let guard = self.axes.borrow();
+            guard.set_view_bounding_box(Aabb::new(
+                Position::zero(),
+                Position::new((world_end_x, height as f32)),
+            ));
+            drop(guard);
+        } else {
+            let guard = self.axes.borrow();
+            guard.set_view_bounding_box(Aabb::new(
+                Position::zero(),
+                Position::new((width as f32, height as f32)),
+            ));
+            drop(guard);
+        }
 
         self.update_axes_config_buffer();
-        self.update_values_config_buffer();
+        self.update_datums_config_buffer();
         self.update_curves_config_buffer();
         self.update_selections_config_buffer();
 
@@ -1649,6 +1837,7 @@ impl Renderer {
         id: String,
         color: Option<ColorQuery<'_>>,
         selection_threshold: Option<f32>,
+        easing_type: selection::EasingType,
     ) {
         if self.labels.iter().any(|l| l.id == id) {
             panic!("id already exists");
@@ -1668,15 +1857,16 @@ impl Renderer {
             id,
             threshold_changed: true,
             selection_threshold,
+            easing: easing_type,
             color,
             color_dimmed,
         };
 
         self.active_label_idx = Some(self.labels.len());
         self.labels.push(label);
-        self.buffers.values.push_label(&self.device);
-        self.buffers.curves.push_label(&self.device);
-        self.buffers.selections.push_label(&self.device);
+        self.buffers.datums_mut().push_label(&self.device);
+        self.buffers.curves_mut().push_label(&self.device);
+        self.buffers.selections_mut().push_label(&self.device);
 
         let axes = self.axes.borrow();
         for axis in axes.visible_axes() {
@@ -1684,9 +1874,16 @@ impl Renderer {
         }
         drop(axes);
 
+        if let DatumsColoring::Probability = &self.datums_coloring {
+            let label = &self.labels[self.active_label_idx.unwrap()].id;
+            self.color_bar.set_to_label_probability(label);
+        }
+
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
         self.update_label_colors_buffer();
+
+        self.notify_easing_change();
     }
 
     fn remove_label(&mut self, id: String) {
@@ -1697,9 +1894,9 @@ impl Renderer {
             .expect("no label with a matching id found");
 
         self.labels.remove(label_idx);
-        self.buffers.values.remove_label(label_idx);
-        self.buffers.curves.remove_label(label_idx);
-        self.buffers.selections.remove_label(label_idx);
+        self.buffers.datums_mut().remove_label(label_idx);
+        self.buffers.curves_mut().remove_label(label_idx);
+        self.buffers.selections_mut().remove_label(label_idx);
 
         if self.labels.is_empty() {
             self.active_label_idx = None;
@@ -1713,9 +1910,20 @@ impl Renderer {
         }
         drop(axes);
 
+        if let DatumsColoring::Probability = &self.datums_coloring {
+            if let Some(active_label_idx) = self.active_label_idx {
+                let label = &self.labels[active_label_idx].id;
+                self.color_bar.set_to_label_probability(label);
+            } else {
+                self.color_bar.set_to_empty();
+            }
+        }
+
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
         self.update_label_colors_buffer();
+
+        self.notify_easing_change();
     }
 
     fn change_active_label(&mut self, id: String) {
@@ -1726,8 +1934,15 @@ impl Renderer {
             .expect("no label with a matching id found");
         self.active_label_idx = Some(label_idx);
 
+        if let DatumsColoring::Probability = &self.datums_coloring {
+            let label = &self.labels[self.active_label_idx.unwrap()].id;
+            self.color_bar.set_to_label_probability(label);
+        }
+
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
+
+        self.notify_easing_change();
     }
 
     fn change_label_color(&mut self, id: String, color: Option<ColorQuery<'_>>) {
@@ -1769,6 +1984,22 @@ impl Renderer {
                 self.update_selections_config_buffer();
             }
         }
+    }
+
+    fn change_label_easing(&mut self, easing: selection::EasingType) {
+        let label_idx = self.active_label_idx.expect("no label is present");
+        self.labels[label_idx].easing = easing;
+
+        let axes = self.axes.borrow();
+        for axis in axes.visible_axes() {
+            let curve_builder = axis.borrow_selection_curve_builder(label_idx);
+            let curve = curve_builder.build(axis.visible_datums_range_normalized().into(), easing);
+            axis.borrow_selection_curve_mut(label_idx).set_curve(curve);
+        }
+        drop(axes);
+
+        self.update_selection_lines_buffer();
+        self.notify_easing_change();
     }
 
     fn pointer_down(&mut self, event: web_sys::PointerEvent) {
@@ -1824,7 +2055,43 @@ impl Renderer {
                             axis,
                             selection_idx,
                             active_label_idx,
+                            self.labels[active_label_idx].easing,
                         ))
+                    }
+                }
+                axis::Element::SelectionControlPoint {
+                    axis,
+                    selection_idx,
+                    segment_idx,
+                } => {
+                    if let Some(active_label_idx) = self.active_label_idx {
+                        self.active_action =
+                            Some(action::Action::new_select_selection_control_point_action(
+                                axis,
+                                selection_idx,
+                                segment_idx,
+                                active_label_idx,
+                                self.labels[active_label_idx].easing,
+                                event,
+                            ))
+                    }
+                }
+                axis::Element::CurveControlPoint {
+                    axis,
+                    selection_idx,
+                    segment_idx,
+                    is_upper,
+                } => {
+                    if let Some(active_label_idx) = self.active_label_idx {
+                        self.active_action =
+                            Some(action::Action::new_select_curve_control_point_action(
+                                axis,
+                                selection_idx,
+                                segment_idx,
+                                active_label_idx,
+                                is_upper,
+                                self.labels[active_label_idx].easing,
+                            ))
                     }
                 }
                 axis::Element::AxisLine { axis } => {
@@ -1833,6 +2100,7 @@ impl Renderer {
                             axis,
                             event,
                             active_label_idx,
+                            self.labels[active_label_idx].easing,
                         ))
                     }
                 }
@@ -1843,6 +2111,44 @@ impl Renderer {
     fn update_action(&mut self, event: web_sys::PointerEvent) {
         if let Some(action) = &mut self.active_action {
             self.events.push(action.update(event));
+        } else {
+            let position =
+                Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
+
+            let axes = self.axes.borrow();
+            let element = axes.element_at_position(position, self.active_label_idx);
+            match element {
+                Some(axis::Element::Label { .. }) => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "ew-resize")
+                    .unwrap(),
+                Some(axis::Element::Selection { .. }) => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "ns-resize")
+                    .unwrap(),
+                Some(axis::Element::SelectionControlPoint { .. }) => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "row-resize")
+                    .unwrap(),
+                Some(axis::Element::CurveControlPoint { .. }) => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "move")
+                    .unwrap(),
+                Some(axis::Element::AxisLine { .. }) => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "crosshair")
+                    .unwrap(),
+                None => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "default")
+                    .unwrap(),
+            }
         }
     }
 
@@ -1853,11 +2159,11 @@ impl Renderer {
     }
 }
 
-// General buffers
+// Shared buffers
 impl Renderer {
     fn update_matrix_buffer(&mut self) {
         let guard = self.axes.borrow();
-        self.buffers.general.matrix.update(
+        self.buffers.shared_mut().matrices_mut().update(
             &self.device,
             &buffers::Matrices::new(guard.num_visible_axes()),
         );
@@ -1891,7 +2197,10 @@ impl Renderer {
                 range_y: wgsl::Vec2(range),
             });
         }
-        self.buffers.general.axes.update(&self.device, &axes);
+        self.buffers
+            .shared_mut()
+            .axes_mut()
+            .update(&self.device, &axes);
     }
 
     fn update_label_colors_buffer(&mut self) {
@@ -1903,7 +2212,42 @@ impl Renderer {
                 color_low: wgsl::Vec4(l.color_dimmed.with_alpha(0.5).to_f32_with_alpha()),
             })
             .collect::<Vec<_>>();
-        self.buffers.general.colors.update(&self.device, &colors);
+        self.buffers
+            .shared_mut()
+            .label_colors_mut()
+            .update(&self.device, &colors);
+    }
+
+    fn update_color_scale_texture(
+        &mut self,
+        color_space: ColorSpace,
+        scale: color_scale::ColorScale<colors::UnknownColorSpace>,
+    ) {
+        let color_scale_elements = scale
+            .get_scale()
+            .iter()
+            .copied()
+            .map(|(t, c)| buffers::ColorScaleElement {
+                t,
+                color: wgsl::Vec4(c.to_f32_with_alpha()),
+            })
+            .collect::<Vec<_>>();
+        let color_scale_elements =
+            buffers::ColorScaleElementBuffer::new(&self.device, &color_scale_elements);
+
+        let encoder = self
+            .device
+            .create_command_encoder(webgpu::CommandEncoderDescriptor {
+                label: Some("color scale sampling command encoder".into()),
+            });
+        self.pipelines.compute().color_scale_sampling().dispatch(
+            color_space,
+            self.buffers.shared_mut().color_scale_mut(),
+            &color_scale_elements,
+            &self.device,
+            &encoder,
+        );
+        self.device.queue().submit(&[encoder.finish(None)]);
     }
 }
 
@@ -1912,12 +2256,10 @@ impl Renderer {
     fn update_axes_config_buffer(&mut self) {
         let guard = self.axes.borrow();
         let (width, height) = guard.axis_line_size();
-        self.buffers.axes.config.update(
+        self.buffers.axes_mut().config_mut().update(
             &self.device,
-            &buffers::LineConfig {
+            &buffers::AxesConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
-                line_type: 3,
-                color_mode: 0,
                 color: wgsl::Vec3([0.8, 0.8, 0.8]),
             },
         );
@@ -1932,45 +2274,33 @@ impl Renderer {
 
         for ax in guard.visible_axes() {
             let index = ax.axis_index().unwrap();
-            let start_args_x = f32::from_ne_bytes((index as u32).to_ne_bytes());
-            let end_args_x = f32::from_ne_bytes((index as u32).to_ne_bytes());
-
-            lines[index].write(buffers::LineInfo {
+            lines[index].write(buffers::AxisLineInfo {
+                axis: index as u32,
+                axis_position: buffers::AxisLineInfo::CENTER,
                 min_expanded_val: 0.0,
-                start_args: wgsl::Vec2([start_args_x, 0.0]),
-                end_args: wgsl::Vec2([end_args_x, 1.0]),
-                offset_start: wgsl::Vec2([0.0, 0.0]),
-                offset_end: wgsl::Vec2([0.0, 0.0]),
             });
-
-            let start_args_x = f32::from_ne_bytes((index as u32 + (1 << 31)).to_ne_bytes());
-            let end_args_x = f32::from_ne_bytes((index as u32 + (1 << 31)).to_ne_bytes());
-            lines.push(MaybeUninit::new(buffers::LineInfo {
+            lines.push(MaybeUninit::new(buffers::AxisLineInfo {
+                axis: index as u32,
+                axis_position: buffers::AxisLineInfo::LEFT,
                 min_expanded_val: 1.0,
-                start_args: wgsl::Vec2([start_args_x, 0.0]),
-                end_args: wgsl::Vec2([end_args_x, 1.0]),
-                offset_start: wgsl::Vec2([0.0, 0.0]),
-                offset_end: wgsl::Vec2([0.0, 0.0]),
             }));
-
-            let start_args_x = f32::from_ne_bytes((index as u32 + (1 << 29)).to_ne_bytes());
-            let end_args_x = f32::from_ne_bytes((index as u32 + (1 << 29)).to_ne_bytes());
-            lines.push(MaybeUninit::new(buffers::LineInfo {
+            lines.push(MaybeUninit::new(buffers::AxisLineInfo {
+                axis: index as u32,
+                axis_position: buffers::AxisLineInfo::RIGHT,
                 min_expanded_val: 1.0,
-                start_args: wgsl::Vec2([start_args_x, 0.0]),
-                end_args: wgsl::Vec2([end_args_x, 1.0]),
-                offset_start: wgsl::Vec2([0.0, 0.0]),
-                offset_end: wgsl::Vec2([0.0, 0.0]),
             }));
         }
 
-        self.buffers.axes.lines.update(&self.device, &lines);
+        self.buffers
+            .axes_mut()
+            .lines_mut()
+            .update(&self.device, &lines);
     }
 }
 
-// Values buffers
+// Datums buffers
 impl Renderer {
-    fn update_values_config_buffer(&mut self) {
+    fn update_datums_config_buffer(&mut self) {
         let selection_threshold = if let Some(active_label_idx) = self.active_label_idx {
             self.labels[active_label_idx].selection_threshold
         } else {
@@ -1981,7 +2311,7 @@ impl Renderer {
         let color_probabilities =
             matches!(self.datums_coloring, DatumsColoring::Probability) as u32;
         let (width, height) = guard.datums_line_size();
-        self.buffers.values.config.update(
+        self.buffers.datums_mut().config_mut().update(
             &self.device,
             &buffers::ValueLineConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
@@ -1992,7 +2322,7 @@ impl Renderer {
         );
     }
 
-    fn update_value_lines_buffer(&mut self) {
+    fn update_datum_lines_buffer(&mut self) {
         let axes = self.axes.borrow();
 
         // Compute the curves.
@@ -2045,7 +2375,10 @@ impl Renderer {
             }
         }
 
-        self.buffers.values.lines.update(&self.device, &lines)
+        self.buffers
+            .datums_mut()
+            .lines_mut()
+            .update(&self.device, &lines)
     }
 
     fn update_color_values_buffer(&mut self) {
@@ -2053,148 +2386,28 @@ impl Renderer {
         let num_datums = axes.num_datums();
 
         self.buffers
-            .values
-            .color_values
+            .datums_mut()
+            .color_values_mut()
             .resize(&self.device, num_datums);
 
         match &self.datums_coloring {
             DatumsColoring::Constant(x) => {
                 let values = vec![*x; num_datums];
                 self.buffers
-                    .values
-                    .color_values
+                    .datums()
+                    .color_values()
                     .update(&self.device, &values);
             }
             DatumsColoring::Attribute(key) => {
                 let axis = axes.axis(key).expect("unknown attribute");
                 let values = axis.datums_normalized();
                 self.buffers
-                    .values
-                    .color_values
+                    .datums()
+                    .color_values()
                     .update(&self.device, values);
             }
             DatumsColoring::Probability => {}
         }
-    }
-
-    fn update_color_scale_texture(
-        &mut self,
-        color_space: ColorSpace,
-        scale: color_scale::ColorScale<colors::UnknownColorSpace>,
-    ) {
-        let scale = scale
-            .get_scale()
-            .iter()
-            .copied()
-            .map(|(t, c)| buffers::ColorScaleElement {
-                t,
-                color: wgsl::Vec4(c.to_f32_with_alpha()),
-            })
-            .collect::<Vec<_>>();
-        let color_scale_buffer = buffers::ColorScaleElementBuffer::new(&self.device, &scale);
-        let scale_view = self.buffers.values.color_scale.view();
-
-        let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-            label: Some(Cow::Borrowed("color scale sampling bind group")),
-            entries: [
-                webgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: webgpu::BindGroupEntryResource::TextureView(scale_view.clone()),
-                },
-                webgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: color_scale_buffer.buffer().clone(),
-                        offset: None,
-                        size: None,
-                    }),
-                },
-            ],
-            layout: self
-                .pipelines
-                .compute_pipelines
-                .sample_color_scale
-                .0
-                .clone(),
-        });
-
-        let encoder = self
-            .device
-            .create_command_encoder(webgpu::CommandEncoderDescriptor {
-                label: Some(Cow::Borrowed("color scale creation command encoder")),
-            });
-
-        let num_workgroups =
-            ((buffers::ColorScaleTexture::COLOR_SCALE_RESOLUTION + 63) / 64) as u32;
-
-        let sampling_pass = encoder.begin_compute_pass(None);
-        sampling_pass.set_pipeline(&self.pipelines.compute_pipelines.sample_color_scale.1);
-        sampling_pass.set_bind_group(0, &bind_group);
-        sampling_pass.dispatch_workgroups(&[num_workgroups]);
-        sampling_pass.end();
-
-        // Transform the color scale to XYZ.
-        if color_space != ColorSpace::Xyz {
-            let transformed_scale = buffers::ColorScaleTexture::new(&self.device);
-            let transformed_scale_view = transformed_scale.view();
-
-            let color_space: u32 = match color_space {
-                ColorSpace::SRgb => 0,
-                ColorSpace::Xyz => 1,
-                ColorSpace::CieLab => 2,
-                ColorSpace::CieLch => 3,
-            };
-            let color_space_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
-                label: Some(Cow::Borrowed("color space buffer")),
-                size: std::mem::size_of::<u32>(),
-                usage: webgpu::BufferUsage::UNIFORM | webgpu::BufferUsage::COPY_DST,
-                mapped_at_creation: None,
-            });
-            self.device
-                .queue()
-                .write_buffer_single(&color_space_buffer, 0, &color_space);
-
-            let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-                label: Some(Cow::Borrowed("color scale transformation bind group")),
-                entries: [
-                    webgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: webgpu::BindGroupEntryResource::TextureView(scale_view),
-                    },
-                    webgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: webgpu::BindGroupEntryResource::TextureView(
-                            transformed_scale_view,
-                        ),
-                    },
-                    webgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                            buffer: color_space_buffer,
-                            offset: None,
-                            size: None,
-                        }),
-                    },
-                ],
-                layout: self
-                    .pipelines
-                    .compute_pipelines
-                    .transform_color_scale
-                    .0
-                    .clone(),
-            });
-
-            let transformation_pass = encoder.begin_compute_pass(None);
-            transformation_pass
-                .set_pipeline(&self.pipelines.compute_pipelines.transform_color_scale.1);
-            transformation_pass.set_bind_group(0, &bind_group);
-            transformation_pass.dispatch_workgroups(&[num_workgroups]);
-            transformation_pass.end();
-
-            self.buffers.values.color_scale = transformed_scale;
-        }
-
-        self.device.queue().submit(&[encoder.finish(None)]);
     }
 
     fn update_datums_buffer(&mut self) {
@@ -2203,8 +2416,8 @@ impl Renderer {
         let num_visible_axes = axes.num_visible_axes();
 
         self.buffers
-            .values
-            .datums
+            .datums_mut()
+            .datums_mut()
             .resize(&self.device, num_datums, num_visible_axes);
 
         if num_datums == 0 || num_visible_axes == 0 {
@@ -2217,8 +2430,8 @@ impl Renderer {
                 .axis_index()
                 .expect("all visible axes should have an index");
             self.buffers
-                .values
-                .datums
+                .datums()
+                .datums()
                 .update(&self.device, datums, axis_idx);
         }
     }
@@ -2229,12 +2442,10 @@ impl Renderer {
     fn update_curves_config_buffer(&mut self) {
         let guard = self.axes.borrow();
         let (width, height) = guard.curve_line_size();
-        self.buffers.curves.config_mut().update(
+        self.buffers.curves_mut().config_mut().update(
             &self.device,
-            &buffers::LineConfig {
+            &buffers::CurvesConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
-                line_type: 23,
-                color_mode: 0,
                 color: wgsl::Vec3([1.0, 0.8, 0.8]),
             },
         );
@@ -2246,7 +2457,7 @@ impl Renderer {
     fn update_selections_config_buffer(&mut self) {
         let guard = self.axes.borrow();
         let (width, height) = guard.selections_line_size();
-        self.buffers.selections.config_mut().update(
+        self.buffers.selections_mut().config_mut().update(
             &self.device,
             &buffers::SelectionConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
@@ -2330,7 +2541,7 @@ impl Renderer {
             }
         }
         self.buffers
-            .selections
+            .selections_mut()
             .lines_mut(active_label_idx)
             .update(&self.device, &segments);
     }
@@ -2345,7 +2556,7 @@ impl Renderer {
     ) -> bool {
         let axes = self.axes.borrow();
         self.buffers
-            .curves
+            .curves_mut()
             .sample_texture_mut(label_idx)
             .set_num_curves(&self.device, axes.num_visible_axes());
 
@@ -2358,6 +2569,11 @@ impl Renderer {
             };
             changed = true;
 
+            let axis_idx = axis
+                .axis_index()
+                .expect("all visible axes must have an index");
+            let probability_texture = self.buffers.curves().sample_texture(label_idx);
+
             let spline_segments = spline
                 .segments()
                 .iter()
@@ -2367,49 +2583,16 @@ impl Renderer {
                     t_range: wgsl::Vec2(s.t_range),
                 })
                 .collect::<Vec<_>>();
-            let spline_segments_buffer =
+            let spline_segments =
                 buffers::SplineSegmentsBuffer::new(&self.device, &spline_segments);
 
-            let axis_idx = axis
-                .axis_index()
-                .expect("all visible axes must have an index");
-            let probability_texture = self
-                .buffers
-                .curves
-                .sample_texture(label_idx)
-                .axis_view(axis_idx);
-
-            // Sample the curve.
-            let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
-                label: Some(Cow::Borrowed(
-                    "probability curve spline sampling bind group",
-                )),
-                entries: [
-                    webgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: webgpu::BindGroupEntryResource::TextureView(probability_texture),
-                    },
-                    webgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                            buffer: spline_segments_buffer.buffer().clone(),
-                            offset: None,
-                            size: None,
-                        }),
-                    },
-                ],
-                layout: self.pipelines.compute_pipelines.sample_curves.0.clone(),
-            });
-
-            let num_workgroups = ((buffers::ProbabilitySampleTexture::PROBABILITY_CURVE_RESOLUTION
-                + 63)
-                / 64) as u32;
-
-            let pass = encoder.begin_compute_pass(None);
-            pass.set_pipeline(&self.pipelines.compute_pipelines.sample_curves.1);
-            pass.set_bind_group(0, &bind_group);
-            pass.dispatch_workgroups(&[num_workgroups]);
-            pass.end();
+            self.pipelines.compute().curve_spline_sampling().dispatch(
+                axis_idx,
+                probability_texture,
+                &spline_segments,
+                &self.device,
+                encoder,
+            );
         }
 
         changed
@@ -2426,12 +2609,12 @@ impl Renderer {
         let num_lines = axes.num_visible_axes()
             * buffers::ProbabilitySampleTexture::PROBABILITY_CURVE_RESOLUTION;
         self.buffers
-            .curves
+            .curves_mut()
             .lines_mut(label_idx)
             .set_len(&self.device, num_lines);
 
-        let lines_buffer = self.buffers.curves.lines(label_idx).buffer().clone();
-        let samples = self.buffers.curves.sample_texture(label_idx).array_view();
+        let lines_buffer = self.buffers.curves().lines(label_idx).buffer().clone();
+        let samples = self.buffers.curves().sample_texture(label_idx).array_view();
 
         // Fill the buffer using the compute pipeline.
         let bind_group = self.device.create_bind_group(webgpu::BindGroupDescriptor {
@@ -2450,13 +2633,13 @@ impl Renderer {
                     resource: webgpu::BindGroupEntryResource::TextureView(samples),
                 },
             ],
-            layout: self.pipelines.compute_pipelines.create_curves.0.clone(),
+            layout: self.pipelines.compute().create_curves.0.clone(),
         });
 
         let num_workgroups = ((num_lines + 63) / 64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
-        pass.set_pipeline(&self.pipelines.compute_pipelines.create_curves.1);
+        pass.set_pipeline(&self.pipelines.compute().create_curves.1);
         pass.set_bind_group(0, &bind_group);
         pass.dispatch_workgroups(&[num_workgroups]);
         pass.end();
@@ -2468,7 +2651,7 @@ impl Renderer {
 
         // Ensure that the buffer is large enough.
         self.buffers
-            .values
+            .datums_mut()
             .probabilities_mut(label_idx)
             .set_len(&self.device, num_datums);
 
@@ -2487,10 +2670,10 @@ impl Renderer {
             .queue()
             .write_buffer_single(&num_datums_buffer, 0, &(num_datums as u32));
 
-        let curve_samples = self.buffers.curves.sample_texture(label_idx).array_view();
+        let curve_samples = self.buffers.curves().sample_texture(label_idx).array_view();
         let output_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
             label: Some(Cow::Borrowed("curve application output")),
-            size: std::mem::size_of::<u32>() * self.buffers.values.datums.len(),
+            size: std::mem::size_of::<u32>() * self.buffers.datums().datums().len(),
             usage: webgpu::BufferUsage::STORAGE,
             mapped_at_creation: None,
         });
@@ -2514,7 +2697,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 2,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.values.datums.buffer().clone(),
+                        buffer: self.buffers.datums().datums().buffer().clone(),
                         offset: None,
                         size: None,
                     }),
@@ -2530,19 +2713,19 @@ impl Renderer {
             ],
             layout: self
                 .pipelines
-                .compute_pipelines
+                .compute()
                 .compute_probability
                 .apply_curve_bind_layout
                 .clone(),
         });
 
-        let num_workgroups = ((self.buffers.values.datums.len() + 63) / 64) as u32;
+        let num_workgroups = ((self.buffers.datums().datums().len() + 63) / 64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(
             &self
                 .pipelines
-                .compute_pipelines
+                .compute()
                 .compute_probability
                 .apply_curve_pipeline,
         );
@@ -2559,7 +2742,7 @@ impl Renderer {
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
                         buffer: self
                             .buffers
-                            .values
+                            .datums()
                             .probabilities(label_idx)
                             .buffer()
                             .clone(),
@@ -2586,7 +2769,7 @@ impl Renderer {
             ],
             layout: self
                 .pipelines
-                .compute_pipelines
+                .compute()
                 .compute_probability
                 .reduce_bind_layout
                 .clone(),
@@ -2595,13 +2778,7 @@ impl Renderer {
         let num_workgroups = ((num_datums + 63) / 64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
-        pass.set_pipeline(
-            &self
-                .pipelines
-                .compute_pipelines
-                .compute_probability
-                .reduce_pipeline,
-        );
+        pass.set_pipeline(&self.pipelines.compute().compute_probability.reduce_pipeline);
         pass.set_bind_group(0, &bind_group);
         pass.dispatch_workgroups(&[num_workgroups]);
         pass.end();
@@ -2624,12 +2801,12 @@ impl Renderer {
             .create_command_encoder(webgpu::CommandEncoderDescriptor { label: None });
         let staging_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
             label: Some(Cow::Borrowed("probability staging buffer")),
-            size: self.buffers.values.probabilities(label_idx).size(),
+            size: self.buffers.datums().probabilities(label_idx).size(),
             usage: webgpu::BufferUsage::MAP_READ | webgpu::BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
         encoder.copy_buffer_to_buffer(
-            self.buffers.values.probabilities(label_idx).buffer(),
+            self.buffers.datums().probabilities(label_idx).buffer(),
             0,
             &staging_buffer,
             0,

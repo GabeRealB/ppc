@@ -72,6 +72,14 @@ module.exports = function (env, argv) {
                     exclude: /node_modules/,
                 },
                 {
+                    test: /\.(png|jpe?g|gif)$/i,
+                    use: [
+                        {
+                            loader: 'file-loader',
+                        },
+                    ],
+                },
+                {
                     test: /\.css$/,
                     use: [
                         {

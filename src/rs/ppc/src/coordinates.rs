@@ -34,6 +34,8 @@ pub trait PositionType<Offset: OffsetType<Self, Length>, Length: LengthType<Self
     + SubAssign<Offset>
     + PartialEq
 {
+    /// Calculates the component wise offset from the smaller to the bigger component.
+    fn abs_offset(self, rhs: Self) -> Offset;
 }
 
 /// Generalization of an offset.
@@ -154,6 +156,11 @@ impl<T: CoordinateSystem> Position<T> {
         transformer: &impl CoordinateSystemTransformer<T, U>,
     ) -> Position<U> {
         Position::new(transformer.transform_position(*self))
+    }
+
+    /// Calculates the component wise offset from the smaller to the bigger component.
+    pub fn abs_offset(self, rhs: Self) -> Offset<T> {
+        Offset::new(self.value.abs_offset(rhs.value))
     }
 }
 
@@ -654,7 +661,7 @@ impl<T: CoordinateSystem> Aabb<T> {
 
     /// Returns the size of the bounding box.
     pub fn size(&self) -> Offset<T> {
-        self.end - self.start
+        self.start.abs_offset(self.end)
     }
 
     /// Checks if the bounding box is degenerate.
@@ -1078,6 +1085,12 @@ mod cartesian {
     impl<const INVERSE_Y: bool> PositionType<CartesianOffset, CartesianLength>
         for CartesianPosition<INVERSE_Y>
     {
+        fn abs_offset(self, rhs: Self) -> CartesianOffset {
+            CartesianOffset {
+                x: (self.x - rhs.x).abs(),
+                y: (self.y - rhs.y).abs(),
+            }
+        }
     }
 
     /// Offset in the 2d cartesian coordinate system.

@@ -1,10 +1,13 @@
+use crate::buffers;
+use crate::colors;
+use crate::colors::Color;
 use crate::webgpu::*;
 
 const NUM_SAMPLES: u32 = 4;
 
 pub struct Pipelines {
-    pub render_pipelines: RenderPipelines,
-    pub compute_pipelines: ComputePipelines,
+    render_pipelines: RenderPipelines,
+    compute_pipelines: ComputePipelines,
 }
 
 impl Pipelines {
@@ -17,39 +20,76 @@ impl Pipelines {
             compute_pipelines,
         }
     }
+
+    pub fn render(&self) -> &RenderPipelines {
+        &self.render_pipelines
+    }
+
+    pub fn compute(&self) -> &ComputePipelines {
+        &self.compute_pipelines
+    }
 }
 
 pub struct RenderPipelines {
-    pub draw_lines: (BindGroupLayout, RenderPipeline),
-    pub draw_value_lines: (BindGroupLayout, RenderPipeline, Sampler),
-    pub draw_selections: (BindGroupLayout, RenderPipeline, Sampler),
-    pub draw_curve_segments: (BindGroupLayout, RenderPipeline),
+    axis_lines: AxisLinesRenderPipeline,
+    datum_lines: DatumLinesRenderPipeline,
+    curve_lines: CurveLinesRenderPipeline,
+    selections: SelectionsRenderPipeline,
+    curve_segments: CurveSegmentsRenderPipeline,
+    color_bar: ColorBarRenderPipeline,
 }
 
 impl RenderPipelines {
     pub async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
-        let draw_lines = Self::init_draw_lines_pipeline(device, presentation_format).await;
-        let draw_value_lines =
-            Self::init_draw_value_lines_pipeline(device, presentation_format).await;
-        let draw_selections =
-            Self::init_draw_selections_pipeline(device, presentation_format).await;
-        let draw_curve_segments =
-            Self::init_draw_curve_segments_pipeline(device, presentation_format).await;
-
         Self {
-            draw_lines,
-            draw_value_lines,
-            draw_selections,
-            draw_curve_segments,
+            axis_lines: AxisLinesRenderPipeline::new(device, presentation_format).await,
+            datum_lines: DatumLinesRenderPipeline::new(device, presentation_format).await,
+            curve_lines: CurveLinesRenderPipeline::new(device, presentation_format).await,
+            selections: SelectionsRenderPipeline::new(device, presentation_format).await,
+            curve_segments: CurveSegmentsRenderPipeline::new(device, presentation_format).await,
+            color_bar: ColorBarRenderPipeline::new(device, presentation_format).await,
         }
     }
 
-    async fn init_draw_lines_pipeline(
-        device: &Device,
-        presentation_format: TextureFormat,
-    ) -> (BindGroupLayout, RenderPipeline) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("line render pipeline bind group layout".into()),
+    pub fn axis_lines(&self) -> &AxisLinesRenderPipeline {
+        &self.axis_lines
+    }
+
+    pub fn datum_lines(&self) -> &DatumLinesRenderPipeline {
+        &self.datum_lines
+    }
+
+    pub fn curve_lines(&self) -> &CurveLinesRenderPipeline {
+        &self.curve_lines
+    }
+
+    pub fn selections(&self) -> &SelectionsRenderPipeline {
+        &self.selections
+    }
+
+    pub fn curve_segments(&self) -> &CurveSegmentsRenderPipeline {
+        &self.curve_segments
+    }
+
+    pub fn color_bar(&self) -> &ColorBarRenderPipeline {
+        &self.color_bar
+    }
+}
+
+pub struct AxisLinesRenderPipeline {
+    layout: BindGroupLayout,
+    pipeline: RenderPipeline,
+}
+
+impl AxisLinesRenderPipeline {
+    async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("axis lines shader".into()),
+            code: include_str!("./shaders/axis_lines.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("axis lines render pipeline bind group layout".into()),
             entries: [
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -88,26 +128,20 @@ impl RenderPipelines {
 
         let pipeline = device
             .create_render_pipeline_async(RenderPipelineDescriptor {
-                label: Some("line render pipeline".into()),
+                label: Some("axis lines render pipeline".into()),
                 layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
                     PipelineLayoutDescriptor {
                         label: None,
-                        layouts: [bind_layout.clone()],
+                        layouts: [layout.clone()],
                     },
                 )),
                 vertex: VertexState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("lines vertex shader".into()),
-                        code: include_str!("./shaders/line.vert.wgsl").into(),
-                    }),
+                    entry_point: "vertex_main",
+                    module: shader_module.clone(),
                 },
                 fragment: Some(FragmentState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("lines fragment shader".into()),
-                        code: include_str!("./shaders/line.frag.wgsl").into(),
-                    }),
+                    entry_point: "fragment_main",
+                    module: shader_module,
                     targets: [FragmentStateTarget {
                         format: presentation_format,
                         blend: Some(FragmentStateBlend {
@@ -140,15 +174,105 @@ impl RenderPipelines {
             })
             .await;
 
-        (bind_layout, pipeline)
+        Self { layout, pipeline }
     }
 
-    async fn init_draw_value_lines_pipeline(
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
+        &self,
+        matrices: &buffers::MatricesBuffer,
+        config: &buffers::AxesConfigBuffer,
+        axes: &buffers::AxesBuffer,
+        axis_lines: &buffers::AxisLinesBuffer,
+        viewport_start: (f32, f32),
+        viewport_size: (f32, f32),
         device: &Device,
-        presentation_format: TextureFormat,
-    ) -> (BindGroupLayout, RenderPipeline, Sampler) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("value lines render pipeline bind group layout".into()),
+        encoder: &CommandEncoder,
+        msaa_texture: &TextureView,
+        resolve_target: &TextureView,
+    ) {
+        let num_lines = axis_lines.len();
+        if num_lines == 0 {
+            return;
+        }
+
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("axis lines bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: matrices.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: config.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: axes.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: axis_lines.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.layout.clone(),
+        });
+
+        let descriptor = RenderPassDescriptor {
+            label: Some("axis lines render pass descriptor".into()),
+            color_attachments: [RenderPassColorAttachments {
+                clear_value: None,
+                load_op: RenderPassLoadOp::Load,
+                store_op: RenderPassStoreOp::Store,
+                resolve_target: Some(resolve_target.clone()),
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        };
+
+        let (x, y) = viewport_start;
+        let (width, height) = viewport_size;
+
+        let pass = encoder.begin_render_pass(descriptor);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        pass.draw_with_instance_count(6, num_lines);
+        pass.end();
+    }
+}
+
+pub struct DatumLinesRenderPipeline {
+    layout: BindGroupLayout,
+    pipeline: RenderPipeline,
+}
+
+impl DatumLinesRenderPipeline {
+    async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("datum lines shader".into()),
+            code: include_str!("./shaders/datum_lines.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("datum lines render pipeline bind group layout".into()),
             entries: [
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -207,38 +331,25 @@ impl RenderPipelines {
                         view_dimension: Some(TextureViewDimension::D2),
                     }),
                 },
-                BindGroupLayoutEntry {
-                    binding: 7,
-                    visibility: ShaderStage::FRAGMENT,
-                    resource: BindGroupLayoutEntryResource::Sampler(SamplerBindingLayout {
-                        r#type: Some(SamplerBindingType::NonFiltering),
-                    }),
-                },
             ],
         });
 
         let pipeline = device
             .create_render_pipeline_async(RenderPipelineDescriptor {
-                label: Some("value lines render pipeline".into()),
+                label: Some("datum lines render pipeline".into()),
                 layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
                     PipelineLayoutDescriptor {
                         label: None,
-                        layouts: [bind_layout.clone()],
+                        layouts: [layout.clone()],
                     },
                 )),
                 vertex: VertexState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("value lines vertex shader".into()),
-                        code: include_str!("./shaders/value_line.vert.wgsl").into(),
-                    }),
+                    entry_point: "vertex_main",
+                    module: shader_module.clone(),
                 },
                 fragment: Some(FragmentState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("value lines fragment shader".into()),
-                        code: include_str!("./shaders/value_line.frag.wgsl").into(),
-                    }),
+                    entry_point: "fragment_main",
+                    module: shader_module,
                     targets: [FragmentStateTarget {
                         format: presentation_format,
                         blend: Some(FragmentStateBlend {
@@ -271,29 +382,312 @@ impl RenderPipelines {
             })
             .await;
 
-        let sampler = device.create_sampler(SamplerDescriptor {
-            label: Some("value lines render sampler".into()),
-            address_mode_u: Some(AddressMode::Repeat),
-            address_mode_v: Some(AddressMode::Repeat),
-            address_mode_w: None,
-            compare: None,
-            lod_max_clamp: None,
-            lod_min_clamp: None,
-            mag_filter: None,
-            max_anisotropy: None,
-            min_filter: None,
-            mipmap_filter: None,
-        });
-
-        (bind_layout, pipeline, sampler)
+        Self { layout, pipeline }
     }
 
-    async fn init_draw_selections_pipeline(
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
+        &self,
+        clear_value: colors::ColorTransparent<colors::SRgb>,
+        matrices: &buffers::MatricesBuffer,
+        config: &buffers::DatumsConfigBuffer,
+        axes: &buffers::AxesBuffer,
+        datum_lines: &buffers::DatumLinesBuffer,
+        color_values: &buffers::ColorValuesBuffer,
+        probabilities: &buffers::ProbabilitiesBuffer,
+        color_scale: &buffers::ColorScaleTexture,
+        viewport_start: (f32, f32),
+        viewport_size: (f32, f32),
         device: &Device,
-        presentation_format: TextureFormat,
-    ) -> (BindGroupLayout, RenderPipeline, Sampler) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("selection render pipeline bind group layout".into()),
+        encoder: &CommandEncoder,
+        msaa_texture: &TextureView,
+        resolve_target: &TextureView,
+    ) {
+        let num_lines = datum_lines.len();
+        if num_lines == 0 {
+            return;
+        }
+
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("datum lines bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: matrices.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: config.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: axes.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: datum_lines.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: color_values.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 5,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: probabilities.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 6,
+                    resource: BindGroupEntryResource::TextureView(color_scale.view()),
+                },
+            ],
+            layout: self.layout.clone(),
+        });
+
+        let descriptor = RenderPassDescriptor {
+            label: Some("datum lines render pass descriptor".into()),
+            color_attachments: [RenderPassColorAttachments {
+                clear_value: Some(clear_value.to_f32_with_alpha()),
+                load_op: RenderPassLoadOp::Clear,
+                store_op: RenderPassStoreOp::Store,
+                resolve_target: Some(resolve_target.clone()),
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        };
+
+        let (x, y) = viewport_start;
+        let (width, height) = viewport_size;
+
+        let pass = encoder.begin_render_pass(descriptor);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        pass.draw_with_instance_count(6, num_lines);
+        pass.end();
+    }
+}
+
+pub struct CurveLinesRenderPipeline {
+    layout: BindGroupLayout,
+    pipeline: RenderPipeline,
+}
+
+impl CurveLinesRenderPipeline {
+    async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("curve lines shader".into()),
+            code: include_str!("./shaders/curve_lines.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("curve lines render pipeline bind group layout".into()),
+            entries: [
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStage::VERTEX,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        r#type: Some(BufferBindingType::Uniform),
+                        ..Default::default()
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        r#type: Some(BufferBindingType::Uniform),
+                        ..Default::default()
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStage::VERTEX,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                        ..Default::default()
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStage::VERTEX,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                        ..Default::default()
+                    }),
+                },
+            ],
+        });
+
+        let pipeline = device
+            .create_render_pipeline_async(RenderPipelineDescriptor {
+                label: Some("curve lines render pipeline".into()),
+                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
+                    PipelineLayoutDescriptor {
+                        label: None,
+                        layouts: [layout.clone()],
+                    },
+                )),
+                vertex: VertexState {
+                    entry_point: "vertex_main",
+                    module: shader_module.clone(),
+                },
+                fragment: Some(FragmentState {
+                    entry_point: "fragment_main",
+                    module: shader_module,
+                    targets: [FragmentStateTarget {
+                        format: presentation_format,
+                        blend: Some(FragmentStateBlend {
+                            alpha: FragmentStateBlendEntry {
+                                dst_factor: Some(BlendFactor::OneMinusSrcAlpha),
+                                operation: Some(BlendOperation::Add),
+                                src_factor: Some(BlendFactor::One),
+                            },
+                            color: FragmentStateBlendEntry {
+                                dst_factor: Some(BlendFactor::OneMinusSrcAlpha),
+                                operation: Some(BlendOperation::Add),
+                                src_factor: Some(BlendFactor::One),
+                            },
+                        }),
+                        write_mask: None,
+                    }],
+                }),
+                multisample: Some(MultisampleState {
+                    alpha_to_coverage_enabled: None,
+                    count: Some(NUM_SAMPLES),
+                    mask: None,
+                }),
+                primitive: Some(PrimitiveState {
+                    cull_mode: None,
+                    front_face: None,
+                    strip_index_format: None,
+                    topology: Some(PrimitiveTopology::TriangleList),
+                    unclipped_depth: None,
+                }),
+            })
+            .await;
+
+        Self { layout, pipeline }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
+        &self,
+        matrices: &buffers::MatricesBuffer,
+        config: &buffers::CurvesConfigBuffer,
+        axes: &buffers::AxesBuffer,
+        curve_lines: &buffers::CurveLinesInfoBuffer,
+        viewport_start: (f32, f32),
+        viewport_size: (f32, f32),
+        device: &Device,
+        encoder: &CommandEncoder,
+        msaa_texture: &TextureView,
+        resolve_target: &TextureView,
+    ) {
+        let num_lines = curve_lines.len();
+        if num_lines == 0 {
+            return;
+        }
+
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("axis lines bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: matrices.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: config.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: axes.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: curve_lines.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.layout.clone(),
+        });
+
+        let descriptor = RenderPassDescriptor {
+            label: Some("axis lines render pass descriptor".into()),
+            color_attachments: [RenderPassColorAttachments {
+                clear_value: None,
+                load_op: RenderPassLoadOp::Load,
+                store_op: RenderPassStoreOp::Store,
+                resolve_target: Some(resolve_target.clone()),
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        };
+
+        let (x, y) = viewport_start;
+        let (width, height) = viewport_size;
+
+        let pass = encoder.begin_render_pass(descriptor);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        pass.draw_with_instance_count(6, num_lines);
+        pass.end();
+    }
+}
+
+pub struct SelectionsRenderPipeline {
+    layout: BindGroupLayout,
+    pipeline: RenderPipeline,
+}
+
+impl SelectionsRenderPipeline {
+    async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("selections shader".into()),
+            code: include_str!("./shaders/selections.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("selections render pipeline bind group layout".into()),
             entries: [
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -344,38 +738,25 @@ impl RenderPipelines {
                         view_dimension: Some(TextureViewDimension::D2Array),
                     }),
                 },
-                BindGroupLayoutEntry {
-                    binding: 6,
-                    visibility: ShaderStage::FRAGMENT,
-                    resource: BindGroupLayoutEntryResource::Sampler(SamplerBindingLayout {
-                        r#type: Some(SamplerBindingType::NonFiltering),
-                    }),
-                },
             ],
         });
 
         let pipeline = device
             .create_render_pipeline_async(RenderPipelineDescriptor {
-                label: Some("selection render pipeline".into()),
+                label: Some("selections render pipeline".into()),
                 layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
                     PipelineLayoutDescriptor {
                         label: None,
-                        layouts: [bind_layout.clone()],
+                        layouts: [layout.clone()],
                     },
                 )),
                 vertex: VertexState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("selection vertex shader".into()),
-                        code: include_str!("./shaders/selection.vert.wgsl").into(),
-                    }),
+                    entry_point: "vertex_main",
+                    module: shader_module.clone(),
                 },
                 fragment: Some(FragmentState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("selection fragment shader".into()),
-                        code: include_str!("./shaders/selection.frag.wgsl").into(),
-                    }),
+                    entry_point: "fragment_main",
+                    module: shader_module,
                     targets: [FragmentStateTarget {
                         format: presentation_format,
                         blend: Some(FragmentStateBlend {
@@ -408,29 +789,119 @@ impl RenderPipelines {
             })
             .await;
 
-        let sampler = device.create_sampler(SamplerDescriptor {
-            label: Some("selection render sampler".into()),
-            address_mode_u: Some(AddressMode::Repeat),
-            address_mode_v: Some(AddressMode::Repeat),
-            address_mode_w: None,
-            compare: None,
-            lod_max_clamp: None,
-            lod_min_clamp: None,
-            mag_filter: None,
-            max_anisotropy: None,
-            min_filter: None,
-            mipmap_filter: None,
-        });
-
-        (bind_layout, pipeline, sampler)
+        Self { layout, pipeline }
     }
 
-    async fn init_draw_curve_segments_pipeline(
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
+        &self,
+        matrices: &buffers::MatricesBuffer,
+        config: &buffers::SelectionsConfigBuffer,
+        axes: &buffers::AxesBuffer,
+        selection_infos: &buffers::SelectionLinesBuffer,
+        colors: &buffers::LabelColorBuffer,
+        probability_samples: &buffers::ProbabilitySampleTexture,
+        viewport_start: (f32, f32),
+        viewport_size: (f32, f32),
         device: &Device,
-        presentation_format: TextureFormat,
-    ) -> (BindGroupLayout, RenderPipeline) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("curve segment render pipeline bind group layout".into()),
+        encoder: &CommandEncoder,
+        msaa_texture: &TextureView,
+        resolve_target: &TextureView,
+    ) {
+        let num_selections = selection_infos.len();
+        if num_selections == 0 {
+            return;
+        }
+
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("selections bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: matrices.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: config.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: axes.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: selection_infos.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: colors.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 5,
+                    resource: BindGroupEntryResource::TextureView(probability_samples.array_view()),
+                },
+            ],
+            layout: self.layout.clone(),
+        });
+
+        let descriptor = RenderPassDescriptor {
+            label: Some("selections render pass descriptor".into()),
+            color_attachments: [RenderPassColorAttachments {
+                clear_value: None,
+                load_op: RenderPassLoadOp::Load,
+                store_op: RenderPassStoreOp::Store,
+                resolve_target: Some(resolve_target.clone()),
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        };
+
+        let (x, y) = viewport_start;
+        let (width, height) = viewport_size;
+
+        let pass = encoder.begin_render_pass(descriptor);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        pass.draw_with_instance_count(6, num_selections);
+        pass.end();
+    }
+}
+
+pub struct CurveSegmentsRenderPipeline {
+    layout: BindGroupLayout,
+    pipeline: RenderPipeline,
+}
+
+impl CurveSegmentsRenderPipeline {
+    async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("curve segments shader".into()),
+            code: include_str!("./shaders/curve_segments.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("curve segments render pipeline bind group layout".into()),
             entries: [
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -442,9 +913,9 @@ impl RenderPipelines {
                 },
                 BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: ShaderStage::VERTEX,
+                    visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
                     resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
-                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                        r#type: Some(BufferBindingType::Uniform),
                         ..Default::default()
                     }),
                 },
@@ -464,31 +935,33 @@ impl RenderPipelines {
                         ..Default::default()
                     }),
                 },
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStage::FRAGMENT,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                        ..Default::default()
+                    }),
+                },
             ],
         });
 
         let pipeline = device
             .create_render_pipeline_async(RenderPipelineDescriptor {
-                label: Some("curve segment render pipeline".into()),
+                label: Some("curve segments render pipeline".into()),
                 layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
                     PipelineLayoutDescriptor {
                         label: None,
-                        layouts: [bind_layout.clone()],
+                        layouts: [layout.clone()],
                     },
                 )),
                 vertex: VertexState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("curve segment vertex shader".into()),
-                        code: include_str!("./shaders/curve_segment.vert.wgsl").into(),
-                    }),
+                    entry_point: "vertex_main",
+                    module: shader_module.clone(),
                 },
                 fragment: Some(FragmentState {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("curve segment fragment shader".into()),
-                        code: include_str!("./shaders/curve_segment.frag.wgsl").into(),
-                    }),
+                    entry_point: "fragment_main",
+                    module: shader_module,
                     targets: [FragmentStateTarget {
                         format: presentation_format,
                         blend: Some(FragmentStateBlend {
@@ -521,17 +994,240 @@ impl RenderPipelines {
             })
             .await;
 
-        (bind_layout, pipeline)
+        Self { layout, pipeline }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
+        &self,
+        label_idx: usize,
+        active_label_idx: usize,
+        min_curve_t: f32,
+        matrices: &buffers::MatricesBuffer,
+        axes: &buffers::AxesBuffer,
+        curve_lines: &buffers::CurveLinesInfoBuffer,
+        label_colors: &buffers::LabelColorBuffer,
+        viewport_start: (f32, f32),
+        viewport_size: (f32, f32),
+        device: &Device,
+        encoder: &CommandEncoder,
+        msaa_texture: &TextureView,
+        resolve_target: &TextureView,
+    ) {
+        let num_lines = curve_lines.len();
+        if num_lines == 0 {
+            return;
+        }
+
+        let config = buffers::CurveSegmentConfigBuffer::new(
+            device,
+            buffers::CurveSegmentConfig {
+                label: label_idx as u32,
+                active_label: active_label_idx as u32,
+                min_curve_t,
+            },
+        );
+
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("axis lines bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: matrices.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: config.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: axes.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: curve_lines.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: label_colors.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.layout.clone(),
+        });
+
+        let descriptor = RenderPassDescriptor {
+            label: Some("probability curve segments render pass".into()),
+            color_attachments: [RenderPassColorAttachments {
+                clear_value: None,
+                load_op: RenderPassLoadOp::Load,
+                store_op: RenderPassStoreOp::Store,
+                resolve_target: Some(resolve_target.clone()),
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        };
+
+        let (x, y) = viewport_start;
+        let (width, height) = viewport_size;
+
+        let pass = encoder.begin_render_pass(descriptor);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        pass.draw_with_instance_count(6, num_lines);
+        pass.end();
+    }
+}
+
+pub struct ColorBarRenderPipeline {
+    layout: BindGroupLayout,
+    pipeline: RenderPipeline,
+}
+
+impl ColorBarRenderPipeline {
+    async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("color bar shader".into()),
+            code: include_str!("./shaders/color_bar.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("color bar rendering bind group layout".into()),
+            entries: [BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStage::FRAGMENT,
+                resource: BindGroupLayoutEntryResource::Texture(TextureBindingLayout {
+                    multisampled: None,
+                    sample_type: Some(TextureSampleType::UnfilterableFloat),
+                    view_dimension: Some(TextureViewDimension::D2),
+                }),
+            }],
+        });
+
+        let pipeline = device
+            .create_render_pipeline_async(RenderPipelineDescriptor {
+                label: Some("color bar render pipeline".into()),
+                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
+                    PipelineLayoutDescriptor {
+                        label: None,
+                        layouts: [layout.clone()],
+                    },
+                )),
+                vertex: VertexState {
+                    entry_point: "vertex_main",
+                    module: shader_module.clone(),
+                },
+                fragment: Some(FragmentState {
+                    entry_point: "fragment_main",
+                    module: shader_module,
+                    targets: [FragmentStateTarget {
+                        format: presentation_format,
+                        blend: Some(FragmentStateBlend {
+                            alpha: FragmentStateBlendEntry {
+                                dst_factor: Some(BlendFactor::OneMinusSrcAlpha),
+                                operation: Some(BlendOperation::Add),
+                                src_factor: Some(BlendFactor::One),
+                            },
+                            color: FragmentStateBlendEntry {
+                                dst_factor: Some(BlendFactor::OneMinusSrcAlpha),
+                                operation: Some(BlendOperation::Add),
+                                src_factor: Some(BlendFactor::One),
+                            },
+                        }),
+                        write_mask: None,
+                    }],
+                }),
+                multisample: Some(MultisampleState {
+                    alpha_to_coverage_enabled: None,
+                    count: Some(NUM_SAMPLES),
+                    mask: None,
+                }),
+                primitive: Some(PrimitiveState {
+                    cull_mode: None,
+                    front_face: None,
+                    strip_index_format: None,
+                    topology: Some(PrimitiveTopology::TriangleList),
+                    unclipped_depth: None,
+                }),
+            })
+            .await;
+
+        Self { layout, pipeline }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
+        &self,
+        color_scale: &buffers::ColorScaleTexture,
+        clear_value: colors::ColorTransparent<colors::SRgb>,
+        viewport_start: (f32, f32),
+        viewport_size: (f32, f32),
+        device: &Device,
+        encoder: &CommandEncoder,
+        msaa_texture: &TextureView,
+        resolve_target: &TextureView,
+    ) {
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("color bar bind group".into()),
+            entries: [BindGroupEntry {
+                binding: 0,
+                resource: BindGroupEntryResource::TextureView(color_scale.view()),
+            }],
+            layout: self.layout.clone(),
+        });
+
+        let descriptor = RenderPassDescriptor {
+            label: Some("color bar render pass".into()),
+            color_attachments: [RenderPassColorAttachments {
+                clear_value: Some(clear_value.to_f32_with_alpha()),
+                load_op: RenderPassLoadOp::Load,
+                store_op: RenderPassStoreOp::Store,
+                resolve_target: Some(resolve_target.clone()),
+                view: msaa_texture.clone(),
+            }],
+            max_draw_count: None,
+        };
+
+        let (x, y) = viewport_start;
+        let (width, height) = viewport_size;
+
+        let pass = encoder.begin_render_pass(descriptor);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        pass.draw(6);
+        pass.end();
     }
 }
 
 pub struct ComputePipelines {
-    pub sample_curves: (BindGroupLayout, ComputePipeline),
     pub create_curves: (BindGroupLayout, ComputePipeline),
-    pub create_curves_segments: (BindGroupLayout, ComputePipeline),
     pub compute_probability: ProbabilityComputationPipeline,
-    pub sample_color_scale: (BindGroupLayout, ComputePipeline),
     pub transform_color_scale: (BindGroupLayout, ComputePipeline),
+    curve_spline_sampling: ProbabilityCurveSplineSamplingComputePipeline,
+    //
+    //
+    color_scale_sampling: ColorScaleSamplingComputePipeline,
 }
 
 pub struct ProbabilityComputationPipeline {
@@ -543,70 +1239,25 @@ pub struct ProbabilityComputationPipeline {
 
 impl ComputePipelines {
     pub async fn new(device: &Device) -> Self {
-        let sample_curves = Self::init_curve_sampling_pipeline(device).await;
         let create_curves = Self::init_curve_creation_pipeline(device).await;
-        let create_curves_segments = Self::init_curve_segment_creation_pipeline(device).await;
         let compute_probability = Self::init_probability_computation_pipeline(device).await;
-        let sample_color_scale = Self::init_color_scale_sampling_pipeline(device).await;
         let transform_color_scale = Self::init_color_scale_transformation_pipeline(device).await;
 
         Self {
-            sample_curves,
             create_curves,
-            create_curves_segments,
             compute_probability,
-            sample_color_scale,
             transform_color_scale,
+            curve_spline_sampling: ProbabilityCurveSplineSamplingComputePipeline::new(device).await,
+            color_scale_sampling: ColorScaleSamplingComputePipeline::new(device).await,
         }
     }
 
-    async fn init_curve_sampling_pipeline(device: &Device) -> (BindGroupLayout, ComputePipeline) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("curve spline sampling bind group layout".into()),
-            entries: [
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStage::COMPUTE,
-                    resource: BindGroupLayoutEntryResource::StorageTexture(
-                        StorageTextureBindingLayout {
-                            access: Some(StorageTextureAccess::WriteOnly),
-                            format: TextureFormat::R32float,
-                            view_dimension: Some(TextureViewDimension::D2),
-                        },
-                    ),
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStage::COMPUTE,
-                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
-                        has_dynamic_offset: None,
-                        min_binding_size: None,
-                        r#type: Some(BufferBindingType::ReadOnlyStorage),
-                    }),
-                },
-            ],
-        });
+    pub fn curve_spline_sampling(&self) -> &ProbabilityCurveSplineSamplingComputePipeline {
+        &self.curve_spline_sampling
+    }
 
-        let pipeline = device
-            .create_compute_pipeline_async(ComputePipelineDescriptor {
-                label: Some("curve spline sampling compute pipeline".into()),
-                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
-                    PipelineLayoutDescriptor {
-                        label: Some("curve sampling pipeline layout".into()),
-                        layouts: [bind_layout.clone()],
-                    },
-                )),
-                compute: ProgrammableStage {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("curve sampling compute shader".into()),
-                        code: include_str!("./shaders/sample_spline.comp.wgsl").into(),
-                    }),
-                },
-            })
-            .await;
-
-        (bind_layout, pipeline)
+    pub fn color_scale_sampling(&self) -> &ColorScaleSamplingComputePipeline {
+        &self.color_scale_sampling
     }
 
     async fn init_curve_creation_pipeline(device: &Device) -> (BindGroupLayout, ComputePipeline) {
@@ -648,55 +1299,6 @@ impl ComputePipelines {
                     module: device.create_shader_module(ShaderModuleDescriptor {
                         label: Some("curve creation compute shader".into()),
                         code: include_str!("./shaders/create_curves.comp.wgsl").into(),
-                    }),
-                },
-            })
-            .await;
-
-        (bind_layout, pipeline)
-    }
-
-    async fn init_curve_segment_creation_pipeline(
-        device: &Device,
-    ) -> (BindGroupLayout, ComputePipeline) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("curve segment creation bind group layout".into()),
-            entries: [
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStage::COMPUTE,
-                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
-                        has_dynamic_offset: None,
-                        min_binding_size: None,
-                        r#type: Some(BufferBindingType::Storage),
-                    }),
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStage::COMPUTE,
-                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
-                        has_dynamic_offset: None,
-                        min_binding_size: None,
-                        r#type: Some(BufferBindingType::ReadOnlyStorage),
-                    }),
-                },
-            ],
-        });
-
-        let pipeline = device
-            .create_compute_pipeline_async(ComputePipelineDescriptor {
-                label: Some("curve segment creation compute pipeline".into()),
-                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
-                    PipelineLayoutDescriptor {
-                        label: Some("curve creation pipeline layout".into()),
-                        layouts: [bind_layout.clone()],
-                    },
-                )),
-                compute: ProgrammableStage {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("curve segment creation compute shader".into()),
-                        code: include_str!("./shaders/create_segment_curve.comp.wgsl").into(),
                     }),
                 },
             })
@@ -829,58 +1431,6 @@ impl ComputePipelines {
         }
     }
 
-    async fn init_color_scale_sampling_pipeline(
-        device: &Device,
-    ) -> (BindGroupLayout, ComputePipeline) {
-        let bind_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("color scale sampling bind group layout".into()),
-            entries: [
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStage::COMPUTE,
-                    resource: BindGroupLayoutEntryResource::StorageTexture(
-                        StorageTextureBindingLayout {
-                            access: Some(StorageTextureAccess::WriteOnly),
-                            format: TextureFormat::Rgba32float,
-                            view_dimension: Some(TextureViewDimension::D2),
-                        },
-                    ),
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStage::COMPUTE,
-                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
-                        has_dynamic_offset: None,
-                        min_binding_size: None,
-                        r#type: Some(BufferBindingType::ReadOnlyStorage),
-                    }),
-                },
-            ],
-        });
-
-        let pipeline = device
-            .create_compute_pipeline_async(ComputePipelineDescriptor {
-                label: Some("color scale sampling compute pipeline".into()),
-                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
-                    PipelineLayoutDescriptor {
-                        label: Some("color scale sampling pipeline layout".into()),
-                        layouts: [bind_layout.clone()],
-                    },
-                )),
-                compute: ProgrammableStage {
-                    entry_point: "main",
-                    module: device.create_shader_module(ShaderModuleDescriptor {
-                        label: Some("color scale sampling compute shader".into()),
-                        code: include_str!("./shaders/color_scale/sample_color_scale.comp.wgsl")
-                            .into(),
-                    }),
-                },
-            })
-            .await;
-
-        (bind_layout, pipeline)
-    }
-
     async fn init_color_scale_transformation_pipeline(
         device: &Device,
     ) -> (BindGroupLayout, ComputePipeline) {
@@ -940,5 +1490,314 @@ impl ComputePipelines {
             .await;
 
         (bind_layout, pipeline)
+    }
+}
+
+pub struct ProbabilityCurveSplineSamplingComputePipeline {
+    layout: BindGroupLayout,
+    pipeline: ComputePipeline,
+}
+
+impl ProbabilityCurveSplineSamplingComputePipeline {
+    async fn new(device: &Device) -> Self {
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("probability curve sampling compute shader".into()),
+            code: include_str!("./shaders/probability_curve/sample_spline.comp.wgsl").into(),
+        });
+
+        let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("probability curve spline sampling bind group layout".into()),
+            entries: [
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::StorageTexture(
+                        StorageTextureBindingLayout {
+                            access: Some(StorageTextureAccess::WriteOnly),
+                            format: TextureFormat::R32float,
+                            view_dimension: Some(TextureViewDimension::D2),
+                        },
+                    ),
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        has_dynamic_offset: None,
+                        min_binding_size: None,
+                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                    }),
+                },
+            ],
+        });
+
+        let pipeline = device
+            .create_compute_pipeline_async(ComputePipelineDescriptor {
+                label: Some("probability curve spline sampling compute pipeline".into()),
+                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
+                    PipelineLayoutDescriptor {
+                        label: Some("curve sampling pipeline layout".into()),
+                        layouts: [layout.clone()],
+                    },
+                )),
+                compute: ProgrammableStage {
+                    entry_point: "main",
+                    module: shader_module,
+                },
+            })
+            .await;
+
+        Self { layout, pipeline }
+    }
+
+    pub fn dispatch(
+        &self,
+        axis_idx: usize,
+        probability_texture: &buffers::ProbabilitySampleTexture,
+        spline_segments: &buffers::SplineSegmentsBuffer,
+        device: &Device,
+        encoder: &CommandEncoder,
+    ) {
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("probability curve spline sampling bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::TextureView(
+                        probability_texture.axis_view(axis_idx),
+                    ),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: spline_segments.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.layout.clone(),
+        });
+
+        const NUM_WORKGROUPS: u32 =
+            ((buffers::ProbabilitySampleTexture::PROBABILITY_CURVE_RESOLUTION + 63) / 64) as u32;
+
+        let pass = encoder.begin_compute_pass(None);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.dispatch_workgroups(&[NUM_WORKGROUPS]);
+        pass.end();
+    }
+}
+
+pub struct ColorScaleSamplingComputePipeline {
+    sampling_layout: BindGroupLayout,
+    sampling_pipeline: ComputePipeline,
+    transformation_layout: BindGroupLayout,
+    transformation_pipeline: ComputePipeline,
+}
+
+impl ColorScaleSamplingComputePipeline {
+    async fn new(device: &Device) -> Self {
+        let sampling_shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("color scale sampling shader module".into()),
+            code: include_str!("./shaders/color_scale/sample_color_scale.comp.wgsl").into(),
+        });
+
+        let transformation_shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("color scale transformation shader module".into()),
+            code: include_str!("./shaders/color_scale/transform_color_scale.comp.wgsl").into(),
+        });
+
+        let sampling_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("color scale sampling bind group layout".into()),
+            entries: [
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::StorageTexture(
+                        StorageTextureBindingLayout {
+                            access: Some(StorageTextureAccess::WriteOnly),
+                            format: TextureFormat::Rgba32float,
+                            view_dimension: Some(TextureViewDimension::D2),
+                        },
+                    ),
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        has_dynamic_offset: None,
+                        min_binding_size: None,
+                        r#type: Some(BufferBindingType::ReadOnlyStorage),
+                    }),
+                },
+            ],
+        });
+
+        let transformation_layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
+            label: Some("color scale transformation bind group layout".into()),
+            entries: [
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::Texture(TextureBindingLayout {
+                        multisampled: None,
+                        sample_type: Some(TextureSampleType::UnfilterableFloat),
+                        view_dimension: Some(TextureViewDimension::D2),
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::StorageTexture(
+                        StorageTextureBindingLayout {
+                            access: Some(StorageTextureAccess::WriteOnly),
+                            format: TextureFormat::Rgba32float,
+                            view_dimension: Some(TextureViewDimension::D2),
+                        },
+                    ),
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStage::COMPUTE,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        has_dynamic_offset: None,
+                        min_binding_size: None,
+                        r#type: Some(BufferBindingType::Uniform),
+                    }),
+                },
+            ],
+        });
+
+        let sampling_pipeline = device
+            .create_compute_pipeline_async(ComputePipelineDescriptor {
+                label: Some("color scale sampling compute pipeline".into()),
+                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
+                    PipelineLayoutDescriptor {
+                        label: Some("color scale sampling pipeline layout".into()),
+                        layouts: [sampling_layout.clone()],
+                    },
+                )),
+                compute: ProgrammableStage {
+                    entry_point: "main",
+                    module: sampling_shader_module,
+                },
+            })
+            .await;
+
+        let transformation_pipeline = device
+            .create_compute_pipeline_async(ComputePipelineDescriptor {
+                label: Some("color scale transformation compute pipeline".into()),
+                layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
+                    PipelineLayoutDescriptor {
+                        label: Some("color scale transformation pipeline layout".into()),
+                        layouts: [transformation_layout.clone()],
+                    },
+                )),
+                compute: ProgrammableStage {
+                    entry_point: "main",
+                    module: transformation_shader_module,
+                },
+            })
+            .await;
+
+        Self {
+            sampling_layout,
+            sampling_pipeline,
+            transformation_layout,
+            transformation_pipeline,
+        }
+    }
+
+    pub fn dispatch(
+        &self,
+        color_space: crate::ColorSpace,
+        color_scale: &mut buffers::ColorScaleTexture,
+        color_scale_elements: &buffers::ColorScaleElementBuffer,
+        device: &Device,
+        encoder: &CommandEncoder,
+    ) {
+        const NUM_WORKGROUPS: u32 =
+            ((buffers::ColorScaleTexture::COLOR_SCALE_RESOLUTION + 63) / 64) as u32;
+
+        let color_scale_view = color_scale.view();
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("color scale sampling bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::TextureView(color_scale_view.clone()),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: color_scale_elements.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.sampling_layout.clone(),
+        });
+
+        let pass = encoder.begin_compute_pass(None);
+        pass.set_pipeline(&self.sampling_pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.dispatch_workgroups(&[NUM_WORKGROUPS]);
+        pass.end();
+
+        // We don't need to transform the color space, since it is already correct.
+        if color_space == crate::ColorSpace::Xyz {
+            return;
+        }
+
+        let tmp_color_scale = buffers::ColorScaleTexture::new(device);
+        let color_space: u32 = match color_space {
+            crate::ColorSpace::SRgb => 0,
+            crate::ColorSpace::Xyz => 1,
+            crate::ColorSpace::CieLab => 2,
+            crate::ColorSpace::CieLch => 3,
+        };
+        let color_space_buffer = device.create_buffer(BufferDescriptor {
+            label: Some("color space buffer".into()),
+            size: std::mem::size_of::<u32>(),
+            usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
+            mapped_at_creation: None,
+        });
+        device
+            .queue()
+            .write_buffer_single(&color_space_buffer, 0, &color_space);
+
+        let bind_group = device.create_bind_group(BindGroupDescriptor {
+            label: Some("color scale transformation bind group".into()),
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::TextureView(color_scale_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::TextureView(tmp_color_scale.view()),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: color_space_buffer,
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
+            layout: self.transformation_layout.clone(),
+        });
+
+        let pass = encoder.begin_compute_pass(None);
+        pass.set_pipeline(&self.transformation_pipeline);
+        pass.set_bind_group(0, &bind_group);
+        pass.dispatch_workgroups(&[NUM_WORKGROUPS]);
+        pass.end();
+
+        *color_scale = tmp_color_scale;
     }
 }
