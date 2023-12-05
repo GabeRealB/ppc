@@ -52,13 +52,23 @@ type LabelInfo = {
     selectionThreshold?: number
 }
 
+type DebugOptions = {
+    showAxisBoundingBox?: boolean,
+    showLabelBoundingBox?: boolean,
+    showCurvesBoundingBox?: boolean,
+    showAxisLineBoundingBox?: boolean,
+    showSelectionsBoundingBox?: boolean,
+    showColorBarBoundingBox?: boolean,
+}
+
 type Props = {
     axes?: { [id: string]: Axis },
     order?: string[],
     colors?: Colors,
     colorBar?: "hidden" | "visible",
     labels: { [id: string]: LabelInfo },
-    activeLabel: string
+    activeLabel: string,
+    debug?: DebugOptions,
 } & DashComponentProps;
 
 enum MessageKind {
@@ -68,6 +78,7 @@ enum MessageKind {
     SetColorBarVisibility,
     SetLabels,
     SetEasing,
+    SetDebugOptions,
 }
 
 type UpdateDataMsgPayload = {
@@ -92,6 +103,8 @@ type SetLabelsMsgPayload = {
 
 type SetEasingMsgPayload = string;
 
+type SetDebugOptionsPayload = DebugOptions;
+
 interface Message {
     kind: MessageKind,
     payload: any
@@ -112,7 +125,7 @@ const PPC = (props: Props) => {
 
     useEffect(() => {
         async function eventLoop() {
-            const { Renderer, UpdateDataPayload, ColorScaleDescription, ColorDescription, Element } = await (await import('../../../pkg')).default;
+            const { Renderer, UpdateDataPayload, ColorScaleDescription, ColorDescription, Element, DebugOptions } = await (await import('../../../pkg')).default;
 
             const canvasGPU = canvasGPURef.current;
             const canvas2D = canvas2DRef.current;
@@ -362,6 +375,20 @@ const PPC = (props: Props) => {
                 }
                 rendererState.queue.setLabelEasing(data);
             }
+            const setDebugOptions = (data?: SetDebugOptionsPayload) => {
+                if (rendererState.exited) {
+                    return;
+                }
+
+                const options = new DebugOptions();
+                options.showAxisBoundingBox = data.showAxisBoundingBox === true;
+                options.showLabelBoundingBox = data.showLabelBoundingBox === true;
+                options.showCurvesBoundingBox = data.showCurvesBoundingBox === true;
+                options.showAxisLineBoundingBox = data.showAxisLineBoundingBox === true;
+                options.showSelectionsBoundingBox = data.showSelectionsBoundingBox === true;
+                options.showColorBarBoundingBox = data.showColorBarBoundingBox === true;
+                rendererState.queue.setDebugOptions(options);
+            }
             const messageListener = (e) => {
                 const data: Message = e.data;
 
@@ -383,6 +410,9 @@ const PPC = (props: Props) => {
                         break;
                     case MessageKind.SetEasing:
                         setEasing(data.payload);
+                        break;
+                    case MessageKind.SetDebugOptions:
+                        setDebugOptions(data.payload);
                         break;
                     default:
                         console.log("unknown message", data);
@@ -491,6 +521,11 @@ const PPC = (props: Props) => {
             kind: MessageKind.SetEasing, payload: easing
         });
     }, [easing]);
+
+    // Debug options
+    useEffect(() => {
+        sx.postMessage({ kind: MessageKind.SetDebugOptions, payload: props.debug });
+    }, [props.debug]);
 
     // Callback handling
     const handleEasingChangeEvent = (easing) => {

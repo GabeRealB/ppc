@@ -147,6 +147,7 @@ impl<T: ColorSpace> ColorScale<T> {
     /// # Panics
     ///
     /// Panics if `t` is outside of the expected range of `[0.0, 1.0]`.
+    #[allow(dead_code)]
     pub fn sample(&self, t: f32) -> ColorTransparent<T> {
         if !(0.0..=1.0).contains(&t) {
             panic!("t value must lie between 0 and 1, t value: {t}")

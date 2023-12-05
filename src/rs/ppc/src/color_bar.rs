@@ -96,7 +96,7 @@ impl ColorBar {
         let outer_padding = (self.get_rem_length)(OUTER_PADDING_REM);
         let bar_padding = (self.get_rem_length)(COLOR_BAR_PADDING_REM);
         let color_bar_width = (self.get_rem_length)(COLOR_BAR_WIDTH_REM);
-        let (label_width, label_height) = if self.label.is_empty() {
+        let (label_width, _) = if self.label.is_empty() {
             (self.get_text_length)("empty")
         } else {
             (self.get_text_length)(&self.label)

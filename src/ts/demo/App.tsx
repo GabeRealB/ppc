@@ -55,6 +55,14 @@ class App extends Component {
                 "label_3": {}
             },
             activeLabel: "label_1",
+            debug: {
+                showAxisBoundingBox: false,
+                showLabelBoundingBox: false,
+                showCurvesBoundingBox: false,
+                showAxisLineBoundingBox: false,
+                showSelectionsBoundingBox: false,
+                showColorBarBoundingBox: false,
+            },
             demo_slider_value: Number.EPSILON,
             coloring_constant_value: 0.5,
             coloring_attribute: "v_1",
@@ -233,6 +241,47 @@ class App extends Component {
                         colors.selected.scale = e.target.value;
                         this.setProps({ colors })
                     }} />Viridis</label>
+
+
+                    <h2 style={{ gridRow: 20 }}>Debug</h2>
+
+                    <h3 style={{ gridRow: 21 }}>Bounding Boxes</h3>
+                    <label style={{ gridRow: 22, gridColumn: "1" }}>Axis</label>
+                    <input style={{ gridRow: 22, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showAxisBoundingBox} onChange={e => {
+                        const debug = window.structuredClone(this.state["debug"]);
+                        debug.showAxisBoundingBox = !debug.showAxisBoundingBox;
+                        this.setProps({ debug })
+                    }}></input>
+                    <label style={{ gridRow: 23, gridColumn: "1" }}>Label</label>
+                    <input style={{ gridRow: 23, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showLabelBoundingBox} onChange={e => {
+                        const debug = window.structuredClone(this.state["debug"]);
+                        debug.showLabelBoundingBox = !debug.showLabelBoundingBox;
+                        this.setProps({ debug })
+                    }}></input>
+                    <label style={{ gridRow: 24, gridColumn: "1" }}>Curves</label>
+                    <input style={{ gridRow: 24, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showCurvesBoundingBox} onChange={e => {
+                        const debug = window.structuredClone(this.state["debug"]);
+                        debug.showCurvesBoundingBox = !debug.showCurvesBoundingBox;
+                        this.setProps({ debug })
+                    }}></input>
+                    <label style={{ gridRow: 25, gridColumn: "1" }}>Axis line</label>
+                    <input style={{ gridRow: 25, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showAxisLineBoundingBox} onChange={e => {
+                        const debug = window.structuredClone(this.state["debug"]);
+                        debug.showAxisLineBoundingBox = !debug.showAxisLineBoundingBox;
+                        this.setProps({ debug })
+                    }}></input>
+                    <label style={{ gridRow: 26, gridColumn: "1" }}>Selections</label>
+                    <input style={{ gridRow: 26, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showSelectionsBoundingBox} onChange={e => {
+                        const debug = window.structuredClone(this.state["debug"]);
+                        debug.showSelectionsBoundingBox = !debug.showSelectionsBoundingBox;
+                        this.setProps({ debug })
+                    }}></input>
+                    <label style={{ gridRow: 27, gridColumn: "1" }}>Colorbar</label>
+                    <input style={{ gridRow: 27, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showColorBarBoundingBox} onChange={e => {
+                        const debug = window.structuredClone(this.state["debug"]);
+                        debug.showColorBarBoundingBox = !debug.showColorBarBoundingBox;
+                        this.setProps({ debug })
+                    }}></input>
                 </div>
             </div>
         )

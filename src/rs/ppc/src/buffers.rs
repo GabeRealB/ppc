@@ -883,6 +883,7 @@ impl ProbabilitiesBuffer {
         self.buffer.size()
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.buffer.size() / std::mem::size_of::<f32>()
     }

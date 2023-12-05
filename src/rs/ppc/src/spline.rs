@@ -197,6 +197,7 @@ impl SplineSegment {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_quadratic(
         p0: [f32; 2],
         p1: [f32; 2],
@@ -241,6 +242,7 @@ impl SplineSegment {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_cubic(
         p0: [f32; 2],
         p1: [f32; 2],

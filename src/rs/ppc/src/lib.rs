@@ -412,6 +412,13 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
+    #[wasm_bindgen(js_name = setDebugOptions)]
+    pub fn set_debug_options(&self, options: DebugOptions) {
+        self.sender
+            .send_blocking(Event::SetDebugOptions { options })
+            .expect("the channel should be open");
+    }
+
     /// Spawns a `draw` event.
     pub async fn draw(&self) {
         let (sx, rx) = async_channel::bounded(1);
@@ -573,6 +580,9 @@ enum Event {
     SetLabelEasing {
         easing: selection::EasingType,
     },
+    SetDebugOptions {
+        options: DebugOptions,
+    },
     Draw {
         completion: Sender<()>,
     },
@@ -646,6 +656,46 @@ impl UpdateDataPayload {
     }
 }
 
+#[wasm_bindgen]
+#[derive(Debug, Default)]
+pub struct DebugOptions {
+    #[wasm_bindgen(js_name = showAxisBoundingBox)]
+    pub show_axis_bounding_box: bool,
+    #[wasm_bindgen(js_name = showLabelBoundingBox)]
+    pub show_label_bounding_box: bool,
+    #[wasm_bindgen(js_name = showCurvesBoundingBox)]
+    pub show_curves_bounding_box: bool,
+    #[wasm_bindgen(js_name = showAxisLineBoundingBox)]
+    pub show_axis_line_bounding_box: bool,
+    #[wasm_bindgen(js_name = showSelectionsBoundingBox)]
+    pub show_selections_bounding_box: bool,
+    #[wasm_bindgen(js_name = showColorBarBoundingBox)]
+    pub show_color_bar_bounding_box: bool,
+}
+
+#[wasm_bindgen]
+impl DebugOptions {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        DebugOptions::default()
+    }
+
+    #[wasm_bindgen(js_name = anyIsActive)]
+    pub fn any_is_active(&self) -> bool {
+        self.show_axis_bounding_box
+            || self.show_label_bounding_box
+            || self.show_curves_bounding_box
+            || self.show_axis_line_bounding_box
+            || self.show_selections_bounding_box
+            || self.show_color_bar_bounding_box
+    }
+
+    #[wasm_bindgen(js_name = noneIsActive)]
+    pub fn none_is_active(&self) -> bool {
+        !self.any_is_active()
+    }
+}
+
 /// Implementation of the renderer for the parallel coordinates.
 #[wasm_bindgen]
 pub struct Renderer {
@@ -670,6 +720,7 @@ pub struct Renderer {
     background_color: ColorTransparent<SRgb>,
     brush_color: ColorOpaque<Xyz>,
     unselected_color: ColorTransparent<Xyz>,
+    debug: DebugOptions,
     pixel_ratio: f32,
     staging_data: StagingData,
 }
@@ -736,6 +787,7 @@ struct StagingData {
     label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
     label_threshold_changes: Vec<(String, Option<f32>)>,
     label_easing_changes: Vec<selection::EasingType>,
+    debug_options_changes: Vec<DebugOptions>,
 }
 
 #[wasm_bindgen]
@@ -875,6 +927,7 @@ impl Renderer {
             background_color: DEFAULT_BACKGROUND_COLOR(),
             brush_color: DEFAULT_BRUSH_COLOR(),
             unselected_color: DEFAULT_UNSELECTED_COLOR(),
+            debug: DebugOptions::default(),
             staging_data: StagingData::default(),
         };
 
@@ -997,6 +1050,10 @@ impl Renderer {
                 Event::SetLabelEasing { easing } => {
                     self.staging_data.label_easing_changes.push(easing);
                     self.events.push(event::Event::LABEL_EASING_CHANGE);
+                }
+                Event::SetDebugOptions { options } => {
+                    self.staging_data.debug_options_changes.push(options);
+                    self.events.push(event::Event::DEBUG_OPTIONS_CHANGE);
                 }
                 Event::Draw { completion } => self.render(completion).await,
                 Event::PointerDown { event } => self.pointer_down(event),
@@ -1350,55 +1407,19 @@ impl Renderer {
     }
 
     fn render_bounding_boxes(&self) {
+        if self.debug.none_is_active() {
+            return;
+        }
+
         let axes = self.axes.borrow();
         let ((x, y), (w, h)) = axes.viewport(self.pixel_ratio);
         self.context_2d
             .stroke_rect(x as f64, y as f64, w as f64, h as f64);
 
         for axis in axes.visible_axes() {
-            let bounding_box = axis
-                .bounding_box(self.active_label_idx)
-                .transform(&axis.space_transformer())
-                .transform(&axes.space_transformer());
-            let x = bounding_box.start().x;
-            let y = bounding_box.end().y;
-            let (w, h) = bounding_box.size().extract();
-            self.context_2d
-                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
-
-            let bounding_box = axis
-                .label_bounding_box()
-                .transform(&axis.space_transformer())
-                .transform(&axes.space_transformer());
-            let x = bounding_box.start().x;
-            let y = bounding_box.end().y;
-            let (w, h) = bounding_box.size().extract();
-            self.context_2d
-                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
-
-            let bounding_box = axis
-                .curves_bounding_box()
-                .transform(&axis.space_transformer())
-                .transform(&axes.space_transformer());
-            let x = bounding_box.start().x;
-            let y = bounding_box.end().y;
-            let (w, h) = bounding_box.size().extract();
-            self.context_2d
-                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
-
-            let bounding_box = axis
-                .axis_line_bounding_box()
-                .transform(&axis.space_transformer())
-                .transform(&axes.space_transformer());
-            let x = bounding_box.start().x;
-            let y = bounding_box.end().y;
-            let (w, h) = bounding_box.size().extract();
-            self.context_2d
-                .stroke_rect(x as f64, y as f64, w as f64, h as f64);
-
-            if let Some(active_label_idx) = self.active_label_idx {
+            if self.debug.show_axis_bounding_box {
                 let bounding_box = axis
-                    .selections_bounding_box(active_label_idx)
+                    .bounding_box(self.active_label_idx)
                     .transform(&axis.space_transformer())
                     .transform(&axes.space_transformer());
                 let x = bounding_box.start().x;
@@ -1406,6 +1427,56 @@ impl Renderer {
                 let (w, h) = bounding_box.size().extract();
                 self.context_2d
                     .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+            }
+
+            if self.debug.show_label_bounding_box {
+                let bounding_box = axis
+                    .label_bounding_box()
+                    .transform(&axis.space_transformer())
+                    .transform(&axes.space_transformer());
+                let x = bounding_box.start().x;
+                let y = bounding_box.end().y;
+                let (w, h) = bounding_box.size().extract();
+                self.context_2d
+                    .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+            }
+
+            if self.debug.show_curves_bounding_box {
+                let bounding_box = axis
+                    .curves_bounding_box()
+                    .transform(&axis.space_transformer())
+                    .transform(&axes.space_transformer());
+                let x = bounding_box.start().x;
+                let y = bounding_box.end().y;
+                let (w, h) = bounding_box.size().extract();
+                self.context_2d
+                    .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+            }
+
+            if self.debug.show_axis_line_bounding_box {
+                let bounding_box = axis
+                    .axis_line_bounding_box()
+                    .transform(&axis.space_transformer())
+                    .transform(&axes.space_transformer());
+                let x = bounding_box.start().x;
+                let y = bounding_box.end().y;
+                let (w, h) = bounding_box.size().extract();
+                self.context_2d
+                    .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+            }
+
+            if self.debug.show_selections_bounding_box {
+                if let Some(active_label_idx) = self.active_label_idx {
+                    let bounding_box = axis
+                        .selections_bounding_box(active_label_idx)
+                        .transform(&axis.space_transformer())
+                        .transform(&axes.space_transformer());
+                    let x = bounding_box.start().x;
+                    let y = bounding_box.end().y;
+                    let (w, h) = bounding_box.size().extract();
+                    self.context_2d
+                        .stroke_rect(x as f64, y as f64, w as f64, h as f64);
+                }
             }
         }
 
@@ -1461,7 +1532,7 @@ impl Renderer {
         self.render_control_points();
         self.render_color_bar_label();
 
-        // self.render_bounding_boxes();
+        self.render_bounding_boxes();
 
         let mut probabilities_change = Vec::new();
         for label_idx in probabilities_changed.iter().copied() {
@@ -1567,6 +1638,11 @@ impl Renderer {
             if events.signaled(event::Event::LABEL_EASING_CHANGE) {
                 let easing = self.staging_data.label_easing_changes.pop().unwrap();
                 self.change_label_easing(easing);
+            }
+
+            if events.signaled(event::Event::DEBUG_OPTIONS_CHANGE) {
+                let options = self.staging_data.debug_options_changes.pop().unwrap();
+                self.change_debug_options(options);
             }
 
             // Internal events.
@@ -1995,6 +2071,10 @@ impl Renderer {
 
         self.update_selection_lines_buffer();
         self.notify_easing_change();
+    }
+
+    fn change_debug_options(&mut self, options: DebugOptions) {
+        self.debug = options;
     }
 
     fn pointer_down(&mut self, event: web_sys::PointerEvent) {

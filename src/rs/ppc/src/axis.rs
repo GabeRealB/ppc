@@ -297,6 +297,7 @@ impl Axis {
     }
 
     /// Fetches the datums of the axis.
+    #[allow(dead_code)]
     pub fn datums(&self) -> &[f32] {
         &self.datums
     }
@@ -307,11 +308,13 @@ impl Axis {
     }
 
     /// Returns the `min` and `max` value of the datums.
+    #[allow(dead_code)]
     pub fn datums_range(&self) -> (f32, f32) {
         self.datums_range
     }
 
     /// Returns the `min` and `max` value of the visible datums.
+    #[allow(dead_code)]
     pub fn visible_datums_range(&self) -> (f32, f32) {
         self.visible_datums_range
     }
@@ -323,6 +326,7 @@ impl Axis {
     }
 
     /// Borrows the selection curve.
+    #[allow(dead_code)]
     pub fn borrow_selection_curve(&self, active_label_idx: usize) -> Ref<'_, SelectionCurve> {
         Ref::map(self.selection_curves.borrow(), |x| &x[active_label_idx])
     }
@@ -759,6 +763,10 @@ pub enum AxisState {
     Hidden,
 }
 
+pub type RemLengthFunc<T> = dyn Fn(f32) -> Length<T>;
+type RemLengthFunc2<T> = dyn Fn(f32) -> (Length<T>, Length<T>);
+pub type TextLengthFunc<T> = dyn Fn(&str) -> (Length<T>, Length<T>);
+
 /// A collection of axes.
 #[derive(Clone)]
 pub struct Axes {
@@ -773,14 +781,14 @@ pub struct Axes {
 
     coordinate_mappings: Rc<RefCell<AxesCoordinateMappings>>,
 
-    get_rem_length_screen: Rc<dyn Fn(f32) -> Length<ScreenSpace>>,
-    get_text_length_screen: Rc<dyn Fn(&str) -> (Length<ScreenSpace>, Length<ScreenSpace>)>,
+    get_rem_length_screen: Rc<RemLengthFunc<ScreenSpace>>,
+    get_text_length_screen: Rc<TextLengthFunc<ScreenSpace>>,
 
-    get_rem_length_world: Rc<dyn Fn(f32) -> (Length<WorldSpace>, Length<WorldSpace>)>,
-    get_text_length_world: Rc<dyn Fn(&str) -> (Length<WorldSpace>, Length<WorldSpace>)>,
+    get_rem_length_world: Rc<RemLengthFunc2<WorldSpace>>,
+    get_text_length_world: Rc<TextLengthFunc<WorldSpace>>,
 
-    get_rem_length_local: Rc<dyn Fn(f32) -> (Length<LocalSpace>, Length<LocalSpace>)>,
-    get_text_length_local: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
+    get_rem_length_local: Rc<RemLengthFunc2<LocalSpace>>,
+    get_text_length_local: Rc<TextLengthFunc<LocalSpace>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1123,6 +1131,7 @@ impl Axes {
     }
 
     /// Returns the order of the axes.
+    #[allow(dead_code)]
     pub fn axes_order(&self) -> Box<[Box<str>]> {
         self.visible_axes().map(|ax| (*ax.key()).into()).collect()
     }
@@ -1347,6 +1356,7 @@ impl Axes {
     }
 
     /// Returns the width of the world space.
+    #[allow(dead_code)]
     pub fn world_width(&self) -> f32 {
         let mappings = self.coordinate_mappings.borrow();
         mappings.world_width
@@ -1435,6 +1445,7 @@ impl Axes {
     }
 
     /// Returns an iterator over all contained axes.
+    #[allow(dead_code)]
     pub fn axes(&self) -> impl Iterator<Item = Rc<Axis>> + '_ {
         self.axes.values().cloned()
     }

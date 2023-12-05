@@ -180,7 +180,7 @@ impl SelectionCurveBuilder {
                 continue;
             }
 
-            for range @ [start, end] in &info.visible_ranges {
+            for [start, end] in &info.visible_ranges {
                 let segment = [start.max(min), end.min(max)];
                 if segment[0] > max || segment[1] < min {
                     continue;

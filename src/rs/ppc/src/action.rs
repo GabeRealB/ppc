@@ -621,7 +621,7 @@ impl SelectCurveControlPointAction {
     }
 
     fn finish(self) -> Event {
-        let mut selection = self.selection;
+        let selection = self.selection;
         let mut curve_builder = self.curve_builder;
         let datums_range = self.axis.visible_datums_range_normalized().into();
         curve_builder.insert_selection(selection, self.selection_idx);

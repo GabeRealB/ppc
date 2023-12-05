@@ -129,6 +129,7 @@ where
     }
 
     /// Instantiates a new matrix from the given row vectors.
+    #[allow(dead_code)]
     pub fn from_rows(rows: [<() as vector::VectorType<C>>::Type<T>; R]) -> Self {
         let rows = rows.map(<() as vector::VectorType<C>>::unpack);
         Self::from_rows_array(rows)

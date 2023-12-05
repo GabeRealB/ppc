@@ -3,6 +3,7 @@ use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, N
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Event(u32);
 
+#[allow(dead_code)]
 impl Event {
     pub const NONE: Self = Self(0);
 
@@ -21,6 +22,7 @@ impl Event {
     pub const LABEL_COLOR_CHANGE: Self = Self(1 << 11);
     pub const LABEL_THRESHOLD_CHANGE: Self = Self(1 << 12);
     pub const LABEL_EASING_CHANGE: Self = Self(1 << 13);
+    pub const DEBUG_OPTIONS_CHANGE: Self = Self(1 << 14);
 
     // Internal events
     pub const AXIS_STATE_CHANGE: Self = Self(1 << 20);
