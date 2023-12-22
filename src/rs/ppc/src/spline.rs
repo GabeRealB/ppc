@@ -96,58 +96,43 @@ impl Spline {
         // When start end end are inverted it indicates that the new segment lies
         // within the segment at end idx.
         if start_idx > end_idx {
-            let seg = self.segments[end_idx];
-            let left = seg.split_at(segment.bounds[0], SegmentRemovalOp::RemoveRight);
-            let right = seg.split_at(segment.bounds[1], SegmentRemovalOp::RemoveLeft);
+            let seg = self.segments.remove(end_idx);
+            let segments = seg.get_maximum_segments(&segment);
 
-            if left.is_empty() {
-                self.segments[end_idx] = segment;
-
-                if !right.is_empty() {
-                    self.segments.insert(end_idx + 1, right);
-                }
-            } else {
-                self.segments[end_idx] = left;
-                self.segments.insert(end_idx + 1, segment);
-
-                if !right.is_empty() {
-                    self.segments.insert(end_idx + 2, right);
+            for (i, segment) in segments.into_iter().enumerate() {
+                if !segment.is_empty() {
+                    self.segments.insert(end_idx + i, segment);
                 }
             }
-
             return;
         }
 
-        // Remove all segments in the range [start, end), as we definitely know
-        // that the new segment covers them completely.
-        self.segments.drain(start_idx..end_idx);
+        let start_idx = start_idx.saturating_sub(1);
+        let end_idx = end_idx.saturating_add(1);
 
-        // Having removed all segments that are completely covered, we only have
-        // to adapt the segments directly preceding and following our new segment.
-        let previous_idx = start_idx.wrapping_sub(1);
-        let next_idx = start_idx + 1;
-
-        self.segments.insert(start_idx, segment);
-
-        if let Some(seg) = self.segments.get_mut(next_idx) {
-            if seg.bounds[0] < segment.bounds[1] {
-                *seg = seg.split_at(segment.bounds[1], SegmentRemovalOp::RemoveLeft);
+        let mut new_segments = vec![];
+        let segments = self.segments.drain(start_idx..end_idx);
+        for s in segments {
+            if !segment.covers_range(s.bounds) {
+                new_segments.push(s);
+                continue;
             }
 
-            if seg.is_empty() {
-                self.segments.remove(next_idx);
+            let mut maximum_segments = s.get_maximum_segments(&segment);
+            if s.bounds[1] < segment.bounds[1] {
+                maximum_segments.pop();
+            }
+            new_segments.extend(maximum_segments);
+        }
+
+        if let Some(last) = new_segments.last() {
+            if last.bounds[1] < segment.bounds[1] {
+                let rest = segment.split_at(last.bounds[1], SegmentRemovalOp::RemoveLeft);
+                new_segments.push(rest);
             }
         }
 
-        if let Some(seg) = self.segments.get_mut(previous_idx) {
-            if seg.bounds[1] > segment.bounds[0] {
-                *seg = seg.split_at(segment.bounds[0], SegmentRemovalOp::RemoveRight);
-            }
-
-            if seg.is_empty() {
-                self.segments.remove(previous_idx);
-            }
-        }
+        self.segments.splice(start_idx..start_idx, new_segments);
     }
 }
 
@@ -421,7 +406,7 @@ impl SplineSegment {
             let diff = max - min;
 
             // Check if we need the first segment from t in [0.0, 0.5].
-            if bounds[0] <= mid && t_range[0] <= 0.5 {
+            if (p0[0]..=mid).contains(&bounds[0]) && (0.0..=0.5).contains(&t_range[0]) {
                 let seg_t_range = [t_range[0], 0.5f32.min(t_range[1])];
                 let seg_bounds = [bounds[0], p0[0].lerp(p1[0], seg_t_range[1])];
                 let seg_coeff = [4.0 * diff, 0.0, 0.0, min]; // (P1 - P0) * (4 * t^3) + P0
@@ -434,7 +419,7 @@ impl SplineSegment {
             }
 
             // Check if we need the second segment from t in [0.5, 1.0].
-            if bounds[0] <= mid && t_range[0] <= 0.5 {
+            if (mid..=p1[0]).contains(&bounds[1]) && (0.5..=1.0).contains(&t_range[1]) {
                 let seg_t_range = [0.5f32.max(t_range[0]), t_range[1]];
                 let seg_bounds = [p0[0].lerp(p1[0], seg_t_range[0]), bounds[1]];
                 let seg_coeff = [4.0 * diff, -12.0 * diff, 12.0 * diff, (-3.0 * diff) + min]; // (P1 - P0) * (4 * (t-1)^3 + 1) + P0
@@ -451,7 +436,7 @@ impl SplineSegment {
             let diff = max - min;
 
             // Check if we need the first segment from t in [0.0, 0.5].
-            if bounds[0] <= mid && t_range[0] <= 0.5 {
+            if (p0[0]..=mid).contains(&bounds[0]) && (0.0..=0.5).contains(&t_range[0]) {
                 let seg_t_range = [t_range[0], 0.5f32.min(t_range[1])];
                 let seg_bounds = [bounds[0], p0[0].lerp(p1[0], seg_t_range[1])];
                 let seg_coeff = [-4.0 * diff, 0.0, 0.0, max]; // (P0 - P1) * (1 - (4 * t^3)) + P1
@@ -464,7 +449,7 @@ impl SplineSegment {
             }
 
             // Check if we need the second segment from t in [0.5, 1.0].
-            if bounds[0] <= mid && t_range[0] <= 0.5 {
+            if (mid..=p1[0]).contains(&bounds[1]) && (0.5..=1.0).contains(&t_range[1]) {
                 let seg_t_range = [0.5f32.max(t_range[0]), t_range[1]];
                 let seg_bounds = [p0[0].lerp(p1[0], seg_t_range[0]), bounds[1]];
                 let seg_coeff = [-4.0 * diff, 12.0 * diff, -12.0 * diff, (4.0 * diff) + min]; // (P0 - P1) * (-4 * (t-1)^3) + P1
@@ -509,6 +494,179 @@ impl SplineSegment {
         }
     }
 
+    pub fn normalize_t_range(&self) -> Self {
+        let bounds = self.bounds;
+        let x0 = self.t_range[0];
+        let len = self.t_range[1] - self.t_range[0];
+        let [a, b, c, d] = self.coefficients;
+
+        // Expand g(x) = f(x+x0)
+        let a_t = a;
+        let b_t = b + (3.0 * a * x0);
+        let c_t = c + (x0 * ((2.0 * b) + (3.0 * a * x0)));
+        let d_t = d + (x0 * (c + (x0 * (b + (a * x0)))));
+
+        let len2 = len * len;
+        let len3 = len2 * len;
+
+        // Expand h(x) = g(x*len)
+        let a_s = a_t * len3;
+        let b_s = b_t * len2;
+        let c_s = c_t * len;
+        let d_s = d_t;
+
+        Self {
+            bounds,
+            t_range: [0.0, 1.0],
+            coefficients: [a_s, b_s, c_s, d_s],
+        }
+    }
+
+    pub fn get_maximum_segments(&self, other: &Self) -> Vec<Self> {
+        assert!(self.covers_range(other.bounds));
+        assert!(
+            !(self.is_empty() && other.is_empty()),
+            "can not have two empty segments"
+        );
+
+        // Early return, if one segment is empty.
+        if self.is_empty() {
+            return vec![*other];
+        } else if other.is_empty() {
+            return vec![*self];
+        }
+
+        let mut segments: Vec<Self> = vec![];
+        let mut push_segment = |segment: Self| {
+            if segment.is_empty() {
+                return;
+            }
+
+            if let Some(last) = segments.last_mut() {
+                if last.coefficients == segment.coefficients
+                    && last.bounds[1] == segment.bounds[0]
+                    && last.t_range[1] == segment.t_range[0]
+                {
+                    last.bounds[1] = segment.bounds[1];
+                    last.t_range[1] = segment.t_range[1];
+                } else {
+                    segments.push(segment);
+                }
+            } else {
+                segments.push(segment);
+            }
+        };
+
+        // Order the segments by the start bound.
+        let (first, second) = if self.bounds[0] <= other.bounds[0] {
+            (self, other)
+        } else {
+            (other, self)
+        };
+
+        // Extract the uncovered first part and insert it.
+        let left = first.split_at(second.bounds[0], SegmentRemovalOp::RemoveRight);
+        let first = first.split_at(second.bounds[0], SegmentRemovalOp::RemoveLeft);
+
+        push_segment(left);
+
+        // Early exit, if the rest of the segment is empty.
+        if first.is_empty() {
+            push_segment(*second);
+            return segments;
+        }
+
+        // Order the segments by the end bound.
+        let (first, second) = if first.bounds[1] <= second.bounds[1] {
+            (&first, second)
+        } else {
+            (second, &first)
+        };
+
+        let overlapping_first = *first;
+        let overlapping_second = second.split_at(first.bounds[1], SegmentRemovalOp::RemoveRight);
+
+        let right = second.split_at(first.bounds[1], SegmentRemovalOp::RemoveLeft);
+
+        // To find the maximum of two polynomials we first normalize them to be in the same range.
+        // Afterwards we build a third polynomial, by subtracting the second one from the first one.
+        // This polynomial will evaluate to a value bigger than 0 at a position x, exactly if the
+        // the evaluation of the first polynomial at x is bigger than the value at the same position
+        // for the second one. To find the ranges in which one is bigger than the other, we search for
+        // the zeros.
+        let first_coeff = overlapping_first.normalize_t_range().coefficients;
+        let second_coeff = overlapping_second.normalize_t_range().coefficients;
+        let difference = Polynomial {
+            a3: first_coeff[0] as f64 - second_coeff[0] as f64,
+            a2: first_coeff[1] as f64 - second_coeff[1] as f64,
+            a1: first_coeff[2] as f64 - second_coeff[2] as f64,
+            a0: first_coeff[3] as f64 - second_coeff[3] as f64,
+        };
+
+        // The call works only with polynomials of degree > 0.
+        // For constants we return None and must determine the maximum
+        // manually.
+        if let Some(zeros) = difference.zeros() {
+            // The difference is valid in the range [0.0, 1.0], so we can
+            // identify invalid points by being outside of this range.
+            // It can occur either because we unwrap a None to an invalid
+            // value, or if the zero lies outside of the range of interest.
+            let mut zeros = zeros.map(|x| x.unwrap_or(-1.0));
+            zeros.sort_unstable_by(f64::total_cmp);
+
+            let maximum_segments = [
+                (0.0, zeros[0]),
+                (zeros[0], zeros[1]),
+                (zeros[1], zeros[2]),
+                (zeros[2], 1.0),
+            ];
+
+            let mut last_bound: f64 = 0.0;
+            for (x0, x1) in maximum_segments {
+                // Skip segments outside or range of [0.0, 1.0].
+                if x1 <= last_bound || x0 >= 1.0 || x0 == x1 {
+                    continue;
+                }
+
+                let x0 = x0.clamp(0.0, 1.0);
+                let x1 = x1.clamp(0.0, 1.0);
+
+                // We evaluate the difference at the middle of the segment to
+                // determine, if it is larger or smaller than 0.
+                let midpoint = (x0 + x1) / 2.0;
+
+                let segment = if difference.evaluate_at(midpoint) <= 0.0 {
+                    let [start_bound, end_bound] = overlapping_first.bounds;
+                    let segment_start = start_bound.lerp(end_bound, x0 as f32);
+                    let segment_end = start_bound.lerp(end_bound, x1 as f32);
+
+                    overlapping_second
+                        .split_at(segment_start, SegmentRemovalOp::RemoveLeft)
+                        .split_at(segment_end, SegmentRemovalOp::RemoveRight)
+                } else {
+                    let [start_bound, end_bound] = overlapping_second.bounds;
+                    let segment_start = start_bound.lerp(end_bound, x0 as f32);
+                    let segment_end = start_bound.lerp(end_bound, x1 as f32);
+
+                    overlapping_first
+                        .split_at(segment_start, SegmentRemovalOp::RemoveLeft)
+                        .split_at(segment_end, SegmentRemovalOp::RemoveRight)
+                };
+
+                push_segment(segment);
+                last_bound = x1;
+            }
+        } else if difference.evaluate_at(0.5) >= 0.0 {
+            push_segment(overlapping_first);
+        } else {
+            push_segment(overlapping_second);
+        }
+
+        // Include the non overlapping part of the second segment.
+        push_segment(right);
+        segments
+    }
+
     pub fn covers_range(&self, range: [f32; 2]) -> bool {
         let r1 = range[0]..=range[1];
         let r2 = self.bounds[0]..=self.bounds[1];
@@ -521,5 +679,217 @@ impl SplineSegment {
 
     pub fn is_empty(&self) -> bool {
         self.bounds[0] == self.bounds[1] || self.t_range[0] == self.t_range[1]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+struct Polynomial {
+    a3: f64,
+    a2: f64,
+    a1: f64,
+    a0: f64,
+}
+
+impl Polynomial {
+    fn degree(&self) -> usize {
+        if self.a3 != 0.0 {
+            3
+        } else if self.a2 != 0.0 {
+            2
+        } else if self.a1 != 0.0 {
+            1
+        } else {
+            0
+        }
+    }
+
+    fn evaluate_at(&self, x: f64) -> f64 {
+        self.a0 + x * (self.a1 + x * (self.a2 + x * self.a3))
+    }
+
+    fn zeros(&self) -> Option<[Option<f64>; 3]> {
+        match self.degree() {
+            0 => None,
+            1 => {
+                let x = self.zeroes_linear();
+                Some([Some(x), None, None])
+            }
+            2 => {
+                let [x1, x2] = self.zeros_quadratic();
+                Some([x1, x2, None])
+            }
+            3 => Some(self.zeros_cubic()),
+            _ => unreachable!(),
+        }
+    }
+
+    fn zeroes_linear(&self) -> f64 {
+        assert_eq!(
+            self.degree(),
+            1,
+            "'zeroes_linear' can only be called on linear polynomials"
+        );
+
+        // a1 * x + a0 = 0 => x = -a0/a1
+        -self.a0 / self.a1
+    }
+
+    fn zeros_quadratic(&self) -> [Option<f64>; 2] {
+        assert_eq!(
+            self.degree(),
+            2,
+            "'zeros_quadratic' can only be called on quadratic polynomials"
+        );
+
+        // Normalize the polynomial.
+        let a1 = self.a1 / self.a2;
+        let a0 = self.a0 / self.a2;
+
+        // Use the pq-formula. (-a1/2) +- sqrt((a1/2)^2 - a0))
+        let p = -0.5 * a1;
+        let d = p.powi(2) - a0;
+        if d > 0.0 {
+            let d = d.sqrt();
+            let x1 = p - d;
+            let x2 = p + d;
+            [Some(x1), Some(x2)]
+        } else if d == 0.0 {
+            let x1 = p;
+            [Some(x1), None]
+        } else {
+            [None; 2]
+        }
+    }
+
+    fn zeros_cubic(&self) -> [Option<f64>; 3] {
+        assert_eq!(
+            self.degree(),
+            3,
+            "'zeros_cubic' can only be called on cubic polynomials"
+        );
+
+        // Taken from https://www.uni-koeln.de/deiters/math/supplement.pdf
+        const PRECISION: f64 = 1.0e-7;
+
+        // Normalize
+        let w = 1.0 / self.a3;
+        let normalized = Self {
+            a3: 1.0,
+            a2: self.a2 * w,
+            a1: self.a1 * w,
+            a0: self.a0 * w,
+        };
+
+        // root at zero?
+        if normalized.a0 == 0.0 {
+            // Polynomial division by x
+            let quadratic = Self {
+                a3: 0.0,
+                a2: normalized.a3,
+                a1: normalized.a2,
+                a0: normalized.a1,
+            };
+            let [x1, x2] = quadratic.zeros_quadratic();
+            return [Some(0.0), x1, x2];
+        }
+
+        let x_infl = -normalized.a2 / 3.0;
+        let y = normalized.evaluate_at(x_infl);
+
+        // Is inflection point a root?
+        if y == 0.0 {
+            let c1 = x_infl + normalized.a2;
+            let c0 = c1 * x_infl + normalized.a1;
+
+            // Polynomial division by (x - x_infl)
+            let quadratic = Self {
+                a3: 0.0,
+                a2: 1.0,
+                a1: c1,
+                a0: c0,
+            };
+            let [x1, x2] = quadratic.zeros_quadratic();
+            return [Some(x_infl), x1, x2];
+        }
+
+        let d = normalized.a2.powi(2) - (3.0 * normalized.a1);
+
+        // Laguerre-Nair-Samuelson bounds
+        let i_slope = d.signum();
+        if d == 0.0 {
+            let x0 = x_infl - y.cbrt();
+            return [Some(x0), None, None];
+        }
+
+        let mut x0 = if i_slope == 1.0 {
+            let delta = y.signum() * -2.0 / 3.0 * d.sqrt();
+            x_infl + delta
+        } else {
+            x_infl
+        };
+
+        // Halley’s method
+        loop {
+            let y = normalized.a2 + x0;
+            let y1 = 2.0 * y + x0;
+            let y2 = y1 + 3.0 * x0;
+            let y1 = x0 * y1 + normalized.a1;
+            let y = (x0 * y + normalized.a1) * x0 + normalized.a0;
+            let dx = y * y1 / (y1.powi(2) - 0.5 * y * y2);
+            x0 -= dx;
+
+            // Terminate when the error is less than 1.0e-18.
+            if dx.abs() <= PRECISION * x0.abs() {
+                break;
+            }
+        }
+
+        let newton1 = |normalized: &Self, x: f64| -> f64 {
+            let y = normalized.a2 + x;
+            let y1 = 2.0 * y + x;
+            let y1 = x * y1 + normalized.a1;
+            let y = (x * y + normalized.a1) * x + normalized.a0;
+
+            if y1 != 0.0 {
+                x - (y / y1)
+            } else {
+                x
+            }
+        };
+
+        let eq_quadratic = |quadratic: &Self, normalized: &Self| -> [Option<f64>; 2] {
+            let p = -0.5 * quadratic.a1;
+            let d = p.powi(2) - quadratic.a0;
+            if d >= 0.0 {
+                let d = d.sqrt();
+                if p < 0.0 {
+                    let x1 = newton1(normalized, p - d);
+                    let x2 = p + d;
+                    [Some(x1), Some(x2)]
+                } else {
+                    let x1 = p - d;
+                    let x2 = newton1(normalized, p + d);
+                    [Some(x1), Some(x2)]
+                }
+            } else {
+                [None, None]
+            }
+        };
+
+        if i_slope == 1.0 {
+            // Polynomial division by (x - x_infl)
+            let c1 = x0 + normalized.a2;
+            let c0 = c1 * x0 + normalized.a1;
+            let quadratic = Self {
+                a3: 0.0,
+                a2: 1.0,
+                a1: c1,
+                a0: c0,
+            };
+            let [x1, x2] = eq_quadratic(&quadratic, &normalized);
+            [Some(x0), x1, x2]
+        } else {
+            [Some(x0), None, None]
+        }
     }
 }

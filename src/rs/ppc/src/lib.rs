@@ -1860,8 +1860,6 @@ impl Renderer {
             .scale(device_pixel_ratio as f64, device_pixel_ratio as f64)
             .unwrap();
 
-        web_sys::console::log_2(&scaled_width.into(), &scaled_height.into());
-        web_sys::console::log_2(&width.into(), &height.into());
         self.render_texture = self
             .device
             .create_texture(webgpu::TextureDescriptor::<'_, 2, 0> {
