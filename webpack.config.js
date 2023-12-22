@@ -40,7 +40,8 @@ module.exports = function (env, argv) {
         }),
         new WasmPackPlugin({
             crateDirectory: path.join(__dirname, 'src/rs/ppc'),
-            outDir: path.join(__dirname, 'pkg')
+            outDir: path.join(__dirname, 'pkg'),
+            extraArgs: '--weak-refs'
         }),
         // Have this example work in Edge which doesn't ship `TextEncoder` or
         // `TextDecoder` at this time.
