@@ -3,6 +3,8 @@ import React, { Component } from 'react';
 
 import PPC from '../components/PPC';
 
+const EPSILON = 1.17549435082228750797e-38;
+
 class App extends Component {
 
     constructor(props) {
@@ -63,7 +65,7 @@ class App extends Component {
                 showSelectionsBoundingBox: false,
                 showColorBarBoundingBox: false,
             },
-            demo_slider_value: Number.EPSILON,
+            demo_slider_value: EPSILON,
             coloring_constant_value: 0.5,
             coloring_attribute: "v_1",
         };
@@ -89,7 +91,7 @@ class App extends Component {
                     <label style={{ gridRow: 2, gridColumn: "1" }}>Label</label>
                     <select style={{ gridRow: 2, gridColumn: "2" }} onChange={e => {
                         const activeLabel = e.target.value;
-                        const demo_slider_value = "selection_threshold" in this.state["labels"][activeLabel] ? this.state["labels"][activeLabel]["selection_threshold"] : Number.EPSILON;
+                        const demo_slider_value = "selectionThreshold" in this.state["labels"][activeLabel] ? this.state["labels"][activeLabel]["selectionThreshold"] : EPSILON;
 
                         this.setProps({ activeLabel: activeLabel, demo_slider_value: demo_slider_value })
                     }}>
@@ -99,10 +101,10 @@ class App extends Component {
                     </select>
 
                     <label style={{ gridRow: 3, gridColumn: "1" }}>Selection threshold</label>
-                    <input style={{ gridRow: 3, gridColumn: "2" }} type="range" min={0.0} max={1.0} step={Number.EPSILON} value={this.state["demo_slider_value"]} onChange={e => {
+                    <input style={{ gridRow: 3, gridColumn: "2" }} type="range" min={0.0} max={1.0} step={EPSILON} value={this.state["demo_slider_value"]} onChange={e => {
                         const labels = window.structuredClone(this.state["labels"]);
                         const activeLabel = this.state["activeLabel"];
-                        labels[activeLabel]["selection_threshold"] = parseFloat(e.target.value);
+                        labels[activeLabel]["selectionThreshold"] = parseFloat(e.target.value);
                         this.setProps({ labels, demo_slider_value: parseFloat(e.target.value) })
                     }}></input>
 
@@ -138,7 +140,7 @@ class App extends Component {
 
 
                     <label style={{ gridRow: 9, gridColumn: "1" }}>Coloring constant</label>
-                    <input style={{ gridRow: 9, gridColumn: "2" }} type="range" min={0.0} max={1.0} step={Number.EPSILON} value={this.state["coloring_constant_value"]} onChange={e => {
+                    <input style={{ gridRow: 9, gridColumn: "2" }} type="range" min={0.0} max={1.0} step={EPSILON} value={this.state["coloring_constant_value"]} onChange={e => {
                         const coloring_constant_value = parseFloat(e.target.value);
                         if (typeof (this.state["colors"].selected.color) !== "number") {
                             this.setProps({ coloring_constant_value })

@@ -337,6 +337,7 @@ impl EventQueue {
                 ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
             }
         });
+        let selection_threshold = selection_threshold.map(|t| t.clamp(f32::EPSILON, 1.0));
 
         self.sender
             .send_blocking(Event::AddLabel {
@@ -386,6 +387,7 @@ impl EventQueue {
 
     #[wasm_bindgen(js_name = setLabelSelectionThreshold)]
     pub fn set_label_selection_threshold(&self, id: String, selection_threshold: Option<f32>) {
+        let selection_threshold = selection_threshold.map(|t| t.clamp(f32::EPSILON, 1.0));
         self.sender
             .send_blocking(Event::SetLabelThreshold {
                 id,
@@ -725,6 +727,7 @@ pub struct Renderer {
     staging_data: StagingData,
 }
 
+#[derive(Debug)]
 struct LabelInfo {
     id: String,
     threshold_changed: bool,
@@ -1324,6 +1327,7 @@ impl Renderer {
 
         self.context_2d.save();
         self.context_2d.set_fill_style(&"rgb(178 178 178)".into());
+        self.context_2d.set_stroke_style(&"rgb(120 120 120)".into());
 
         let guard = self.axes.borrow();
         let radius = guard.control_points_radius().extract::<f32>() as f64;
@@ -1363,23 +1367,38 @@ impl Renderer {
                 self.context_2d.fill();
             }
 
-            for [axis_value, curve_value] in curve_control_points {
-                if !(0.0..=1.0).contains(&axis_value) {
-                    continue;
+            for selection_control_points in curve_control_points {
+                let mut first = true;
+                let curve = web_sys::Path2d::new().unwrap();
+                for [axis_value, curve_value] in selection_control_points {
+                    let axis_value = axis_value.clamp(0.0, 1.0);
+                    let curve_offset = ax.curve_offset_at_curve_value(curve_value);
+                    let position = axis_start.lerp(axis_end, axis_value) + curve_offset;
+                    let (x, y) = position
+                        .transform(&world_mapper)
+                        .transform(&screen_mapper)
+                        .extract();
+
+                    if first {
+                        curve.move_to(x as f64, y as f64);
+                        first = false;
+                    } else {
+                        curve.line_to(x as f64, y as f64);
+                    }
+
+                    if !(0.0..=1.0).contains(&axis_value) {
+                        self.context_2d.begin_path();
+                        self.context_2d
+                            .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
+                            .unwrap();
+                        self.context_2d.fill();
+                    }
                 }
 
-                let curve_offset = ax.curve_offset_at_curve_value(curve_value);
-                let position = axis_start.lerp(axis_end, axis_value) + curve_offset;
-                let (x, y) = position
-                    .transform(&world_mapper)
-                    .transform(&screen_mapper)
-                    .extract();
-
-                self.context_2d.begin_path();
-                self.context_2d
-                    .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
-                    .unwrap();
-                self.context_2d.fill();
+                let stroke =
+                    js_sys::Array::from_iter([js_sys::Number::from(10.0f64), 10.0f64.into()]);
+                self.context_2d.set_line_dash(&stroke.into()).unwrap();
+                self.context_2d.stroke_with_path(&curve);
             }
         }
 
@@ -2050,7 +2069,7 @@ impl Renderer {
 
         if let Some(active_label_idx) = self.active_label_idx {
             if label_idx == active_label_idx {
-                self.update_selections_config_buffer();
+                self.update_datums_config_buffer();
             }
         }
     }
@@ -2562,14 +2581,8 @@ impl Renderer {
                     .get_selection_segment_info_in_range(datums_range)
                     .iter()
                 {
-                    let (offset_x, range, use_low_color) = match *segment {
-                        selection::SelectionSegmentInfo::Visible { rank, range } => {
-                            (axis.selection_offset_at_rank(rank).x, range, 0)
-                        }
-                        selection::SelectionSegmentInfo::Invisible { rank, range } => {
-                            (axis.selection_offset_at_rank(rank).x, range, 1)
-                        }
-                    };
+                    let (offset_x, range) =
+                        (axis.selection_offset_at_rank(segment.rank).x, segment.range);
 
                     segments.push(buffers::SelectionLineInfo {
                         axis: axis_index as u32,
@@ -2577,37 +2590,28 @@ impl Renderer {
                         use_left: 0,
                         offset_x,
                         color_idx: active_label_idx as u32,
-                        use_low_color,
                         range: wgsl::Vec2(range),
                     });
                 }
 
-                for range in curve_builder
-                    .get_visible_selection_ranges_in_range(datums_range)
-                    .iter()
-                {
+                for range in curve_builder.get_group_ranges_between(datums_range).iter() {
                     segments.push(buffers::SelectionLineInfo {
                         axis: axis_index as u32,
                         use_color: 0,
                         use_left: 1,
                         offset_x: 0.0,
                         color_idx: 0,
-                        use_low_color: 0,
                         range: wgsl::Vec2(*range),
                     });
                 }
             } else {
-                for range in curve_builder
-                    .get_visible_selection_ranges_in_range(datums_range)
-                    .iter()
-                {
+                for range in curve_builder.get_group_ranges_between(datums_range).iter() {
                     segments.push(buffers::SelectionLineInfo {
                         axis: axis_index as u32,
                         use_color: 0,
                         use_left: 0,
                         offset_x: 0.0,
                         color_idx: 0,
-                        use_low_color: 0,
                         range: wgsl::Vec2(*range),
                     });
                 }

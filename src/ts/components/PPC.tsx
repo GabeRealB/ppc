@@ -288,7 +288,7 @@ const PPC = (props: Props) => {
                         }
                     }
 
-                    if (!colors.color) {
+                    if (colors.color === undefined || colors.color === null) {
                         rendererState.queue.setDefaultSelectedDatumColoring();
                     } else {
                         if (colors.color instanceof String) {

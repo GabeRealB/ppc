@@ -1290,8 +1290,9 @@ impl Axes {
                         let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
 
                         let selection = {
-                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                            curve_builder.get_visible_selection_containing(axis_value)
+                            // let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                            // curve_builder.get_visible_selection_containing(axis_value)
+                            None
                         };
 
                         if let Some(selection) = selection {

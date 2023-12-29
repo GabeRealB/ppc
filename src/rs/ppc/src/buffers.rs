@@ -188,7 +188,6 @@ pub struct SelectionLineInfo {
     pub use_left: u32,
     pub offset_x: f32,
     pub color_idx: u32,
-    pub use_low_color: u32,
     pub range: Vec2<f32>,
 }
 

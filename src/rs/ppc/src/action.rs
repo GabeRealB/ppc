@@ -327,6 +327,7 @@ impl CreateSelectionAction {
 struct SelectSelectionAction {
     axis: Rc<Axis>,
     moved: bool,
+    selection_idx: usize,
     active_label_idx: usize,
     easing_type: EasingType,
     selection: Selection,
@@ -348,6 +349,7 @@ impl SelectSelectionAction {
         Self {
             axis,
             moved: false,
+            selection_idx,
             active_label_idx,
             easing_type,
             selection,
@@ -372,7 +374,7 @@ impl SelectSelectionAction {
         self.selection.offset(offset);
 
         let mut curve_builder = self.curve_builder.clone();
-        curve_builder.add_selection(self.selection.clone());
+        curve_builder.insert_selection(self.selection.clone(), self.selection_idx);
 
         let datums_range = self.axis.visible_datums_range_normalized().into();
         self.axis
@@ -391,7 +393,7 @@ impl SelectSelectionAction {
 
         // If we moved the mouse we do add the modified selection.
         if self.moved {
-            curve_builder.add_selection(self.selection);
+            curve_builder.insert_selection(self.selection, self.selection_idx);
         }
 
         self.axis
@@ -410,6 +412,7 @@ struct SelectSelectionControlPointAction {
     axis: Rc<Axis>,
     moved: bool,
     lower_bound: bool,
+    selection_idx: usize,
     active_label_idx: usize,
     segment_idx: usize,
     easing_type: EasingType,
@@ -458,6 +461,7 @@ impl SelectSelectionControlPointAction {
             axis,
             moved: false,
             lower_bound,
+            selection_idx,
             active_label_idx,
             segment_idx,
             easing_type,
@@ -491,7 +495,7 @@ impl SelectSelectionControlPointAction {
         }
 
         let mut curve_builder = self.curve_builder.clone();
-        curve_builder.add_selection(self.selection.clone());
+        curve_builder.insert_selection(self.selection.clone(), self.selection_idx);
 
         let datums_range = self.axis.visible_datums_range_normalized().into();
         self.axis
@@ -513,10 +517,10 @@ impl SelectSelectionControlPointAction {
         if delete_segment {
             if !selection.segment_is_primary(self.segment_idx) {
                 selection.remove_segment(self.segment_idx);
-                curve_builder.add_selection(selection);
+                curve_builder.insert_selection(selection, self.selection_idx);
             }
         } else {
-            curve_builder.add_selection(selection);
+            curve_builder.insert_selection(selection, self.selection_idx);
         }
 
         self.axis

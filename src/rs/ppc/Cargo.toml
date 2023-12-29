@@ -99,6 +99,7 @@ features = [
     "gpu_map_mode",
     "gpu_shader_stage",
     "gpu_texture_usage",
+    "Path2d",
     "CanvasRenderingContext2d",
     "TextMetrics",
     "HtmlCanvasElement",

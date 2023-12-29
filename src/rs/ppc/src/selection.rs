@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 use crate::{
     lerp::InverseLerp,
@@ -56,12 +56,13 @@ impl SelectionCurve {
 pub struct SelectionCurveBuilder {
     selections: Vec<Selection>,
     selection_infos: Vec<SelectionInfo>,
+    selection_groups: Vec<SelectionGroup>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
-pub enum SelectionSegmentInfo {
-    Visible { rank: usize, range: [f32; 2] },
-    Invisible { rank: usize, range: [f32; 2] },
+pub struct SelectionSegmentInfo {
+    pub rank: usize,
+    pub range: [f32; 2],
 }
 
 impl SelectionCurveBuilder {
@@ -69,6 +70,7 @@ impl SelectionCurveBuilder {
         Self {
             selections: Vec::new(),
             selection_infos: Vec::new(),
+            selection_groups: Vec::new(),
         }
     }
 
@@ -112,40 +114,30 @@ impl SelectionCurveBuilder {
         control_points.into()
     }
 
-    pub fn get_curve_control_points(&self) -> Box<[[f32; 2]]> {
+    pub fn get_curve_control_points(&self) -> Box<[Vec<[f32; 2]>]> {
         let mut control_points = Vec::new();
-        for (info, selection) in self.selection_infos.iter().zip(&self.selections) {
-            for visible in &info.visible_ranges {
-                let visible_range = visible[0]..=visible[1];
-                let first_segment = selection.segment_containing(visible[0]).unwrap();
-                let last_segment = selection.segment_containing(visible[1]).unwrap();
-
-                for segment in &selection.segments[first_segment..=last_segment] {
-                    match segment {
-                        SelectionSegment::Primary { range, values } => {
-                            if visible_range.contains(&range[0]) {
-                                control_points.push([range[0], values[0]])
-                            }
-
-                            if visible_range.contains(&range[1]) {
-                                control_points.push([range[1], values[1]])
-                            }
-                        }
-                        SelectionSegment::EasingLeft {
-                            end_pos, end_value, ..
-                        }
-                        | SelectionSegment::EasingRight {
-                            end_pos, end_value, ..
-                        } => {
-                            if visible_range.contains(end_pos) {
-                                control_points.push([*end_pos, *end_value]);
-                            }
-                        }
+        for selection in &self.selections {
+            let mut cp = Vec::new();
+            for segment in &selection.segments {
+                match segment {
+                    SelectionSegment::Primary { range, values } => {
+                        cp.push([range[0], values[0]]);
+                        cp.push([range[1], values[1]])
+                    }
+                    SelectionSegment::EasingLeft {
+                        end_pos, end_value, ..
+                    }
+                    | SelectionSegment::EasingRight {
+                        end_pos, end_value, ..
+                    } => {
+                        cp.push([*end_pos, *end_value]);
                     }
                 }
             }
+            if !cp.is_empty() {
+                control_points.push(cp);
+            }
         }
-
         control_points.into()
     }
 
@@ -160,95 +152,20 @@ impl SelectionCurveBuilder {
             .next()
     }
 
-    pub fn get_visible_selection_containing(&self, value: f32) -> Option<usize> {
-        self.selection_infos
-            .iter()
-            .enumerate()
-            .filter(|&(_, info)| {
-                info.visible_ranges
-                    .iter()
-                    .any(|&[start, end]| (start..=end).contains(&value))
-            })
-            .map(|(i, _)| i)
-            .next()
-    }
-
-    pub fn get_visible_selection_ranges_in_range(&self, [min, max]: [f32; 2]) -> Box<[[f32; 2]]> {
-        let mut ranges = Vec::new();
-        for info in &self.selection_infos {
-            if info.range[0] > max || info.range[1] < min {
+    pub fn get_group_ranges_between(&self, [min, max]: [f32; 2]) -> Box<[[f32; 2]]> {
+        let range = min..=max;
+        let mut groups = Vec::new();
+        for group in &self.selection_groups {
+            let [start, end] = group.range;
+            if !range.contains(&start) && !range.contains(&end) {
                 continue;
             }
 
-            for [start, end] in &info.visible_ranges {
-                let segment = [start.max(min), end.min(max)];
-                if segment[0] > max || segment[1] < min {
-                    continue;
-                }
-
-                if ranges.is_empty() {
-                    ranges.push(segment);
-                    continue;
-                }
-
-                let start_idx =
-                    match ranges.binary_search_by(|[min, _]| min.partial_cmp(start).unwrap()) {
-                        Ok(i) => i,
-                        Err(i) => i,
-                    };
-
-                let end_idx =
-                    match ranges.binary_search_by(|[_, max]| max.partial_cmp(end).unwrap()) {
-                        Ok(i) => i,
-                        Err(i) => i,
-                    };
-
-                // When start end end are inverted it indicates that the new segment lies
-                // within the segment at end idx.
-                if start_idx > end_idx {
-                    continue;
-                }
-
-                // Remove all segments in the range [start, end), as we definitely know
-                // that the new segment covers them completely.
-                ranges.drain(start_idx..end_idx);
-
-                // Having removed all segments that are completely covered, we only have
-                // to adapt the segments directly preceding and following our new segment.
-                let previous_idx = start_idx.wrapping_sub(1);
-                let next_idx = start_idx;
-
-                let appended_to_previous =
-                    if let Some([previous_start, previous_end]) = ranges.get_mut(previous_idx) {
-                        if (*previous_start..=*previous_end).contains(&segment[0]) {
-                            *previous_end = segment[1];
-                            true
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-
-                let appended_to_next =
-                    if let Some([previous_start, previous_end]) = ranges.get_mut(next_idx) {
-                        if (*previous_start..=*previous_end).contains(&segment[1]) {
-                            *previous_start = segment[0];
-                            true
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-
-                if !(appended_to_previous && appended_to_next) {
-                    ranges.insert(start_idx, segment);
-                }
-            }
+            let start = start.clamp(min, max);
+            let end = end.clamp(min, max);
+            groups.push([start, end]);
         }
-
-        ranges.into()
+        groups.into()
     }
 
     pub fn get_selection_segment_info_in_range(
@@ -261,29 +178,12 @@ impl SelectionCurveBuilder {
                 continue;
             }
 
-            for [start, end] in &info.visible_ranges {
-                let segment = [start.max(min), end.min(max)];
-                if segment[0] > max || segment[1] < min {
-                    continue;
-                }
-
-                segments.push(SelectionSegmentInfo::Visible {
-                    rank: info.rank,
-                    range: segment,
-                });
-            }
-
-            for [start, end] in &info.invisible_ranges {
-                let segment = [start.max(min), end.min(max)];
-                if segment[0] > max || segment[1] < min {
-                    continue;
-                }
-
-                segments.push(SelectionSegmentInfo::Invisible {
-                    rank: info.rank,
-                    range: segment,
-                });
-            }
+            let [start, end] = info.range;
+            let range = [start.max(min), end.min(max)];
+            segments.push(SelectionSegmentInfo {
+                rank: info.rank,
+                range,
+            });
         }
 
         segments.into()
@@ -314,190 +214,127 @@ impl SelectionCurveBuilder {
 
     fn rebuild_selection_infos(&mut self) {
         self.selection_infos.clear();
+        self.selection_groups.clear();
 
-        // Determine which selections are covered by other selections.
+        // Determine the groups of the selections.
         for (i, selection) in self.selections.iter().enumerate() {
             let selection_range = selection.get_selection_range();
-
-            // Selections that appear later in the list "cover" prior selections.
-            for previous_selection_info in &mut self.selection_infos {
-                let r1 = selection_range[0]..=selection_range[1];
-                let r2 = previous_selection_info.range[0]..=previous_selection_info.range[1];
-
-                if r1.contains(&previous_selection_info.range[0])
-                    || r1.contains(&previous_selection_info.range[1])
-                    || r2.contains(&selection_range[0])
-                    || r2.contains(&selection_range[1])
-                {
-                    previous_selection_info.add_coverer(i);
-                }
-            }
-
             self.selection_infos
-                .push(SelectionInfo::new(selection_range));
+                .push(SelectionInfo::new(0, selection_range));
+            SelectionGroup::add_selection_to_groups(&mut self.selection_groups, i, selection_range);
         }
 
-        // Determine the ranges that are and are not covered for each selection.
-        for i in (0..self.selection_infos.len()).rev() {
-            let mut info = std::mem::take(&mut self.selection_infos[i]);
+        // Propagate the groups to the selection and compute the ranks.
+        for (group_idx, group) in self.selection_groups.iter().enumerate() {
+            let selections = group.selections.iter().cloned().collect::<Vec<_>>();
+            for (i, &selection) in selections.iter().enumerate() {
+                let info: &mut SelectionInfo = &mut self.selection_infos[selection];
+                info.group = group_idx;
 
-            // Iterate each selection covering this and "chip away" from the
-            // visible range.
-            let covered_by = std::mem::take(&mut info.covered_by);
-            for &coverer_idx in &covered_by {
-                let coverer = &self.selection_infos[coverer_idx];
-                let covered_range = coverer.range;
-                info.remove_visible_range(covered_range);
+                let mut rank = 0;
+                let [range_start, range_end] = info.range;
+                let range = range_start..=range_end;
+                for &other in &selections[..i] {
+                    let other_info = &self.selection_infos[other];
+                    let [other_range_start, other_range_end] = other_info.range;
+                    let other_range = other_range_start..=other_range_end;
+
+                    if range.contains(&other_range_start)
+                        || range.contains(&other_range_end)
+                        || other_range.contains(&range_start)
+                        || other_range.contains(&range_end)
+                    {
+                        rank = rank.max(other_info.rank + 1);
+                    }
+                }
+
+                self.selection_infos[selection].rank = rank;
             }
-            info.covered_by = covered_by;
+        }
+    }
+}
 
-            // Compute the invisible ranges.
-            info.compute_invisible_ranges();
-            self.selection_infos[i] = info;
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
+struct SelectionGroup {
+    range: [f32; 2],
+    selections: BTreeSet<usize>,
+}
+
+impl SelectionGroup {
+    fn new(range: [f32; 2], selection: usize) -> Self {
+        let mut selections = BTreeSet::new();
+        selections.insert(selection);
+
+        Self { range, selections }
+    }
+
+    fn add_selection_to_groups(
+        groups: &mut Vec<Self>,
+        selection_idx: usize,
+        selection_range: [f32; 2],
+    ) {
+        if groups.is_empty() {
+            groups.push(Self::new(selection_range, selection_idx));
+            return;
         }
 
-        // Determine the rank of each selection.
-        for i in (0..self.selection_infos.len()).rev() {
-            let mut info = std::mem::take(&mut self.selection_infos[i]);
-            info.rank = info
-                .covered_by
-                .iter()
-                .copied()
-                .map(|coverer| self.selection_infos[coverer].rank + 1)
-                .max()
-                .unwrap_or(0);
-            self.selection_infos[i] = info;
+        // Find the index of the first and last group, that can contain the range.
+        let start_idx = match groups
+            .binary_search_by(|g| g.range[1].partial_cmp(&selection_range[0]).unwrap())
+        {
+            Ok(i) | Err(i) => i,
+        };
+
+        let end_idx = match groups
+            .binary_search_by(|g| g.range[0].partial_cmp(&selection_range[1]).unwrap())
+        {
+            Ok(i) | Err(i) => i,
+        };
+
+        let mut overlapping = groups.drain(start_idx..end_idx).collect::<Vec<_>>();
+        let insertion_idx = match overlapping
+            .binary_search_by(|g| g.range[1].partial_cmp(&selection_range[0]).unwrap())
+        {
+            Ok(i) | Err(i) => i,
+        };
+        overlapping.insert(insertion_idx, Self::new(selection_range, selection_idx));
+
+        let mut new_groups: Vec<SelectionGroup> = vec![overlapping.remove(0)];
+        for mut group in overlapping {
+            let range = group.range[0]..=group.range[1];
+
+            let last_group = new_groups.last_mut().unwrap();
+            let last_group_range = last_group.range[0]..=last_group.range[1];
+            if range.contains(&last_group.range[0])
+                || range.contains(&last_group.range[1])
+                || last_group_range.contains(&group.range[0])
+                || last_group_range.contains(&group.range[1])
+            {
+                last_group.range[0] = last_group.range[0].min(group.range[0]);
+                last_group.range[1] = last_group.range[1].max(group.range[1]);
+                last_group.selections.append(&mut group.selections);
+            } else {
+                new_groups.push(group);
+            }
         }
+
+        groups.splice(start_idx..start_idx, new_groups);
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
 struct SelectionInfo {
     rank: usize,
+    group: usize,
     range: [f32; 2],
-    covered_by: VecDeque<usize>,
-    visible_ranges: Vec<[f32; 2]>,
-    invisible_ranges: Vec<[f32; 2]>,
 }
 
 impl SelectionInfo {
-    fn new(range: [f32; 2]) -> Self {
+    fn new(group: usize, range: [f32; 2]) -> Self {
         Self {
             rank: 0,
+            group,
             range,
-            covered_by: VecDeque::new(),
-            visible_ranges: vec![range],
-            invisible_ranges: vec![],
-        }
-    }
-
-    fn add_coverer(&mut self, coverer: usize) {
-        self.covered_by.push_front(coverer)
-    }
-
-    fn remove_visible_range(&mut self, range: [f32; 2]) {
-        // If there are no visible ranges left we can simply ignore it.
-        if self.visible_ranges.is_empty() {
-            return;
-        }
-
-        // Clamp the range to the remaining visible range of the selection.
-        let min = self.visible_ranges.first().unwrap()[0];
-        let max = self.visible_ranges.last().unwrap()[1];
-        let range = [range[0].clamp(min, max), range[1].clamp(min, max)];
-        if range[0] == range[1] {
-            return;
-        }
-
-        let start_idx = match self
-            .visible_ranges
-            .binary_search_by(|s| s[0].partial_cmp(&range[0]).unwrap())
-        {
-            Ok(i) => i,
-            Err(i) => i,
-        };
-
-        let end_idx = match self
-            .visible_ranges
-            .binary_search_by(|s| s[1].partial_cmp(&range[1]).unwrap())
-        {
-            Ok(i) => i,
-            Err(i) => i,
-        };
-
-        // When start end end are inverted it indicates that the segment lies
-        // within the segment at end idx.
-        if start_idx > end_idx {
-            let [l, h] = self.visible_ranges[end_idx];
-            let left = [l, range[0]];
-            let right = [range[1], h];
-
-            if left[0] == left[1] {
-                self.visible_ranges[end_idx] = range;
-
-                if right[0] != right[1] {
-                    self.visible_ranges.insert(end_idx + 1, right);
-                }
-            } else {
-                self.visible_ranges[end_idx] = left;
-                self.visible_ranges.insert(end_idx + 1, range);
-
-                if right[0] != right[1] {
-                    self.visible_ranges.insert(end_idx + 2, right);
-                }
-            }
-
-            return;
-        }
-
-        // Remove all segments in the range [start, end), as we definitely know
-        // that the segment covers them completely.
-        self.visible_ranges.drain(start_idx..end_idx);
-
-        // Having removed all segments that are completely covered, we only have
-        // to adapt the segments directly preceding and following the segment.
-        let previous_idx = start_idx.wrapping_sub(1);
-        let next_idx = start_idx;
-
-        if let Some(seg) = self.visible_ranges.get_mut(next_idx) {
-            if seg[0] < range[1] {
-                *seg = [range[1], seg[1]];
-            }
-
-            if seg[0] == seg[1] {
-                self.visible_ranges.remove(next_idx);
-            }
-        }
-
-        if let Some(seg) = self.visible_ranges.get_mut(previous_idx) {
-            if seg[1] > range[0] {
-                *seg = [seg[0], range[0]];
-            }
-
-            if seg[0] == seg[1] {
-                self.visible_ranges.remove(previous_idx);
-            }
-        }
-    }
-
-    fn compute_invisible_ranges(&mut self) {
-        if self.visible_ranges.is_empty() {
-            self.invisible_ranges.push(self.range);
-        } else {
-            let mut last_end = self.range[0];
-
-            // If we detect a hole, we close it up.
-            for &[start, end] in &self.visible_ranges {
-                if start > last_end {
-                    self.invisible_ranges.push([last_end, start]);
-                }
-                last_end = end;
-            }
-
-            // Make sure that we covered the entire range.
-            if last_end < self.range[1] {
-                self.invisible_ranges.push([last_end, self.range[1]]);
-            }
         }
     }
 }

@@ -22,7 +22,6 @@ struct SelectionLineInfo {
     use_left: u32,
     offset_x: f32,
     color_idx: u32,
-    use_low_color: u32,
     range: vec2<f32>,
 }
 
@@ -152,7 +151,7 @@ fn fragment_main(
     let sample = mix(sample_1, sample_2, t);
 
     if selection.use_color != 0u {
-        let color_xyz = select(colors[selection.color_idx].color_high, colors[selection.color_idx].color_low, selection.use_low_color == 1u);
+        let color_xyz = colors[selection.color_idx].color_high;
         let color = xyz_to_srgb(color_xyz.rgb);
         return vec4<f32>(color * alpha, alpha);
     } else {
