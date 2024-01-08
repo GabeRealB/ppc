@@ -2138,6 +2138,16 @@ impl Renderer {
                         self.active_label_idx,
                     ))
                 }
+                axis::Element::Group { axis, group_idx } => {
+                    if let Some(active_label_idx) = self.active_label_idx {
+                        self.active_action = Some(action::Action::new_select_group_action(
+                            axis,
+                            group_idx,
+                            active_label_idx,
+                            self.labels[active_label_idx].easing,
+                        ))
+                    }
+                }
                 axis::Element::Selection {
                     axis,
                     selection_idx,
@@ -2214,6 +2224,11 @@ impl Renderer {
                     .canvas_2d
                     .style()
                     .set_property("cursor", "ew-resize")
+                    .unwrap(),
+                Some(axis::Element::Group { .. }) => self
+                    .canvas_2d
+                    .style()
+                    .set_property("cursor", "ns-resize")
                     .unwrap(),
                 Some(axis::Element::Selection { .. }) => self
                     .canvas_2d

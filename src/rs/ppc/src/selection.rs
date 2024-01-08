@@ -74,6 +74,22 @@ impl SelectionCurveBuilder {
         }
     }
 
+    pub fn remove_group(&mut self, group_idx: usize) {
+        let group = &self.selection_groups[group_idx];
+        for &selection_idx in group.selections.iter().rev() {
+            self.selections.remove(selection_idx);
+        }
+        self.rebuild_selection_infos();
+    }
+
+    pub fn offset_group(&mut self, group_idx: usize, offset: f32) {
+        let group = &self.selection_groups[group_idx];
+        for &selection_idx in &group.selections {
+            self.selections[selection_idx].offset(offset);
+        }
+        self.rebuild_selection_infos();
+    }
+
     pub fn get_selection(&self, index: usize) -> &Selection {
         &self.selections[index]
     }
@@ -148,6 +164,15 @@ impl SelectionCurveBuilder {
             .filter(|&(_, info)| {
                 info.rank == rank && (info.range[0]..=info.range[1]).contains(&value)
             })
+            .map(|(i, _)| i)
+            .next()
+    }
+
+    pub fn get_group_containing(&self, value: f32) -> Option<usize> {
+        self.selection_groups
+            .iter()
+            .enumerate()
+            .filter(|&(_, group)| (group.range[0]..=group.range[1]).contains(&value))
             .map(|(i, _)| i)
             .next()
     }

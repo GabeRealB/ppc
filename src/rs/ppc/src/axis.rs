@@ -428,14 +428,22 @@ impl Axis {
     }
 
     pub fn curves_bounding_box(&self) -> Aabb<LocalSpace> {
-        let start = Position::new((-0.4, 0.0));
+        let start = if self.is_expanded() {
+            Position::new((-0.4, 0.0))
+        } else {
+            Position::new((0.0, 1.0))
+        };
         let end = Position::new((0.0, 1.0));
         Aabb::new(start, end)
     }
 
     pub fn selections_bounding_box(&self, active_label_idx: usize) -> Aabb<LocalSpace> {
         let curve_builders = self.curve_builders.borrow();
-        let max_rank = curve_builders[active_label_idx].max_rank();
+        let max_rank = if !self.is_expanded() {
+            0
+        } else {
+            curve_builders[active_label_idx].max_rank()
+        };
 
         let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
         let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
@@ -1219,6 +1227,123 @@ impl Axes {
             }
         }
 
+        let handle_collapsed = |ax: Rc<Axis>, position: Position<LocalSpace>, active_label_idx| {
+            // Check if we are hovering a group.
+            let range = ax.axis_line_range();
+            let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+
+            let group = curve_builder.get_group_containing(axis_value);
+            if let Some(group) = group {
+                drop(curve_builder);
+                return Some(Element::Group {
+                    axis: ax,
+                    group_idx: group,
+                });
+            }
+
+            None
+        };
+
+        let handle_expanded = |ax: Rc<Axis>, position, active_label_idx| {
+            // Check if we are hovering a selection.
+            let bounding_box = ax.selections_bounding_box(active_label_idx);
+            if bounding_box.contains_point(&position) {
+                if let Some(rank) = ax.selection_rank_at_position(&position, active_label_idx) {
+                    let range = ax.axis_line_range();
+                    let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+
+                    let selection = {
+                        let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                        curve_builder.get_selection_containing(axis_value, rank)
+                    };
+
+                    if let Some(selection) = selection {
+                        let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                        let sel = curve_builder.get_selection(selection);
+                        let segment = sel.segment_containing(axis_value).unwrap();
+
+                        let lower_bound = sel.lower_bound(segment);
+                        let upper_bound = sel.upper_bound(segment);
+                        drop(curve_builder);
+
+                        let segment_length = upper_bound - lower_bound;
+                        let segment_padding = (SELECTION_CONTROL_POINT_PADDING_REL
+                            * segment_length)
+                            .min(MAX_SELECTION_CONTROL_POINT_PADDING);
+
+                        let lower_range = lower_bound..=lower_bound + segment_padding;
+                        let upper_range = upper_bound - segment_padding..=upper_bound;
+
+                        if lower_range.contains(&axis_value) || upper_range.contains(&axis_value) {
+                            return Some(Element::SelectionControlPoint {
+                                axis: ax,
+                                selection_idx: selection,
+                                segment_idx: segment,
+                            });
+                        } else {
+                            return Some(Element::Selection {
+                                axis: ax,
+                                selection_idx: selection,
+                            });
+                        }
+                    }
+                }
+            }
+
+            let control_points_radius = self.control_points_radius();
+            let bounding_box = ax.curves_bounding_box();
+            if bounding_box.contains_point(&position) {
+                let range = ax.axis_line_range();
+                let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+
+                let selection = {
+                    // let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                    // curve_builder.get_visible_selection_containing(axis_value)
+                    None
+                };
+
+                if let Some(selection) = selection {
+                    let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                    let sel = curve_builder.get_selection(selection);
+                    let segment = sel.segment_containing(axis_value).unwrap();
+
+                    let lower_bound = sel.lower_bound(segment);
+                    let upper_bound = sel.upper_bound(segment);
+
+                    let lower_value = sel.lower_value(segment);
+                    let upper_value = sel.upper_value(segment);
+                    drop(curve_builder);
+
+                    let lower_position = range.0.lerp(range.1, lower_bound)
+                        + ax.curve_offset_at_curve_value(lower_value);
+                    let upper_position = range.0.lerp(range.1, upper_bound)
+                        + ax.curve_offset_at_curve_value(upper_value);
+
+                    let offset = Offset::<ScreenSpace>::new((
+                        control_points_radius.0,
+                        control_points_radius.0,
+                    ))
+                    .transform(&self.space_transformer())
+                    .transform(&ax.space_transformer());
+
+                    let lower_bb = Aabb::new(lower_position - offset, lower_position + offset);
+                    let upper_bb = Aabb::new(upper_position - offset, upper_position + offset);
+
+                    if lower_bb.contains_point(&position) || upper_bb.contains_point(&position) {
+                        return Some(Element::CurveControlPoint {
+                            axis: ax,
+                            selection_idx: selection,
+                            segment_idx: segment,
+                            is_upper: upper_bb.contains_point(&position),
+                        });
+                    }
+                }
+            }
+
+            None
+        };
+
         for ax in self.visible_axes() {
             let position = position.transform(&ax.space_transformer());
 
@@ -1234,109 +1359,18 @@ impl Axes {
                 return Some(Element::Label { axis: ax });
             }
 
-            // Check if we are hovering a selection.
-            if let Some(active_label_idx) = active_label_idx {
-                let bounding_box = ax.selections_bounding_box(active_label_idx);
-                if bounding_box.contains_point(&position) {
-                    if let Some(rank) = ax.selection_rank_at_position(&position, active_label_idx) {
-                        let range = ax.axis_line_range();
-                        let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
-
-                        let selection = {
-                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                            curve_builder.get_selection_containing(axis_value, rank)
-                        };
-
-                        if let Some(selection) = selection {
-                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                            let sel = curve_builder.get_selection(selection);
-                            let segment = sel.segment_containing(axis_value).unwrap();
-
-                            let lower_bound = sel.lower_bound(segment);
-                            let upper_bound = sel.upper_bound(segment);
-                            drop(curve_builder);
-
-                            let segment_length = upper_bound - lower_bound;
-                            let segment_padding = (SELECTION_CONTROL_POINT_PADDING_REL
-                                * segment_length)
-                                .min(MAX_SELECTION_CONTROL_POINT_PADDING);
-
-                            let lower_range = lower_bound..=lower_bound + segment_padding;
-                            let upper_range = upper_bound - segment_padding..=upper_bound;
-
-                            if lower_range.contains(&axis_value)
-                                || upper_range.contains(&axis_value)
-                            {
-                                return Some(Element::SelectionControlPoint {
-                                    axis: ax,
-                                    selection_idx: selection,
-                                    segment_idx: segment,
-                                });
-                            } else {
-                                return Some(Element::Selection {
-                                    axis: ax,
-                                    selection_idx: selection,
-                                });
-                            }
-                        }
-                    }
-                }
-
+            let el = if let Some(active_label_idx) = active_label_idx {
                 if ax.is_expanded() {
-                    let control_points_radius = self.control_points_radius();
-                    let bounding_box = ax.curves_bounding_box();
-                    if bounding_box.contains_point(&position) {
-                        let range = ax.axis_line_range();
-                        let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
-
-                        let selection = {
-                            // let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                            // curve_builder.get_visible_selection_containing(axis_value)
-                            None
-                        };
-
-                        if let Some(selection) = selection {
-                            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                            let sel = curve_builder.get_selection(selection);
-                            let segment = sel.segment_containing(axis_value).unwrap();
-
-                            let lower_bound = sel.lower_bound(segment);
-                            let upper_bound = sel.upper_bound(segment);
-
-                            let lower_value = sel.lower_value(segment);
-                            let upper_value = sel.upper_value(segment);
-                            drop(curve_builder);
-
-                            let lower_position = range.0.lerp(range.1, lower_bound)
-                                + ax.curve_offset_at_curve_value(lower_value);
-                            let upper_position = range.0.lerp(range.1, upper_bound)
-                                + ax.curve_offset_at_curve_value(upper_value);
-
-                            let offset = Offset::<ScreenSpace>::new((
-                                control_points_radius.0,
-                                control_points_radius.0,
-                            ))
-                            .transform(&self.space_transformer())
-                            .transform(&ax.space_transformer());
-
-                            let lower_bb =
-                                Aabb::new(lower_position - offset, lower_position + offset);
-                            let upper_bb =
-                                Aabb::new(upper_position - offset, upper_position + offset);
-
-                            if lower_bb.contains_point(&position)
-                                || upper_bb.contains_point(&position)
-                            {
-                                return Some(Element::CurveControlPoint {
-                                    axis: ax,
-                                    selection_idx: selection,
-                                    segment_idx: segment,
-                                    is_upper: upper_bb.contains_point(&position),
-                                });
-                            }
-                        }
-                    }
+                    handle_expanded(ax.clone(), position, active_label_idx)
+                } else {
+                    handle_collapsed(ax.clone(), position, active_label_idx)
                 }
+            } else {
+                None
+            };
+
+            if el.is_some() {
+                return el;
             }
 
             // Check if we are hovering the axis line.
@@ -1524,6 +1558,10 @@ impl Debug for Axes {
 pub enum Element {
     Label {
         axis: Rc<Axis>,
+    },
+    Group {
+        axis: Rc<Axis>,
+        group_idx: usize,
     },
     Selection {
         axis: Rc<Axis>,

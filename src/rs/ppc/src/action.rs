@@ -18,6 +18,7 @@ pub struct Action {
 #[derive(Debug)]
 enum ActionInner {
     MoveAxis(MoveAxisAction),
+    SelectGroup(SelectGroupAction),
     CreateSelection(CreateSelectionAction),
     SelectSelection(SelectSelectionAction),
     SelectSelectionControlPoint(SelectSelectionControlPointAction),
@@ -32,6 +33,22 @@ impl Action {
     ) -> Self {
         Self {
             inner: ActionInner::MoveAxis(MoveAxisAction::new(axis, event, active_label_idx)),
+        }
+    }
+
+    pub fn new_select_group_action(
+        axis: Rc<Axis>,
+        group_idx: usize,
+        active_label_idx: usize,
+        easing_type: EasingType,
+    ) -> Self {
+        Self {
+            inner: ActionInner::SelectGroup(SelectGroupAction::new(
+                axis,
+                group_idx,
+                active_label_idx,
+                easing_type,
+            )),
         }
     }
 
@@ -112,6 +129,7 @@ impl Action {
     pub fn update(&mut self, event: PointerEvent) -> Event {
         match &mut self.inner {
             ActionInner::MoveAxis(e) => e.update(event),
+            ActionInner::SelectGroup(e) => e.update(event),
             ActionInner::CreateSelection(e) => e.update(event),
             ActionInner::SelectSelection(e) => e.update(event),
             ActionInner::SelectSelectionControlPoint(e) => e.update(event),
@@ -122,6 +140,7 @@ impl Action {
     pub fn finish(self) -> Event {
         match self.inner {
             ActionInner::MoveAxis(e) => e.finish(),
+            ActionInner::SelectGroup(e) => e.finish(),
             ActionInner::CreateSelection(e) => e.finish(),
             ActionInner::SelectSelection(e) => e.finish(),
             ActionInner::SelectSelectionControlPoint(e) => e.finish(),
@@ -153,9 +172,7 @@ impl MoveAxisAction {
 
     fn update(&mut self, event: PointerEvent) -> Event {
         let offset = {
-            let position =
-                Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
-
+            let position = Position::<ScreenSpace>::new((event.offset_x() as f32, 0.0));
             if position.x != self.start_position.x {
                 self.moved = true;
             }
@@ -219,6 +236,92 @@ impl MoveAxisAction {
         } else {
             Event::AXIS_POSITION_CHANGE
         }
+    }
+}
+
+#[derive(Debug)]
+struct SelectGroupAction {
+    axis: Rc<Axis>,
+    moved: bool,
+    offset: f32,
+    group_idx: usize,
+    active_label_idx: usize,
+    easing_type: EasingType,
+    curve_builder: SelectionCurveBuilder,
+}
+
+impl SelectGroupAction {
+    fn new(
+        axis: Rc<Axis>,
+        group_idx: usize,
+        active_label_idx: usize,
+        easing_type: EasingType,
+    ) -> Self {
+        let curve_builder = axis
+            .borrow_selection_curve_builder(active_label_idx)
+            .clone();
+
+        Self {
+            axis,
+            moved: false,
+            offset: 0.0,
+            group_idx,
+            active_label_idx,
+            easing_type,
+            curve_builder,
+        }
+    }
+
+    fn update(&mut self, event: PointerEvent) -> Event {
+        if event.movement_y() == 0 {
+            return Event::NONE;
+        }
+        self.moved = true;
+
+        let offset = {
+            let axes = self.axis.axes();
+            let axes = axes.borrow();
+            let offset = Offset::<ScreenSpace>::new((0.0, event.movement_y() as f32));
+            let offset = offset.transform(&axes.space_transformer());
+            let offset = offset.transform(&self.axis.space_transformer());
+
+            let (axis_start, axis_end) = self.axis.axis_line_range();
+            -offset.y / (axis_end.y - axis_start.y).abs()
+        };
+        self.offset += offset;
+
+        let mut curve_builder = self.curve_builder.clone();
+        curve_builder.offset_group(self.group_idx, self.offset);
+
+        let datums_range = self.axis.visible_datums_range_normalized().into();
+        self.axis
+            .borrow_selection_curve_mut(self.active_label_idx)
+            .set_curve(curve_builder.build(datums_range, self.easing_type));
+        *self
+            .axis
+            .borrow_selection_curve_builder_mut(self.active_label_idx) = curve_builder;
+
+        Event::SELECTIONS_CHANGE
+    }
+
+    fn finish(self) -> Event {
+        let mut curve_builder = self.curve_builder;
+        let datums_range = self.axis.visible_datums_range_normalized().into();
+
+        if !self.moved {
+            curve_builder.remove_group(self.group_idx);
+        } else if self.offset != 0.0 {
+            curve_builder.offset_group(self.group_idx, self.offset);
+        }
+
+        self.axis
+            .borrow_selection_curve_mut(self.active_label_idx)
+            .set_curve(curve_builder.build(datums_range, self.easing_type));
+        *self
+            .axis
+            .borrow_selection_curve_builder_mut(self.active_label_idx) = curve_builder;
+
+        Event::SELECTIONS_CHANGE
     }
 }
 
@@ -363,8 +466,7 @@ impl SelectSelectionAction {
         let offset = {
             let axes = self.axis.axes();
             let axes = axes.borrow();
-            let offset =
-                Offset::<ScreenSpace>::new((event.movement_x() as f32, event.movement_y() as f32));
+            let offset = Offset::<ScreenSpace>::new((0.0, event.movement_y() as f32));
             let offset = offset.transform(&axes.space_transformer());
             let offset = offset.transform(&self.axis.space_transformer());
 
