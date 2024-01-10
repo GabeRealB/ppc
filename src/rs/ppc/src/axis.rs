@@ -1297,23 +1297,18 @@ impl Axes {
                 let range = ax.axis_line_range();
                 let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
 
-                let selection = {
-                    // let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                    // curve_builder.get_visible_selection_containing(axis_value)
-                    None
-                };
+                let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+                for (selection_idx, selection) in curve_builder.selections().iter().enumerate() {
+                    let segment_idx = match selection.segment_containing(axis_value) {
+                        Some(x) => x,
+                        None => continue,
+                    };
 
-                if let Some(selection) = selection {
-                    let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                    let sel = curve_builder.get_selection(selection);
-                    let segment = sel.segment_containing(axis_value).unwrap();
+                    let lower_bound = selection.lower_bound(segment_idx);
+                    let upper_bound = selection.upper_bound(segment_idx);
 
-                    let lower_bound = sel.lower_bound(segment);
-                    let upper_bound = sel.upper_bound(segment);
-
-                    let lower_value = sel.lower_value(segment);
-                    let upper_value = sel.upper_value(segment);
-                    drop(curve_builder);
+                    let lower_value = selection.lower_value(segment_idx);
+                    let upper_value = selection.upper_value(segment_idx);
 
                     let lower_position = range.0.lerp(range.1, lower_bound)
                         + ax.curve_offset_at_curve_value(lower_value);
@@ -1331,10 +1326,11 @@ impl Axes {
                     let upper_bb = Aabb::new(upper_position - offset, upper_position + offset);
 
                     if lower_bb.contains_point(&position) || upper_bb.contains_point(&position) {
+                        drop(curve_builder);
                         return Some(Element::CurveControlPoint {
                             axis: ax,
-                            selection_idx: selection,
-                            segment_idx: segment,
+                            selection_idx,
+                            segment_idx,
                             is_upper: upper_bb.contains_point(&position),
                         });
                     }

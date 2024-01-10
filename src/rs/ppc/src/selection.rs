@@ -110,6 +110,10 @@ impl SelectionCurveBuilder {
         selection
     }
 
+    pub fn selections(&self) -> &[Selection] {
+        &self.selections
+    }
+
     pub fn get_selection_control_points(&self) -> Box<[(usize, f32)]> {
         let mut control_points = Vec::new();
         for (info, selection) in self.selection_infos.iter().zip(&self.selections) {

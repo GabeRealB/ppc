@@ -1386,7 +1386,7 @@ impl Renderer {
                         curve.line_to(x as f64, y as f64);
                     }
 
-                    if !(0.0..=1.0).contains(&axis_value) {
+                    if (0.0..=1.0).contains(&axis_value) {
                         self.context_2d.begin_path();
                         self.context_2d
                             .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
