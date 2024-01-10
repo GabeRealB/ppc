@@ -600,6 +600,10 @@ impl Selection {
                 if u > max { max.inv_lerp(l, u) } else { 1.0 },
             ];
 
+            if t_range[0] == t_range[1] {
+                continue;
+            }
+
             let easing_type = if self.segment_is_primary(i) {
                 EasingType::Linear
             } else {
