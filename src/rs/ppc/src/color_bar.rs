@@ -9,9 +9,16 @@ const OUTER_PADDING_REM: f32 = 2.0;
 const COLOR_BAR_PADDING_REM: f32 = 1.0;
 const COLOR_BAR_WIDTH_REM: f32 = 2.5;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ColorBarColorMode {
+    Color,
+    Probability,
+}
+
 #[allow(clippy::type_complexity)]
 pub struct ColorBar {
     visible: bool,
+    color_mode: ColorBarColorMode,
     label: Rc<str>,
     screen_size: (f32, f32),
     get_rem_length: Rc<dyn Fn(f32) -> Length<ViewSpace>>,
@@ -38,10 +45,15 @@ impl ColorBar {
         Self {
             visible: false,
             label: "".into(),
+            color_mode: ColorBarColorMode::Color,
             screen_size: (width, height),
             get_rem_length,
             get_text_length,
         }
+    }
+
+    pub fn color_mode(&self) -> ColorBarColorMode {
+        self.color_mode
     }
 
     pub fn label(&self) -> Rc<str> {
@@ -58,14 +70,17 @@ impl ColorBar {
 
     pub fn set_to_empty(&mut self) {
         self.label = "".into();
+        self.color_mode = ColorBarColorMode::Color;
     }
 
     pub fn set_to_label_probability(&mut self, label: &str) {
         self.label = format!("Probability {label}").into();
+        self.color_mode = ColorBarColorMode::Probability;
     }
 
     pub fn set_to_axis(&mut self, axis: &Axis) {
         self.label = axis.label();
+        self.color_mode = ColorBarColorMode::Color;
     }
 
     pub fn set_screen_size(&mut self, width: f32, height: f32) {

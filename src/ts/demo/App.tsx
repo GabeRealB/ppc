@@ -1,12 +1,15 @@
 /* eslint no-magic-numbers: 0 */
 import React, { Component } from 'react';
+import { Box, MenuItem, Select, Stack, FormControl, Typography, InputLabel, FormControlLabel, Checkbox, FormLabel, RadioGroup, Radio, FormGroup, Switch } from '@mui/material';
+import Slider from '@mui/material/Slider';
+import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Unstable_Grid2';
 
 import PPC from '../components/PPC';
 
 const EPSILON = 1.17549435082228750797e-38;
 
 class App extends Component {
-
     constructor(props) {
         super(props);
         this.state = {
@@ -65,7 +68,8 @@ class App extends Component {
                 showSelectionsBoundingBox: false,
                 showColorBarBoundingBox: false,
             },
-            demo_slider_value: EPSILON,
+            demo_slider_value_start: EPSILON,
+            demo_slider_value_end: 1.0,
             coloring_constant_value: 0.5,
             coloring_attribute: "v_1",
         };
@@ -77,215 +81,270 @@ class App extends Component {
     }
 
     render() {
+        const activeLabel = this.state["activeLabel"];
+        const demoSliderValueStart = this.state["demo_slider_value_start"];
+        const demoSliderValueEnd = this.state["demo_slider_value_end"];
+        const colorBarState = this.state["colorBar"];
+
+        let coloringMode;
+        switch (typeof (this.state["colors"].selected.color)) {
+            case 'number':
+                coloringMode = "constant";
+                break;
+            case 'string':
+                coloringMode = "attribute";
+            default:
+                if (this.state["colors"].selected.color.type === "probability") {
+                    coloringMode = "probability";
+                }
+        }
+        const constantColoringValue = this.state["coloring_constant_value"];
+        const attributeColoringValue = this.state["coloring_attribute"];
+        const colorMapValue = this.state["colors"].selected.scale;
+
+        const debugShowAxisBB = this.state["debug"].showAxisBoundingBox;
+        const debugShowLabelBB = this.state["debug"].showLabelBoundingBox;
+        const debugShowCurvesBB = this.state["debug"].showCurvesBoundingBox;
+        const debugShowAxisLineBB = this.state["debug"].showAxisLineBoundingBox;
+        const debugShowSelectionsBB = this.state["debug"].showSelectionsBoundingBox;
+        const debugShowColorBarBB = this.state["debug"].showColorBarBoundingBox;
+
         return (
-            <div style={{ display: "flex", width: "100%", height: "100%", alignItems: "flex-start" }} >
-                <div style={{ width: "85%", height: "100%", paddingLeft: "2rem", paddingRight: "2rem" }}>
-                    <PPC
-                        setProps={this.setProps}
-                        {...this.state}
-                    />
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(1, 1fr)", gap: "10px", gridAutoRows: "minmax(20px, auto)", alignItems: "flex-start", overflow: "auto" }}>
-                    <h2 style={{ gridRow: 1 }}>Labels</h2>
+            <Box style={{ height: "95%", padding: "2rem" }}>
+                <Grid container style={{ height: "100%" }} spacing={2}>
+                    <Grid xs={10}>
+                        <PPC
+                            setProps={this.setProps}
+                            {...this.state}
+                        />
+                    </Grid>
+                    <Grid xs={2}>
+                        <Stack
+                            spacing={2}
+                            justifyContent="flex-start"
+                            alignItems="flex-start"
+                            maxHeight={"95vh"}
+                            paddingX={"2rem"}
+                            style={{ overflow: "auto" }}
+                        >
+                            <Typography variant='h4'>Labels</Typography>
+                            <FormControl fullWidth>
+                                <InputLabel>Label</InputLabel>
+                                <Select
+                                    value={activeLabel}
+                                    label="Label"
+                                    onChange={e => {
+                                        this.setProps({ activeLabel: e.target.value });
+                                    }}
+                                >
+                                    <MenuItem value={"label_1"}>Label 1</MenuItem>
+                                    <MenuItem value={"label_2"}>Label 2</MenuItem>
+                                    <MenuItem value={"label_3"}>Label 3</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControl fullWidth>
+                                <FormLabel>Selection probability bounds</FormLabel>
+                                <Slider
+                                    min={EPSILON}
+                                    max={1.0}
+                                    step={EPSILON}
+                                    value={[demoSliderValueStart, demoSliderValueEnd]}
+                                    onChange={(e, value) => {
+                                        const labels = window.structuredClone(this.state["labels"]);
+                                        const activeLabel = this.state["activeLabel"];
+                                        labels[activeLabel]["selectionBounds"] = value;
+                                        this.setProps({ labels, demo_slider_value_start: value[0], demo_slider_value_end: value[1] })
+                                    }}
+                                />
+                            </FormControl>
 
-                    <label style={{ gridRow: 2, gridColumn: "1" }}>Label</label>
-                    <select style={{ gridRow: 2, gridColumn: "2" }} onChange={e => {
-                        const activeLabel = e.target.value;
-                        const demo_slider_value = "selectionThreshold" in this.state["labels"][activeLabel] ? this.state["labels"][activeLabel]["selectionThreshold"] : EPSILON;
+                            <Divider flexItem />
 
-                        this.setProps({ activeLabel: activeLabel, demo_slider_value: demo_slider_value })
-                    }}>
-                        <option value="label_1">Label 1</option>
-                        <option value="label_2">Label 2</option>
-                        <option value="label_3">Label 3</option>
-                    </select>
+                            <Typography variant='h4'>Color Scale</Typography>
+                            <FormControl fullWidth>
+                                <FormControlLabel
+                                    control={<Checkbox
+                                        checked={colorBarState === "visible"}
+                                        onChange={(e, checked) => {
+                                            if (checked) {
+                                                this.setProps({ colorBar: "visible" })
+                                            } else {
+                                                this.setProps({ colorBar: "hidden" })
+                                            }
+                                        }}
+                                    />}
+                                    label={"Show color scale"}
+                                />
+                            </FormControl>
+                            <FormControl fullWidth>
+                                <FormLabel>Coloring</FormLabel>
+                                <RadioGroup
+                                    value={coloringMode}
+                                    onChange={(e, value) => {
+                                        const colors = window.structuredClone(this.state["colors"]);
+                                        switch (value) {
+                                            case "constant":
+                                                colors.selected.color = this.state["coloring_constant_value"];
+                                                break;
+                                            case "attribute":
+                                                colors.selected.color = this.state["coloring_attribute"];
+                                                break;
+                                            case "probability":
+                                                colors.selected.color = { type: "probability" };
+                                                break;
+                                        }
+                                        this.setProps({ colors });
+                                    }}
+                                >
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"constant"}
+                                        label={"Constant color"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"attribute"}
+                                        label={"By Attribute"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"probability"}
+                                        label={"By Probability"}
+                                    />
+                                </RadioGroup>
+                            </FormControl>
+                            <FormControl fullWidth disabled={coloringMode !== "constant"}>
+                                <FormLabel>Coloring constant</FormLabel>
+                                <Slider
+                                    min={0}
+                                    max={1.0}
+                                    step={EPSILON}
+                                    value={constantColoringValue}
+                                    disabled={coloringMode !== "constant"}
+                                    onChange={(e, value) => {
+                                        const colors = window.structuredClone(this.state["colors"]);
+                                        colors.selected.color = value;
+                                        this.setProps({ colors, coloring_constant_value: value })
+                                    }}
+                                />
+                            </FormControl>
+                            <FormControl fullWidth disabled={coloringMode !== "attribute"}>
+                                <FormLabel>Coloring Attribute</FormLabel>
+                                <RadioGroup
+                                    value={attributeColoringValue}
+                                    onChange={(e, value) => {
+                                        const colors = window.structuredClone(this.state["colors"]);
+                                        colors.selected.color = value;
+                                        this.setProps({ colors, coloring_attribute: value });
+                                    }}
+                                >
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"v_1"}
+                                        label={"Var 1"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"v_2"}
+                                        label={"Var 2"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"v_3"}
+                                        label={"Var 3"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"v_4"}
+                                        label={"Var 4"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"v_5"}
+                                        label={"Var 5"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"v_6"}
+                                        label={"Var 6"}
+                                    />
+                                </RadioGroup>
+                            </FormControl>
+                            <FormControl fullWidth>
+                                <FormLabel>Coloring Map</FormLabel>
+                                <RadioGroup
+                                    value={colorMapValue}
+                                    onChange={(e, value) => {
+                                        const colors = window.structuredClone(this.state["colors"]);
+                                        colors.selected.scale = value;
+                                        this.setProps({ colors })
+                                    }}
+                                >
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"magma"}
+                                        label={"Magma"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"inferno"}
+                                        label={"Inferno"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"plasma"}
+                                        label={"Plasma"}
+                                    />
+                                    <FormControlLabel
+                                        control={<Radio />}
+                                        value={"viridis"}
+                                        label={"Viridis"}
+                                    />
+                                </RadioGroup>
+                            </FormControl>
 
-                    <label style={{ gridRow: 3, gridColumn: "1" }}>Selection threshold</label>
-                    <input style={{ gridRow: 3, gridColumn: "2" }} type="range" min={0.0} max={1.0} step={EPSILON} value={this.state["demo_slider_value"]} onChange={e => {
-                        const labels = window.structuredClone(this.state["labels"]);
-                        const activeLabel = this.state["activeLabel"];
-                        labels[activeLabel]["selectionThreshold"] = parseFloat(e.target.value);
-                        this.setProps({ labels, demo_slider_value: parseFloat(e.target.value) })
-                    }}></input>
+                            <Divider flexItem />
 
-                    <h2 style={{ gridRow: 4, gridColumn: "1 / 2" }}>Color scale</h2>
-
-                    <label style={{ gridRow: 5, gridColumn: "1" }}>Show color scale</label>
-                    <input style={{ gridRow: 5, gridColumn: "2" }} type="checkbox" checked={this.state["colorBar"] === "visible"} onChange={e => {
-                        const colorBar = this.state["colorBar"];
-                        if (colorBar === "hidden") {
-                            this.setProps({ colorBar: "visible" })
-                        } else {
-                            this.setProps({ colorBar: "hidden" })
-                        }
-                    }}></input>
-
-
-                    <label style={{ gridRow: 6, gridColumn: "1" }}>Datums coloring</label>
-                    <label style={{ gridRow: 6, gridColumn: "2" }}><input type="radio" name="coloring" value="constant" checked={typeof (this.state["colors"].selected.color) === "number"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = this.state["coloring_constant_value"];
-                        this.setProps({ colors })
-                    }} />Constant</label>
-                    <label style={{ gridRow: 7, gridColumn: "2" }}><input type="radio" name="coloring" value="attribute" checked={typeof (this.state["colors"].selected.color) === "string"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = this.state["coloring_attribute"];
-                        this.setProps({ colors })
-                    }} />Attribute</label>
-                    <label style={{ gridRow: 8, gridColumn: "2" }}><input type="radio" name="coloring" value="probability" checked={this.state["colors"].selected.color.type === "probability"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = { type: "probability" };
-                        this.setProps({ colors })
-                    }} />Probability</label>
-
-
-                    <label style={{ gridRow: 9, gridColumn: "1" }}>Coloring constant</label>
-                    <input style={{ gridRow: 9, gridColumn: "2" }} type="range" min={0.0} max={1.0} step={EPSILON} value={this.state["coloring_constant_value"]} onChange={e => {
-                        const coloring_constant_value = parseFloat(e.target.value);
-                        if (typeof (this.state["colors"].selected.color) !== "number") {
-                            this.setProps({ coloring_constant_value })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_constant_value;
-                        this.setProps({ colors, coloring_constant_value })
-                    }}></input>
-
-
-                    <label style={{ gridRow: 10, gridColumn: "1" }}>Coloring attribute</label>
-                    <label style={{ gridRow: 10, gridColumn: "2" }}><input type="radio" name="attribute" value="v_1" checked={this.state["coloring_attribute"] === "v_1"} onChange={e => {
-                        const coloring_attribute = e.target.value;
-                        if (typeof (this.state["colors"].selected.color) !== "string") {
-                            this.setProps({ coloring_attribute })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_attribute;
-                        this.setProps({ colors, coloring_attribute })
-                    }} />Var 1</label>
-                    <label style={{ gridRow: 11, gridColumn: "2" }}><input type="radio" name="attribute" value="v_2" checked={this.state["coloring_attribute"] === "v_2"} onChange={e => {
-                        const coloring_attribute = e.target.value;
-                        if (typeof (this.state["colors"].selected.color) !== "string") {
-                            this.setProps({ coloring_attribute })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_attribute;
-                        this.setProps({ colors, coloring_attribute })
-                    }} />Var 2</label>
-                    <label style={{ gridRow: 12, gridColumn: "2" }}><input type="radio" name="attribute" value="v_3" checked={this.state["coloring_attribute"] === "v_3"} onChange={e => {
-                        const coloring_attribute = e.target.value;
-                        if (typeof (this.state["colors"].selected.color) !== "string") {
-                            this.setProps({ coloring_attribute })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_attribute;
-                        this.setProps({ colors, coloring_attribute })
-                    }} />Var 3</label>
-                    <label style={{ gridRow: 13, gridColumn: "2" }}><input type="radio" name="attribute" value="v_4" checked={this.state["coloring_attribute"] === "v_4"} onChange={e => {
-                        const coloring_attribute = e.target.value;
-                        if (typeof (this.state["colors"].selected.color) !== "string") {
-                            this.setProps({ coloring_attribute })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_attribute;
-                        this.setProps({ colors, coloring_attribute })
-                    }} />Var 4</label>
-                    <label style={{ gridRow: 14, gridColumn: "2" }}><input type="radio" name="attribute" value="v_5" checked={this.state["coloring_attribute"] === "v_5"} onChange={e => {
-                        const coloring_attribute = e.target.value;
-                        if (typeof (this.state["colors"].selected.color) !== "string") {
-                            this.setProps({ coloring_attribute })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_attribute;
-                        this.setProps({ colors, coloring_attribute })
-                    }} />Var 5</label>
-                    <label style={{ gridRow: 15, gridColumn: "2" }}><input type="radio" name="attribute" value="v_6" checked={this.state["coloring_attribute"] === "v_6"} onChange={e => {
-                        const coloring_attribute = e.target.value;
-                        if (typeof (this.state["colors"].selected.color) !== "string") {
-                            this.setProps({ coloring_attribute })
-                            return;
-                        }
-
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.color = coloring_attribute;
-                        this.setProps({ colors, coloring_attribute })
-                    }} />Var 6</label>
-
-
-                    <label style={{ gridRow: 16, gridColumn: "1" }}>Color map</label>
-                    <label style={{ gridRow: 16, gridColumn: "2" }}><input type="radio" name="color_map" value="magma" checked={this.state["colors"].selected.scale === "magma"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.scale = e.target.value;
-                        this.setProps({ colors })
-                    }} />Magma</label>
-                    <label style={{ gridRow: 17, gridColumn: "2" }}><input type="radio" name="color_map" value="inferno" checked={this.state["colors"].selected.scale === "inferno"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.scale = e.target.value;
-                        this.setProps({ colors })
-                    }} />Inferno</label>
-                    <label style={{ gridRow: 18, gridColumn: "2" }}><input type="radio" name="color_map" value="plasma" checked={this.state["colors"].selected.scale === "plasma"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.scale = e.target.value;
-                        this.setProps({ colors })
-                    }} />Plasma</label>
-                    <label style={{ gridRow: 19, gridColumn: "2" }}><input type="radio" name="color_map" value="viridis" checked={this.state["colors"].selected.scale === "viridis"} onChange={e => {
-                        const colors = window.structuredClone(this.state["colors"]);
-                        colors.selected.scale = e.target.value;
-                        this.setProps({ colors })
-                    }} />Viridis</label>
-
-
-                    <h2 style={{ gridRow: 20 }}>Debug</h2>
-
-                    <h3 style={{ gridRow: 21 }}>Bounding Boxes</h3>
-                    <label style={{ gridRow: 22, gridColumn: "1" }}>Axis</label>
-                    <input style={{ gridRow: 22, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showAxisBoundingBox} onChange={e => {
-                        const debug = window.structuredClone(this.state["debug"]);
-                        debug.showAxisBoundingBox = !debug.showAxisBoundingBox;
-                        this.setProps({ debug })
-                    }}></input>
-                    <label style={{ gridRow: 23, gridColumn: "1" }}>Label</label>
-                    <input style={{ gridRow: 23, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showLabelBoundingBox} onChange={e => {
-                        const debug = window.structuredClone(this.state["debug"]);
-                        debug.showLabelBoundingBox = !debug.showLabelBoundingBox;
-                        this.setProps({ debug })
-                    }}></input>
-                    <label style={{ gridRow: 24, gridColumn: "1" }}>Curves</label>
-                    <input style={{ gridRow: 24, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showCurvesBoundingBox} onChange={e => {
-                        const debug = window.structuredClone(this.state["debug"]);
-                        debug.showCurvesBoundingBox = !debug.showCurvesBoundingBox;
-                        this.setProps({ debug })
-                    }}></input>
-                    <label style={{ gridRow: 25, gridColumn: "1" }}>Axis line</label>
-                    <input style={{ gridRow: 25, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showAxisLineBoundingBox} onChange={e => {
-                        const debug = window.structuredClone(this.state["debug"]);
-                        debug.showAxisLineBoundingBox = !debug.showAxisLineBoundingBox;
-                        this.setProps({ debug })
-                    }}></input>
-                    <label style={{ gridRow: 26, gridColumn: "1" }}>Selections</label>
-                    <input style={{ gridRow: 26, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showSelectionsBoundingBox} onChange={e => {
-                        const debug = window.structuredClone(this.state["debug"]);
-                        debug.showSelectionsBoundingBox = !debug.showSelectionsBoundingBox;
-                        this.setProps({ debug })
-                    }}></input>
-                    <label style={{ gridRow: 27, gridColumn: "1" }}>Colorbar</label>
-                    <input style={{ gridRow: 27, gridColumn: "2" }} type="checkbox" checked={this.state["debug"].showColorBarBoundingBox} onChange={e => {
-                        const debug = window.structuredClone(this.state["debug"]);
-                        debug.showColorBarBoundingBox = !debug.showColorBarBoundingBox;
-                        this.setProps({ debug })
-                    }}></input>
-                </div>
-            </div>
+                            <Typography variant='h4'>Debug</Typography>
+                            <FormGroup
+                                onChange={e => {
+                                    const element = e.target as HTMLInputElement;
+                                    const debug = window.structuredClone(this.state["debug"]);
+                                    switch (element.value) {
+                                        case "axis":
+                                            debug.showAxisBoundingBox = !debug.showAxisBoundingBox;
+                                            break;
+                                        case "label":
+                                            debug.showLabelBoundingBox = !debug.showLabelBoundingBox;
+                                            break;
+                                        case "curves":
+                                            debug.showCurvesBoundingBox = !debug.showCurvesBoundingBox;
+                                            break;
+                                        case "axis_lines":
+                                            debug.showAxisLineBoundingBox = !debug.showAxisLineBoundingBox;
+                                            break;
+                                        case "selections":
+                                            debug.showSelectionsBoundingBox = !debug.showSelectionsBoundingBox;
+                                            break;
+                                        case "colorbar":
+                                            debug.showColorBarBoundingBox = !debug.showColorBarBoundingBox;
+                                            break;
+                                    }
+                                    this.setProps({ debug });
+                                }}
+                            >
+                                <FormLabel>Bounding Boxes</FormLabel>
+                                <FormControlLabel control={<Switch checked={debugShowAxisBB} />} value="axis" label="Axis" />
+                                <FormControlLabel control={<Switch checked={debugShowLabelBB} />} value="label" label="Label" />
+                                <FormControlLabel control={<Switch checked={debugShowCurvesBB} />} value="curves" label="Curves" />
+                                <FormControlLabel control={<Switch checked={debugShowAxisLineBB} />} value="axis_lines" label="Axis lines" />
+                                <FormControlLabel control={<Switch checked={debugShowSelectionsBB} />} value="selections" label="Selections" />
+                                <FormControlLabel control={<Switch checked={debugShowColorBarBB} />} value="colorbar" label="Colorbar" />
+                            </FormGroup>
+                        </Stack>
+                    </Grid>
+                </Grid>
+            </Box>
         )
     }
 }

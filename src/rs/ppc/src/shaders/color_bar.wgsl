@@ -1,11 +1,20 @@
+struct ColorBarBounds {
+    start: f32,
+    end: f32,
+}
+
 @group(0) @binding(0)
 var color_scale: texture_2d<f32>;
+
+@group(0) @binding(1)
+var<uniform> color_scale_bounds: ColorBarBounds;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) color_scale_value: f32,
 }
 
+const OUT_OF_BOUNDS_FACTOR = 0.4;
 const INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
 const VERTEX_BUFFER = array<vec2<f32>, 4>(
     vec2<f32>(-1.0, -1.0),
@@ -41,6 +50,10 @@ fn vertex_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
 
 @fragment
 fn fragment_main(@location(0) color_scale_value: f32) -> @location(0) vec4<f32> {
+    let sample_in_bounds_0 = color_scale_bounds.start <= color_scale_value;
+    let sample_in_bounds_1 = color_scale_value <= color_scale_bounds.end;
+    let sample_in_bounds = sample_in_bounds_0 && sample_in_bounds_1;
+
     let num_samples = textureDimensions(color_scale).x;
     let sample_position = color_scale_value * f32(num_samples - 1u);
     let sample_1 = i32(floor(sample_position));
@@ -51,7 +64,8 @@ fn fragment_main(@location(0) color_scale_value: f32) -> @location(0) vec4<f32> 
     let color_2 = textureLoad(color_scale, vec2(sample_2, 0), 0);
     let color = mix(color_1, color_2, t);
 
-    let color_alpha = color.a;
+    let alpha_factor = select(OUT_OF_BOUNDS_FACTOR, 1.0, sample_in_bounds);
+    let color_alpha = color.a * alpha_factor;
     let color_srgb = xyz_to_srgb(color.rgb);
     return vec4<f32>(color_srgb * color_alpha, color_alpha);
 }

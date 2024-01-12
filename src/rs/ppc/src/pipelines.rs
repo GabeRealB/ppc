@@ -1113,15 +1113,26 @@ impl ColorBarRenderPipeline {
 
         let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
             label: Some("color bar rendering bind group layout".into()),
-            entries: [BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStage::FRAGMENT,
-                resource: BindGroupLayoutEntryResource::Texture(TextureBindingLayout {
-                    multisampled: None,
-                    sample_type: Some(TextureSampleType::UnfilterableFloat),
-                    view_dimension: Some(TextureViewDimension::D2),
-                }),
-            }],
+            entries: [
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStage::FRAGMENT,
+                    resource: BindGroupLayoutEntryResource::Texture(TextureBindingLayout {
+                        multisampled: None,
+                        sample_type: Some(TextureSampleType::UnfilterableFloat),
+                        view_dimension: Some(TextureViewDimension::D2),
+                    }),
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStage::FRAGMENT,
+                    resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
+                        has_dynamic_offset: None,
+                        min_binding_size: None,
+                        r#type: Some(BufferBindingType::Uniform),
+                    }),
+                },
+            ],
         });
 
         let pipeline = device
@@ -1179,6 +1190,7 @@ impl ColorBarRenderPipeline {
     pub fn render(
         &self,
         color_scale: &buffers::ColorScaleTexture,
+        color_scale_bounds: &buffers::ColorScaleBoundsBuffer,
         clear_value: colors::ColorTransparent<colors::SRgb>,
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
@@ -1189,10 +1201,20 @@ impl ColorBarRenderPipeline {
     ) {
         let bind_group = device.create_bind_group(BindGroupDescriptor {
             label: Some("color bar bind group".into()),
-            entries: [BindGroupEntry {
-                binding: 0,
-                resource: BindGroupEntryResource::TextureView(color_scale.view()),
-            }],
+            entries: [
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindGroupEntryResource::TextureView(color_scale.view()),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindGroupEntryResource::Buffer(BufferBinding {
+                        buffer: color_scale_bounds.buffer().clone(),
+                        offset: None,
+                        size: None,
+                    }),
+                },
+            ],
             layout: self.layout.clone(),
         });
 

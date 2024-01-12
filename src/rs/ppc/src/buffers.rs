@@ -95,7 +95,7 @@ unsafe impl HostSharable for AxisLineInfo {}
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct ValueLineConfig {
     pub line_width: Vec2<f32>,
-    pub selection_threshold: f32,
+    pub selection_bounds: Vec2<f32>,
     pub color_probabilities: u32,
     pub unselected_color: Vec4<f32>,
 }
@@ -227,6 +227,15 @@ impl ColorScaleElementBuffer {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct ColorScaleBounds {
+    pub start: f32,
+    pub end: f32,
+}
+
+unsafe impl HostSharable for ColorScaleBounds {}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct SplineSegment {
     pub coefficients: Vec4<f32>,
     pub bounds: Vec2<f32>,
@@ -327,6 +336,7 @@ pub struct SharedBuffers {
     axes: AxesBuffer,
     colors: LabelColorBuffer,
     color_scale: ColorScaleTexture,
+    color_scale_bounds: ColorScaleBoundsBuffer,
 }
 
 impl SharedBuffers {
@@ -336,6 +346,7 @@ impl SharedBuffers {
             axes: AxesBuffer::new(device),
             colors: LabelColorBuffer::new(device),
             color_scale: ColorScaleTexture::new(device),
+            color_scale_bounds: ColorScaleBoundsBuffer::new(device),
         }
     }
 
@@ -369,6 +380,14 @@ impl SharedBuffers {
 
     pub fn color_scale_mut(&mut self) -> &mut ColorScaleTexture {
         &mut self.color_scale
+    }
+
+    pub fn color_scale_bounds(&self) -> &ColorScaleBoundsBuffer {
+        &self.color_scale_bounds
+    }
+
+    pub fn color_scale_bounds_mut(&mut self) -> &mut ColorScaleBoundsBuffer {
+        &mut self.color_scale_bounds
     }
 }
 
@@ -518,6 +537,42 @@ impl ColorScaleTexture {
             format: None,
             mip_level_count: None,
         }))
+    }
+}
+
+/// A buffer containing the bounds of the color scale.
+#[derive(Debug, Clone)]
+pub struct ColorScaleBoundsBuffer {
+    buffer: Buffer,
+}
+
+impl ColorScaleBoundsBuffer {
+    fn new(device: &Device) -> Self {
+        let buffer = device.create_buffer(BufferDescriptor {
+            label: Some(Cow::Borrowed("color scale bounds buffer")),
+            size: std::mem::size_of::<ColorScaleBounds>(),
+            usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
+            mapped_at_creation: None,
+        });
+
+        device.queue().write_buffer_single(
+            &buffer,
+            0,
+            &ColorScaleBounds {
+                start: 0.0,
+                end: 1.0,
+            },
+        );
+
+        Self { buffer }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    pub fn update(&mut self, device: &Device, bounds: &ColorScaleBounds) {
+        device.queue().write_buffer_single(&self.buffer, 0, bounds);
     }
 }
 

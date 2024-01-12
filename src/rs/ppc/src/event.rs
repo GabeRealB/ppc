@@ -20,7 +20,7 @@ impl Event {
     pub const LABEL_REMOVAL: Self = Self(1 << 9);
     pub const ACTIVE_LABEL_CHANGE: Self = Self(1 << 10);
     pub const LABEL_COLOR_CHANGE: Self = Self(1 << 11);
-    pub const LABEL_THRESHOLD_CHANGE: Self = Self(1 << 12);
+    pub const LABEL_SELECTION_BOUNDS_CHANGE: Self = Self(1 << 12);
     pub const LABEL_EASING_CHANGE: Self = Self(1 << 13);
     pub const DEBUG_OPTIONS_CHANGE: Self = Self(1 << 14);
 

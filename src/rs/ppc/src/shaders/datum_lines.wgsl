@@ -5,7 +5,7 @@ struct Matrices {
 
 struct Config {
     line_width: vec2<f32>,
-    selection_threshold: f32,
+    selection_bounds: vec2<f32>,
     color_probabilities: u32,
     unselected_color: vec4<f32>,
 }
@@ -158,7 +158,9 @@ fn fragment_main(
     let sample_2 = textureLoad(color_scale, vec2(sample_2_pos, 0), 0);
     let color_scale_color = mix(sample_1, sample_2, t);
 
-    let color_selection = vec4<bool>(probability >= config.selection_threshold);
+    let sample_in_bounds_0 = config.selection_bounds.x <= probability;
+    let sample_in_bounds_1 = probability <= config.selection_bounds.y;
+    let color_selection = vec4<bool>(sample_in_bounds_0 && sample_in_bounds_1);
     let color = select(config.unselected_color, color_scale_color, color_selection);
 
     let color_alpha = color.a;

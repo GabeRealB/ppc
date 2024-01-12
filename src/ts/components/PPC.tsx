@@ -49,7 +49,7 @@ type Axis = {
 
 type LabelInfo = {
     color?: Color,
-    selectionThreshold?: number
+    selectionBounds?: [number, number]
 }
 
 type DebugOptions = {
@@ -355,13 +355,18 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        if (label.selectionThreshold !== previous.selectionThreshold) {
-                            rendererState.queue.setLabelSelectionThreshold(id, label.selectionThreshold);
+                        if (label.selectionBounds !== previous.selectionBounds) {
+                            const hasSelectionBounds = label.selectionBounds !== undefined;
+                            const selectionBoundsStart = hasSelectionBounds ? label.selectionBounds[0] : -1.0;
+                            const selectionBoundsEnd = hasSelectionBounds ? label.selectionBounds[1] : -1.0;
+                            rendererState.queue.setLabelSelectionBounds(id, hasSelectionBounds, selectionBoundsStart, selectionBoundsEnd);
                         }
                     } else {
-                        let color = label.color ? new ColorDescription(label.color.colorSpace, new Float32Array(label.color.values)) : null;
-                        let selectionThreshold = label.selectionThreshold;
-                        rendererState.queue.addLabel(id, color, selectionThreshold);
+                        const color = label.color ? new ColorDescription(label.color.colorSpace, new Float32Array(label.color.values)) : null;
+                        const hasSelectionBounds = label.selectionBounds !== undefined;
+                        const selectionBoundsStart = hasSelectionBounds ? label.selectionBounds[0] : -1.0;
+                        const selectionBoundsEnd = hasSelectionBounds ? label.selectionBounds[1] : -1.0;
+                        rendererState.queue.addLabel(id, color, hasSelectionBounds, selectionBoundsStart, selectionBoundsEnd);
                     }
                 }
 

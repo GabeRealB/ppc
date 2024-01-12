@@ -321,7 +321,9 @@ impl EventQueue {
         &self,
         id: String,
         color: Option<ColorDescription>,
-        selection_threshold: Option<f32>,
+        has_selection_bounds: bool,
+        selection_bounds_start: f32,
+        selection_bounds_end: f32,
     ) {
         let color = color.map(|color| {
             let ColorDescription {
@@ -337,13 +339,20 @@ impl EventQueue {
                 ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
             }
         });
-        let selection_threshold = selection_threshold.map(|t| t.clamp(f32::EPSILON, 1.0));
+        let selection_bounds = if has_selection_bounds {
+            Some((
+                selection_bounds_start.clamp(f32::EPSILON, 1.0),
+                selection_bounds_end.clamp(f32::EPSILON, 1.0),
+            ))
+        } else {
+            None
+        };
 
         self.sender
             .send_blocking(Event::AddLabel {
                 id,
                 color,
-                selection_threshold,
+                selection_bounds,
                 easing: selection::EasingType::Linear,
             })
             .expect("the channel should be open");
@@ -385,13 +394,26 @@ impl EventQueue {
             .expect("the channel should be open");
     }
 
-    #[wasm_bindgen(js_name = setLabelSelectionThreshold)]
-    pub fn set_label_selection_threshold(&self, id: String, selection_threshold: Option<f32>) {
-        let selection_threshold = selection_threshold.map(|t| t.clamp(f32::EPSILON, 1.0));
+    #[wasm_bindgen(js_name = setLabelSelectionBounds)]
+    pub fn set_label_selection_bounds(
+        &self,
+        id: String,
+        has_selection_bounds: bool,
+        selection_bounds_start: f32,
+        selection_bounds_end: f32,
+    ) {
+        let selection_bounds = if has_selection_bounds {
+            Some((
+                selection_bounds_start.clamp(f32::EPSILON, 1.0),
+                selection_bounds_end.clamp(f32::EPSILON, 1.0),
+            ))
+        } else {
+            None
+        };
         self.sender
-            .send_blocking(Event::SetLabelThreshold {
+            .send_blocking(Event::SetLabelSelectionBounds {
                 id,
-                selection_threshold,
+                selection_bounds,
             })
             .expect("the channel should be open");
     }
@@ -562,7 +584,7 @@ enum Event {
     AddLabel {
         id: String,
         color: Option<colors::ColorQuery<'static>>,
-        selection_threshold: Option<f32>,
+        selection_bounds: Option<(f32, f32)>,
         easing: selection::EasingType,
     },
     RemoveLabel {
@@ -575,9 +597,9 @@ enum Event {
         id: String,
         color: Option<colors::ColorQuery<'static>>,
     },
-    SetLabelThreshold {
+    SetLabelSelectionBounds {
         id: String,
-        selection_threshold: Option<f32>,
+        selection_bounds: Option<(f32, f32)>,
     },
     SetLabelEasing {
         easing: selection::EasingType,
@@ -731,7 +753,7 @@ pub struct Renderer {
 struct LabelInfo {
     id: String,
     threshold_changed: bool,
-    selection_threshold: f32,
+    selection_bounds: (f32, f32),
     easing: selection::EasingType,
     color: ColorOpaque<Xyz>,
     color_dimmed: ColorOpaque<Xyz>,
@@ -782,13 +804,13 @@ struct StagingData {
     label_additions: Vec<(
         String,
         Option<ColorQuery<'static>>,
-        Option<f32>,
+        Option<(f32, f32)>,
         selection::EasingType,
     )>,
     label_removals: Vec<String>,
     active_label: Vec<String>,
     label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
-    label_threshold_changes: Vec<(String, Option<f32>)>,
+    label_threshold_changes: Vec<(String, Option<(f32, f32)>)>,
     label_easing_changes: Vec<selection::EasingType>,
     debug_options_changes: Vec<DebugOptions>,
 }
@@ -1018,15 +1040,12 @@ impl Renderer {
                 Event::AddLabel {
                     id,
                     color,
-                    selection_threshold,
+                    selection_bounds,
                     easing,
                 } => {
-                    self.staging_data.label_additions.push((
-                        id,
-                        color,
-                        selection_threshold,
-                        easing,
-                    ));
+                    self.staging_data
+                        .label_additions
+                        .push((id, color, selection_bounds, easing));
                     self.events.push(event::Event::LABEL_ADDITION);
                 }
                 Event::RemoveLabel { id } => {
@@ -1041,14 +1060,15 @@ impl Renderer {
                     self.staging_data.label_color_changes.push((id, color));
                     self.events.push(event::Event::LABEL_COLOR_CHANGE);
                 }
-                Event::SetLabelThreshold {
+                Event::SetLabelSelectionBounds {
                     id,
-                    selection_threshold,
+                    selection_bounds,
                 } => {
                     self.staging_data
                         .label_threshold_changes
-                        .push((id, selection_threshold));
-                    self.events.push(event::Event::LABEL_THRESHOLD_CHANGE);
+                        .push((id, selection_bounds));
+                    self.events
+                        .push(event::Event::LABEL_SELECTION_BOUNDS_CHANGE);
                 }
                 Event::SetLabelEasing { easing } => {
                     self.staging_data.label_easing_changes.push(easing);
@@ -1243,6 +1263,7 @@ impl Renderer {
 
         self.pipelines.render().color_bar().render(
             self.buffers.shared().color_scale(),
+            self.buffers.shared().color_scale_bounds(),
             self.background_color,
             viewport_start,
             viewport_size,
@@ -1648,10 +1669,10 @@ impl Renderer {
                 self.change_label_color(id, color);
             }
 
-            if events.signaled(event::Event::LABEL_THRESHOLD_CHANGE) {
-                let (id, selection_threshold) =
+            if events.signaled(event::Event::LABEL_SELECTION_BOUNDS_CHANGE) {
+                let (id, selection_bounds) =
                     self.staging_data.label_threshold_changes.pop().unwrap();
-                self.change_label_threshold(id, selection_threshold);
+                self.change_label_selection_bounds(id, selection_bounds);
             }
 
             if events.signaled(event::Event::LABEL_EASING_CHANGE) {
@@ -1840,6 +1861,7 @@ impl Renderer {
 
         self.update_color_values_buffer();
         self.update_datums_config_buffer();
+        self.update_color_scale_bounds_buffer();
     }
 
     fn set_color_bar_visibility(&mut self, visible: bool) {
@@ -1924,7 +1946,7 @@ impl Renderer {
         &mut self,
         id: String,
         color: Option<ColorQuery<'_>>,
-        selection_threshold: Option<f32>,
+        selection_bounds: Option<(f32, f32)>,
         easing_type: selection::EasingType,
     ) {
         if self.labels.iter().any(|l| l.id == id) {
@@ -1939,12 +1961,12 @@ impl Renderer {
             self.label_color_generator.next()
         };
 
-        let selection_threshold = selection_threshold.unwrap_or(std::f32::EPSILON);
+        let selection_bounds = selection_bounds.unwrap_or((std::f32::EPSILON, 1.0));
 
         let label = LabelInfo {
             id,
             threshold_changed: true,
-            selection_threshold,
+            selection_bounds,
             easing: easing_type,
             color,
             color_dimmed,
@@ -1970,6 +1992,7 @@ impl Renderer {
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
         self.update_label_colors_buffer();
+        self.update_color_scale_bounds_buffer();
 
         self.notify_easing_change();
     }
@@ -2010,6 +2033,7 @@ impl Renderer {
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
         self.update_label_colors_buffer();
+        self.update_color_scale_bounds_buffer();
 
         self.notify_easing_change();
     }
@@ -2029,6 +2053,7 @@ impl Renderer {
 
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
+        self.update_color_scale_bounds_buffer();
 
         self.notify_easing_change();
     }
@@ -2055,21 +2080,22 @@ impl Renderer {
         self.update_label_colors_buffer();
     }
 
-    fn change_label_threshold(&mut self, id: String, selection_threshold: Option<f32>) {
+    fn change_label_selection_bounds(&mut self, id: String, selection_bounds: Option<(f32, f32)>) {
         let label_idx = self
             .labels
             .iter()
             .position(|l| l.id == id)
             .expect("no label with a matching id found");
 
-        let selection_threshold = selection_threshold.unwrap_or(std::f32::EPSILON);
+        let selection_bounds = selection_bounds.unwrap_or((std::f32::EPSILON, 1.0));
 
         self.labels[label_idx].threshold_changed = true;
-        self.labels[label_idx].selection_threshold = selection_threshold;
+        self.labels[label_idx].selection_bounds = selection_bounds;
 
         if let Some(active_label_idx) = self.active_label_idx {
             if label_idx == active_label_idx {
                 self.update_datums_config_buffer();
+                self.update_color_scale_bounds_buffer();
             }
         }
     }
@@ -2356,6 +2382,26 @@ impl Renderer {
         );
         self.device.queue().submit(&[encoder.finish(None)]);
     }
+
+    fn update_color_scale_bounds_buffer(&mut self) {
+        if let Some(active_label_idx) = self.active_label_idx {
+            let color_mode = self.color_bar.color_mode();
+            let bounds = match color_mode {
+                color_bar::ColorBarColorMode::Color => buffers::ColorScaleBounds {
+                    start: 0.0,
+                    end: 1.0,
+                },
+                color_bar::ColorBarColorMode::Probability => buffers::ColorScaleBounds {
+                    start: self.labels[active_label_idx].selection_bounds.0,
+                    end: self.labels[active_label_idx].selection_bounds.1,
+                },
+            };
+            self.buffers
+                .shared_mut()
+                .color_scale_bounds_mut()
+                .update(&self.device, &bounds);
+        }
+    }
 }
 
 // Axes lines buffers
@@ -2408,10 +2454,10 @@ impl Renderer {
 // Datums buffers
 impl Renderer {
     fn update_datums_config_buffer(&mut self) {
-        let selection_threshold = if let Some(active_label_idx) = self.active_label_idx {
-            self.labels[active_label_idx].selection_threshold
+        let selection_bounds = if let Some(active_label_idx) = self.active_label_idx {
+            self.labels[active_label_idx].selection_bounds
         } else {
-            1.0
+            (1.0, 1.0)
         };
 
         let guard = self.axes.borrow();
@@ -2422,7 +2468,7 @@ impl Renderer {
             &self.device,
             &buffers::ValueLineConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
-                selection_threshold,
+                selection_bounds: wgsl::Vec2(selection_bounds.into()),
                 color_probabilities,
                 unselected_color: wgsl::Vec4(self.unselected_color.to_f32_with_alpha()),
             },
@@ -2908,11 +2954,13 @@ impl Renderer {
 
         // Read the computed probabilities.
         staging_buffer.map_async(webgpu::MapMode::READ).await;
+        let selection_range = (self.labels[label_idx].selection_bounds.0)
+            ..=(self.labels[label_idx].selection_bounds.1);
         let probabilities = unsafe { staging_buffer.get_mapped_range::<f32>() };
         let attribution = probabilities
             .iter()
             .enumerate()
-            .filter(|(_, &p)| p >= self.labels[label_idx].selection_threshold)
+            .filter(|(_, p)| selection_range.contains(p))
             .map(|(i, _)| i)
             .collect::<Box<[_]>>();
 
