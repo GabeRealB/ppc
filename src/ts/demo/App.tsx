@@ -46,7 +46,7 @@ class App extends Component {
             },
             colors: {
                 selected: {
-                    scale: "viridis",
+                    scale: "plasma",
                     color: 0.5,
                 }
             },
