@@ -2421,6 +2421,10 @@ impl Renderer {
     fn update_axes_lines_buffer(&mut self) {
         let guard = self.axes.borrow();
 
+        let (curve_t_min, curve_t_max) = guard.curve_t_range();
+        let curve_t_min = buffers::AxisLineInfo::LEFT * curve_t_min;
+        let curve_t_max = buffers::AxisLineInfo::LEFT * curve_t_max;
+
         let num_lines = guard.visible_axes().len();
         let mut lines = Vec::<MaybeUninit<_>>::with_capacity(num_lines * 3);
         unsafe { lines.set_len(num_lines) };
@@ -2442,6 +2446,15 @@ impl Renderer {
                 axis_position: buffers::AxisLineInfo::RIGHT,
                 min_expanded_val: 1.0,
             }));
+
+            for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                let axis_position = curve_t_min.lerp(curve_t_max, t);
+                lines.push(MaybeUninit::new(buffers::AxisLineInfo {
+                    axis: index as u32,
+                    axis_position,
+                    min_expanded_val: 1.0,
+                }));
+            }
         }
 
         self.buffers

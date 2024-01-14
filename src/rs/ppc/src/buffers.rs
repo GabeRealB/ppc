@@ -78,14 +78,14 @@ unsafe impl HostSharable for AxesConfig {}
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct AxisLineInfo {
     pub axis: u32,
-    pub axis_position: u32,
+    pub axis_position: f32,
     pub min_expanded_val: f32,
 }
 
 impl AxisLineInfo {
-    pub const LEFT: u32 = 0;
-    pub const CENTER: u32 = 1;
-    pub const RIGHT: u32 = 2;
+    pub const LEFT: f32 = -1.0;
+    pub const CENTER: f32 = 0.0;
+    pub const RIGHT: f32 = 1.0;
 }
 
 unsafe impl HostSharable for AxisLineInfo {}

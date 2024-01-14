@@ -17,7 +17,7 @@ struct Axes {
 
 struct AxisLineInfo {
     axis: u32,
-    axis_position: u32,
+    axis_position: f32,
     min_expanded_val: f32,
 }
 
@@ -67,24 +67,13 @@ fn vertex_main(
     var line_end = vec2<f32>(0.0, axis.range_y.y);
     var discard_line = axis.expanded_val < line.min_expanded_val;
 
-    let left_position_x = mix(axis.center_x, axis.position_x.x, axis.expanded_val);
-    let right_position_x = mix(axis.center_x, axis.position_x.y, axis.expanded_val);
-    let center_position_x = axis.center_x;
+    let left_bound = select(axis.position_x.x, axis.center_x, line.axis_position >= 0.0);
+    let right_bound = select(axis.position_x.y, axis.center_x, line.axis_position <= 0.0);
 
-    switch line.axis_position {
-        case AXIS_LEFT {
-            line_start.x = left_position_x;
-            line_end.x = left_position_x;
-        }
-        case AXIS_CENTER, default {
-            line_start.x = center_position_x;
-            line_end.x = center_position_x;
-        }
-        case AXIS_RIGHT {
-            line_start.x = right_position_x;
-            line_end.x = right_position_x;
-        }
-    }
+    let mix_factor = select(abs(line.axis_position), 1.0 + line.axis_position, line.axis_position < 0);
+    let position = mix(left_bound, right_bound, mix_factor);
+    line_start.x = position;
+    line_end.x = position;
 
     let line_vector = normalize(line_end - line_start);
     let line_unit_cos = line_vector.x;
