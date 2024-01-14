@@ -29,7 +29,7 @@ const DEFAULT_BACKGROUND_COLOR: fn() -> ColorTransparent<SRgb> =
     || ColorTransparent::<SRgb>::from_f32_with_alpha([1.0, 1.0, 1.0, 1.0]);
 
 const DEFAULT_BRUSH_COLOR: fn() -> ColorOpaque<Xyz> = || {
-    let query = ColorQuery::Named("fuchsia".into());
+    let query = ColorQuery::Css("rgb(15 255 80)".into());
     query.resolve()
 };
 
