@@ -517,6 +517,7 @@ struct SelectSelectionControlPointAction {
     selection_idx: usize,
     active_label_idx: usize,
     segment_idx: usize,
+    symmetric_segment_idx: Option<usize>,
     easing_type: EasingType,
     selection: Selection,
     curve_builder: SelectionCurveBuilder,
@@ -552,12 +553,32 @@ impl SelectSelectionControlPointAction {
             (selection.lower_bound(segment_idx) + selection.upper_bound(segment_idx)) / 2.0;
         let lower_bound = axis_value < middle;
 
-        if event.shift_key() {
+        let symmetric_segment_idx = if event.shift_key() {
             if !lower_bound {
                 segment_idx += 1;
             }
             selection.insert_segment(segment_idx);
-        }
+            None
+        } else if (event.ctrl_key() || event.alt_key())
+            && ((segment_idx == 0 && lower_bound)
+                || (segment_idx == selection.num_segments() - 1 && !lower_bound))
+        {
+            let s1 = 0;
+            let s2 = selection.num_segments() + 1;
+
+            selection.insert_segment(s1);
+            selection.insert_segment(s2);
+
+            if lower_bound {
+                segment_idx = s1;
+                Some(s2)
+            } else {
+                segment_idx = s2;
+                Some(s1)
+            }
+        } else {
+            None
+        };
 
         Self {
             axis,
@@ -566,6 +587,7 @@ impl SelectSelectionControlPointAction {
             selection_idx,
             active_label_idx,
             segment_idx,
+            symmetric_segment_idx,
             easing_type,
             selection,
             curve_builder,
@@ -592,8 +614,22 @@ impl SelectSelectionControlPointAction {
 
         if self.lower_bound {
             self.selection.set_lower_bound(self.segment_idx, axis_value);
+
+            if let Some(symmetric_segment_idx) = self.symmetric_segment_idx {
+                let offset = self.selection.upper_bound(self.segment_idx) - axis_value;
+                let symmetric_lower_bound = self.selection.lower_bound(symmetric_segment_idx);
+                self.selection
+                    .set_upper_bound(symmetric_segment_idx, symmetric_lower_bound + offset);
+            }
         } else {
             self.selection.set_upper_bound(self.segment_idx, axis_value);
+
+            if let Some(symmetric_segment_idx) = self.symmetric_segment_idx {
+                let offset = axis_value - self.selection.lower_bound(self.segment_idx);
+                let symmetric_upper_bound = self.selection.upper_bound(symmetric_segment_idx);
+                self.selection
+                    .set_lower_bound(symmetric_segment_idx, symmetric_upper_bound - offset);
+            }
         }
 
         let mut curve_builder = self.curve_builder.clone();
@@ -618,7 +654,15 @@ impl SelectSelectionControlPointAction {
         let delete_segment = !self.moved || selection.segment_is_point(self.segment_idx);
         if delete_segment {
             if !selection.segment_is_primary(self.segment_idx) {
-                selection.remove_segment(self.segment_idx);
+                if let Some(symmetric_segment_idx) = self.symmetric_segment_idx {
+                    let s1 = symmetric_segment_idx.min(self.segment_idx);
+                    let s2 = symmetric_segment_idx.max(self.segment_idx);
+                    selection.remove_segment(s2);
+                    selection.remove_segment(s1);
+                } else {
+                    selection.remove_segment(self.segment_idx);
+                }
+
                 curve_builder.insert_selection(selection, self.selection_idx);
             }
         } else {

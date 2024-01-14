@@ -413,6 +413,10 @@ impl Selection {
         self.lower_bound(segment_idx) == self.upper_bound(segment_idx)
     }
 
+    pub fn num_segments(&self) -> usize {
+        self.segments.len()
+    }
+
     pub fn lower_bound(&self, segment_idx: usize) -> f32 {
         match &self.segments[segment_idx] {
             SelectionSegment::Primary { range, .. } => range[0],
