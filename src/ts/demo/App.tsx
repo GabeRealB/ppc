@@ -18,7 +18,8 @@ class App extends Component {
                     label: "Var 1",
                     range: [0, 100],
                     // visibleRange: [20, 70],
-                    datums: [...Array(100)].map(() => Math.random() * 100)
+                    datums: [...Array(100)].map(() => Math.random() * 100),
+                    tickPositions: [0, 25, 50, 75, 100],
                 },
                 "v_2": {
                     label: "Var 2",
@@ -28,7 +29,9 @@ class App extends Component {
                 "v_3": {
                     label: "Var 3",
                     range: [0, 1],
-                    datums: [...Array(100)].map(() => (Math.random()) > 0.5 ? 1 : 0)
+                    datums: [...Array(100)].map(() => (Math.random()) > 0.5 ? 0.9 : 0.1),
+                    tickPositions: [0.1, 0.9],
+                    tickLabels: ["False", "True"],
                 },
                 "v_4": {
                     label: "Var 4",

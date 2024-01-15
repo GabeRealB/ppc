@@ -44,6 +44,8 @@ type Axis = {
     datums: number[],
     range?: [number, number],
     visibleRange?: [number, number],
+    tickPositions?: [number],
+    tickLabels?: [string],
     hidden?: boolean
 };
 
@@ -125,7 +127,7 @@ const PPC = (props: Props) => {
 
     useEffect(() => {
         async function eventLoop() {
-            const { Renderer, UpdateDataPayload, ColorScaleDescription, ColorDescription, Element, DebugOptions } = await (await import('../../../pkg')).default;
+            const { Renderer, UpdateDataPayload, ColorScaleDescription, ColorDescription, Element, AxisTicksDef, DebugOptions } = await (await import('../../../pkg')).default;
 
             const canvasGPU = canvasGPURef.current;
             const canvas2D = canvas2DRef.current;
@@ -212,10 +214,32 @@ const PPC = (props: Props) => {
                     for (let key in axes) {
                         const axis = axes[key];
 
+                        let has_valid_ticks = axis.tickPositions !== undefined;
+                        if (has_valid_ticks && axis.tickLabels !== undefined) {
+                            if (axis.tickPositions.length !== axis.tickLabels.length) {
+                                console.error("Axis has defined tick labels, but the number of tick " +
+                                    "labels does not match the specified tick positions.");
+                                has_valid_ticks = false;
+                            }
+                        }
+
                         const datums = new Float32Array(axis.datums);
                         const range = axis.range ? new Float32Array(axis.range) : undefined;
                         const visibleRange = axis.visibleRange ? new Float32Array(axis.visibleRange) : undefined;
-                        payload.newAxis(key, axis.label, datums, range, visibleRange, axis.hidden);
+                        const ticks = has_valid_ticks ? new AxisTicksDef() : undefined;
+
+                        if (ticks) {
+                            for (const position of axis.tickPositions) {
+                                ticks.addTick(position);
+                            }
+                            if (axis.tickLabels) {
+                                for (const label of axis.tickLabels) {
+                                    ticks.addTickLabel(label);
+                                }
+                            }
+                        }
+
+                        payload.newAxis(key, axis.label, datums, range, visibleRange, ticks, axis.hidden);
                     }
                 }
 

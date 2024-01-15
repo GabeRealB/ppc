@@ -38,6 +38,8 @@ const LABEL_MARGIN_REM: f32 = 1.0;
 const SELECTION_CONTROL_POINT_PADDING_REL: f32 = 0.2;
 const MAX_SELECTION_CONTROL_POINT_PADDING: f32 = 0.02;
 
+const TICKS_PADDING_REM: f32 = 0.5;
+
 const MIN_CURVE_T: f32 = 0.1;
 const MAX_CURVE_T: f32 = 0.95;
 
@@ -48,6 +50,7 @@ pub struct AxisArgs {
     range: (f32, f32),
     min_range: (f32, f32),
     visible_range: Option<(f32, f32)>,
+    ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
     state: AxisState,
 }
 
@@ -80,6 +83,7 @@ impl AxisArgs {
             range,
             min_range,
             visible_range: None,
+            ticks: None,
             state: AxisState::Collapsed,
         }
     }
@@ -99,10 +103,18 @@ impl AxisArgs {
         );
 
         self.range = (min, max);
-        if let Some(visible_range) = &mut self.visible_range {
+        let (ticks_min, ticks_max) = if let Some(visible_range) = &mut self.visible_range {
             visible_range.0 = visible_range.0.clamp(self.range.0, self.range.1);
             visible_range.1 = visible_range.1.clamp(self.range.0, self.range.1);
+            *visible_range
+        } else {
+            self.range
+        };
+
+        if let Some(ticks) = &mut self.ticks {
+            ticks.retain(|(x, _)| (ticks_min..=ticks_max).contains(x))
         }
+
         self
     }
 
@@ -120,7 +132,19 @@ impl AxisArgs {
             self.range
         );
 
+        if let Some(ticks) = &mut self.ticks {
+            ticks.retain(|(x, _)| (min..=max).contains(x))
+        }
+
         self.visible_range = Some((min, max));
+        self
+    }
+
+    pub fn with_ticks(mut self, mut ticks: Vec<(f32, Option<Rc<str>>)>) -> Self {
+        let (min, max) = self.visible_range.unwrap_or(self.range);
+        ticks.retain(|(x, _)| (min..=max).contains(x));
+        self.ticks = Some(ticks);
+
         self
     }
 
@@ -150,6 +174,9 @@ pub struct Axis {
     visible_datums_range: (f32, f32),
     visible_datums_range_normalized: (f32, f32),
 
+    ticks: Vec<(f32, Rc<str>)>,
+    max_tick_height: Length<LocalSpace>,
+
     selection_curves: RefCell<Vec<SelectionCurve>>,
     curve_builders: RefCell<Vec<SelectionCurveBuilder>>,
 
@@ -178,6 +205,7 @@ impl Axis {
         let datums = args.datums;
         let datums_range = args.range;
         let visible_datums_range = args.visible_range.unwrap_or(datums_range);
+        let ticks = args.ticks;
         let state = args.state;
 
         let datums_normalized = datums
@@ -208,6 +236,44 @@ impl Axis {
         let max_label = max_label.as_string().unwrap().into();
         let axes = Rc::downgrade(axes);
 
+        let ticks = if let Some(ticks) = ticks {
+            ticks
+                .into_iter()
+                .map(|(t, label)| {
+                    let label = label.unwrap_or_else(|| {
+                        let label_v = wasm_bindgen::JsValue::from_f64(t as f64);
+                        let label = format.call1(&formatter, &label_v).unwrap();
+                        label.as_string().unwrap().into()
+                    });
+
+                    (
+                        t.inv_lerp(visible_datums_range.0, visible_datums_range.1),
+                        label,
+                    )
+                })
+                .collect::<Vec<_>>()
+        } else {
+            [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                .into_iter()
+                .filter(|t| {
+                    (visible_datums_range_normalized.0..=visible_datums_range_normalized.1)
+                        .contains(t)
+                })
+                .map(|t| {
+                    let label_v = datums_range.0.lerp(datums_range.1, t);
+                    let label_v = wasm_bindgen::JsValue::from_f64(label_v as f64);
+                    let label = format.call1(&formatter, &label_v).unwrap();
+                    let label = label.as_string().unwrap().into();
+                    (t, label)
+                })
+                .collect::<Vec<_>>()
+        };
+        let max_tick_height = ticks
+            .iter()
+            .map(|(_, tick)| get_text_length(tick).1)
+            .max_by(|&l, &r| l.0.total_cmp(&r.0))
+            .unwrap_or(Length::new(0.0));
+
         Self {
             key: key.into(),
             label,
@@ -220,6 +286,8 @@ impl Axis {
             datums_range,
             visible_datums_range,
             visible_datums_range_normalized,
+            ticks,
+            max_tick_height,
             selection_curves: RefCell::new(vec![]),
             curve_builders: RefCell::new(vec![]),
             world_offset: Cell::new(world_offset),
@@ -249,6 +317,11 @@ impl Axis {
     /// Fetches the label of the maximum element.
     pub fn max_label(&self) -> Rc<str> {
         self.max_label.clone()
+    }
+
+    /// Fetches the ticks and their positions.
+    pub fn ticks(&self) -> &[(f32, Rc<str>)] {
+        &self.ticks
     }
 
     /// Fetches the state of the axis.
@@ -608,6 +681,30 @@ impl Axis {
         let (_, end) = self.axis_line_range();
 
         Position::new((end.x, end.y + label_margin.0 + max_label_height.0))
+    }
+
+    pub fn ticks_range(&self) -> (Position<LocalSpace>, Position<LocalSpace>) {
+        let (start, end) = self.axis_line_range();
+
+        let (start, end) = if self.is_expanded() {
+            let extends = self.curves_bounding_box();
+            let (_, start_y) = start.extract();
+            let (_, end_y) = end.extract();
+
+            let (x, _) = extends.start().extract();
+
+            (Position::new((x, start_y)), Position::new((x, end_y)))
+        } else {
+            (start, end)
+        };
+
+        let ticks_padding = (self.get_rem_length)(TICKS_PADDING_REM).0;
+        let offset = Offset::new((ticks_padding.0, self.max_tick_height.0 / 2.0));
+
+        let start = start - offset;
+        let end = end - offset;
+
+        (start, end)
     }
 
     /// Returns a transformer to map between the world space and local space.
@@ -1058,6 +1155,7 @@ impl Axes {
         datums: Box<[f32]>,
         range: Option<(f32, f32)>,
         visible_range: Option<(f32, f32)>,
+        ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
         hidden: bool,
     ) -> Rc<Axis> {
         if !std::ptr::eq(self, this.as_ptr()) {
@@ -1082,6 +1180,9 @@ impl Axes {
         }
         if let Some((min, max)) = visible_range {
             args = args.with_visible_range(min, max);
+        }
+        if let Some(ticks) = ticks {
+            args = args.with_ticks(ticks);
         }
 
         let axis_index = if hidden {

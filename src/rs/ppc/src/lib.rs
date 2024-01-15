@@ -641,6 +641,7 @@ struct AxisDef {
     datums: Box<[f32]>,
     range: Option<(f32, f32)>,
     visible_range: Option<(f32, f32)>,
+    ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
     hidden: bool,
 }
 
@@ -655,6 +656,7 @@ impl UpdateDataPayload {
     }
 
     #[wasm_bindgen(js_name = newAxis)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new_axis(
         &mut self,
         key: &str,
@@ -662,14 +664,34 @@ impl UpdateDataPayload {
         datums: Box<[f32]>,
         range: Option<Box<[f32]>>,
         visible_range: Option<Box<[f32]>>,
+        ticks: Option<AxisTicksDef>,
         hidden: Option<bool>,
     ) {
+        let ticks = if let Some(ticks) = ticks {
+            assert!(
+                ticks.tick_labels.is_empty()
+                    || ticks.tick_positions.len() == ticks.tick_labels.len()
+            );
+
+            let positions = ticks.tick_positions.into_iter();
+            let labels = ticks
+                .tick_labels
+                .into_iter()
+                .map(Some)
+                .chain(std::iter::repeat(None));
+
+            Some(positions.zip(labels).collect::<Vec<_>>())
+        } else {
+            None
+        };
+
         self.axes.push(AxisDef {
             key: key.into(),
             label: label.into(),
             datums,
             range: range.map(|v| (v[0], v[1])),
             visible_range: visible_range.map(|v| (v[0], v[1])),
+            ticks,
             hidden: hidden.unwrap_or(false),
         });
     }
@@ -677,6 +699,35 @@ impl UpdateDataPayload {
     #[wasm_bindgen(js_name = addOrder)]
     pub fn add_order(&mut self, key: &str) {
         self.order.push(key.into())
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct AxisTicksDef {
+    tick_positions: Vec<f32>,
+    tick_labels: Vec<Rc<str>>,
+}
+
+#[wasm_bindgen]
+impl AxisTicksDef {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            tick_positions: Vec::new(),
+            tick_labels: Vec::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = addTick)]
+    pub fn add_tick(&mut self, value: f32) {
+        assert!(!self.tick_positions.contains(&value));
+        self.tick_positions.push(value);
+    }
+
+    #[wasm_bindgen(js_name = addTickLabel)]
+    pub fn add_label(&mut self, label: &str) {
+        self.tick_labels.push(label.into());
     }
 }
 
@@ -1340,6 +1391,41 @@ impl Renderer {
         self.context_2d.restore();
     }
 
+    fn render_ticks(&self) {
+        self.context_2d.save();
+        self.context_2d.set_text_align("right");
+
+        let guard = self.axes.borrow();
+        let screen_mapper = guard.space_transformer();
+
+        for ax in guard.visible_axes() {
+            let world_mapper = ax.space_transformer();
+            let (ticks_start, ticks_end) = ax.ticks_range();
+            for (t, tick) in ax.ticks() {
+                let position = ticks_start.lerp(ticks_end, *t);
+                let position = position.transform(&world_mapper);
+                let position = position.transform(&screen_mapper);
+                let (x, y) = position.extract();
+
+                self.context_2d.fill_text(tick, x as f64, y as f64).unwrap();
+            }
+        }
+
+        if !self.color_bar.is_visible() {
+            self.context_2d.restore();
+            return;
+        }
+
+        let (ticks_start, ticks_end) = self.color_bar.ticks_range();
+        for (t, tick) in self.color_bar.ticks() {
+            let position = ticks_start.lerp(ticks_end, *t);
+            let (x, y) = position.extract();
+            self.context_2d.fill_text(tick, x as f64, y as f64).unwrap();
+        }
+
+        self.context_2d.restore();
+    }
+
     fn render_control_points(&self) {
         let active_label_idx = match self.active_label_idx {
             Some(x) => x,
@@ -1431,11 +1517,13 @@ impl Renderer {
         self.context_2d.set_text_align("center");
 
         if !self.color_bar.is_visible() {
+            self.context_2d.restore();
             return;
         }
 
         let label = self.color_bar.label();
         if label.is_empty() {
+            self.context_2d.restore();
             return;
         }
 
@@ -1444,6 +1532,8 @@ impl Renderer {
         self.context_2d
             .fill_text(&label, x as f64, y as f64)
             .unwrap();
+
+        self.context_2d.restore();
     }
 
     fn render_bounding_boxes(&self) {
@@ -1569,6 +1659,7 @@ impl Renderer {
         );
         self.render_labels();
         self.render_min_max_labels();
+        self.render_ticks();
         self.render_control_points();
         self.render_color_bar_label();
 
@@ -1755,6 +1846,7 @@ impl Renderer {
                 axis.datums,
                 axis.range,
                 axis.visible_range,
+                axis.ticks,
                 axis.hidden,
             );
         }
