@@ -41,7 +41,7 @@ type Colors = {
 
 type Axis = {
     label: string,
-    datums: number[],
+    data_points: number[],
     range?: [number, number],
     visibleRange?: [number, number],
     tickPositions?: [number],
@@ -223,7 +223,7 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        const datums = new Float32Array(axis.datums);
+                        const data_points = new Float32Array(axis.data_points);
                         const range = axis.range ? new Float32Array(axis.range) : undefined;
                         const visibleRange = axis.visibleRange ? new Float32Array(axis.visibleRange) : undefined;
                         const ticks = has_valid_ticks ? new AxisTicksDef() : undefined;
@@ -239,7 +239,7 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        payload.newAxis(key, axis.label, datums, range, visibleRange, ticks, axis.hidden);
+                        payload.newAxis(key, axis.label, data_points, range, visibleRange, ticks, axis.hidden);
                     }
                 }
 
@@ -263,7 +263,7 @@ const PPC = (props: Props) => {
                     rendererState.queue.setDefaultColor(Element.Brush);
                     rendererState.queue.setDefaultColor(Element.Unselected);
                     rendererState.queue.setDefaultColorScaleColor();
-                    rendererState.queue.setDefaultSelectedDatumColoring();
+                    rendererState.queue.setDefaultSelectedDataColorMode();
                     return;
                 }
 
@@ -286,7 +286,7 @@ const PPC = (props: Props) => {
                 const setSelected = (colors?: SelectedColor) => {
                     if (!colors) {
                         rendererState.queue.setDefaultColorScaleColor();
-                        rendererState.queue.setDefaultSelectedDatumColoring();
+                        rendererState.queue.setDefaultSelectedDataColorMode();
                         return;
                     }
 
@@ -313,16 +313,16 @@ const PPC = (props: Props) => {
                     }
 
                     if (colors.color === undefined || colors.color === null) {
-                        rendererState.queue.setDefaultSelectedDatumColoring();
+                        rendererState.queue.setDefaultSelectedDataColorMode();
                     } else {
                         if (colors.color instanceof String) {
-                            rendererState.queue.setSelectedDatumColoringAttribute(colors.color.toString());
+                            rendererState.queue.setSelectedDataColorModeAttribute(colors.color.toString());
                         } else if (typeof colors.color === 'string') {
-                            rendererState.queue.setSelectedDatumColoringAttribute(colors.color);
+                            rendererState.queue.setSelectedDataColorModeAttribute(colors.color);
                         } else if (typeof colors.color === 'number') {
-                            rendererState.queue.setSelectedDatumColoringConstant(colors.color);
+                            rendererState.queue.setSelectedDataColorModeConstant(colors.color);
                         } else if ('type' in colors.color && colors.color.type === 'probability') {
-                            rendererState.queue.setSelectedDatumColoringByProbability();
+                            rendererState.queue.setSelectedDataColorModeProbability();
                         } else {
                             throw new Error("Unknown color scale color provided");
                         }

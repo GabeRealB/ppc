@@ -90,22 +90,22 @@ impl AxisLineInfo {
 
 unsafe impl HostSharable for AxisLineInfo {}
 
-/// Value line rendering config buffer layout.
+/// Data line rendering config buffer layout.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct ValueLineConfig {
+pub struct DataLineConfig {
     pub line_width: Vec2<f32>,
     pub selection_bounds: Vec2<f32>,
     pub color_probabilities: u32,
     pub unselected_color: Vec4<f32>,
 }
 
-unsafe impl HostSharable for ValueLineConfig {}
+unsafe impl HostSharable for DataLineConfig {}
 
-/// Representation of an entry for the value lines buffer.
+/// Representation of an entry for the data lines buffer.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct ValueLine {
+pub struct DataLine {
     pub curve_idx: u32,
     pub start_axis: u32,
     pub start_value: f32,
@@ -113,7 +113,7 @@ pub struct ValueLine {
     pub end_value: f32,
 }
 
-unsafe impl HostSharable for ValueLine {}
+unsafe impl HostSharable for DataLine {}
 
 /// Config for rendering probability curves.
 #[repr(C)]
@@ -272,7 +272,7 @@ impl SplineSegmentsBuffer {
 pub struct Buffers {
     shared: SharedBuffers,
     axes: AxesBuffers,
-    datums: DatumsBuffers,
+    data: DataBuffers,
     curves: CurvesBuffers,
     selections: SelectionsBuffers,
 }
@@ -282,7 +282,7 @@ impl Buffers {
         Self {
             shared: SharedBuffers::new(device),
             axes: AxesBuffers::new(device),
-            datums: DatumsBuffers::new(device),
+            data: DataBuffers::new(device),
             curves: CurvesBuffers::new(device),
             selections: SelectionsBuffers::new(device),
         }
@@ -304,12 +304,12 @@ impl Buffers {
         &mut self.axes
     }
 
-    pub fn datums(&self) -> &DatumsBuffers {
-        &self.datums
+    pub fn data(&self) -> &DataBuffers {
+        &self.data
     }
 
-    pub fn datums_mut(&mut self) -> &mut DatumsBuffers {
-        &mut self.datums
+    pub fn data_mut(&mut self) -> &mut DataBuffers {
+        &mut self.data
     }
 
     pub fn curves(&self) -> &CurvesBuffers {
@@ -678,47 +678,47 @@ impl AxisLinesBuffer {
 
 /// Collection of buffers for drawing values.
 #[derive(Debug, Clone)]
-pub struct DatumsBuffers {
-    config: DatumsConfigBuffer,
-    lines: DatumLinesBuffer,
-    datums: DatumBuffer,
+pub struct DataBuffers {
+    config: DataConfigBuffer,
+    lines: DataLinesBuffer,
+    data: DataBuffer,
     color_values: ColorValuesBuffer,
     probabilities: Vec<ProbabilitiesBuffer>,
 }
 
-impl DatumsBuffers {
+impl DataBuffers {
     fn new(device: &Device) -> Self {
         Self {
-            config: DatumsConfigBuffer::new(device),
-            lines: DatumLinesBuffer::new(device),
-            datums: DatumBuffer::new(device),
+            config: DataConfigBuffer::new(device),
+            lines: DataLinesBuffer::new(device),
+            data: DataBuffer::new(device),
             color_values: ColorValuesBuffer::new(device),
             probabilities: vec![],
         }
     }
 
-    pub fn config(&self) -> &DatumsConfigBuffer {
+    pub fn config(&self) -> &DataConfigBuffer {
         &self.config
     }
 
-    pub fn config_mut(&mut self) -> &mut DatumsConfigBuffer {
+    pub fn config_mut(&mut self) -> &mut DataConfigBuffer {
         &mut self.config
     }
 
-    pub fn lines(&self) -> &DatumLinesBuffer {
+    pub fn lines(&self) -> &DataLinesBuffer {
         &self.lines
     }
 
-    pub fn lines_mut(&mut self) -> &mut DatumLinesBuffer {
+    pub fn lines_mut(&mut self) -> &mut DataLinesBuffer {
         &mut self.lines
     }
 
-    pub fn datums(&self) -> &DatumBuffer {
-        &self.datums
+    pub fn data(&self) -> &DataBuffer {
+        &self.data
     }
 
-    pub fn datums_mut(&mut self) -> &mut DatumBuffer {
-        &mut self.datums
+    pub fn data_mut(&mut self) -> &mut DataBuffer {
+        &mut self.data
     }
 
     pub fn color_values(&self) -> &ColorValuesBuffer {
@@ -746,17 +746,17 @@ impl DatumsBuffers {
     }
 }
 
-/// A uniform buffer storing an instance of an [`ValueLineConfig`].
+/// A uniform buffer storing an instance of an [`DataLineConfig`].
 #[derive(Debug, Clone)]
-pub struct DatumsConfigBuffer {
+pub struct DataConfigBuffer {
     buffer: Buffer,
 }
 
-impl DatumsConfigBuffer {
+impl DataConfigBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("datums config buffer")),
-            size: std::mem::size_of::<ValueLineConfig>(),
+            label: Some(Cow::Borrowed("data config buffer")),
+            size: std::mem::size_of::<DataLineConfig>(),
             usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
@@ -768,21 +768,21 @@ impl DatumsConfigBuffer {
         &self.buffer
     }
 
-    pub fn update(&mut self, device: &Device, config: &ValueLineConfig) {
+    pub fn update(&mut self, device: &Device, config: &DataLineConfig) {
         device.queue().write_buffer_single(&self.buffer, 0, config);
     }
 }
 
-/// A storage buffer containing the information required to draw the value lines.
+/// A storage buffer containing the information required to draw the data lines.
 #[derive(Debug, Clone)]
-pub struct DatumLinesBuffer {
+pub struct DataLinesBuffer {
     buffer: Buffer,
 }
 
-impl DatumLinesBuffer {
+impl DataLinesBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("datum lines buffer")),
+            label: Some(Cow::Borrowed("data lines buffer")),
             size: 0,
             usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -796,14 +796,14 @@ impl DatumLinesBuffer {
     }
 
     pub fn len(&self) -> usize {
-        self.buffer.size() / std::mem::size_of::<ValueLine>()
+        self.buffer.size() / std::mem::size_of::<DataLine>()
     }
 
-    pub fn update(&mut self, device: &Device, lines: &[ValueLine]) {
+    pub fn update(&mut self, device: &Device, lines: &[DataLine]) {
         if self.len() != lines.len() {
             self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
-                label: Some(Cow::Borrowed("datum lines buffer")),
+                label: Some(Cow::Borrowed("data lines buffer")),
                 size: std::mem::size_of_val(lines),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
@@ -815,14 +815,14 @@ impl DatumLinesBuffer {
 }
 
 #[derive(Debug, Clone)]
-pub struct DatumBuffer {
+pub struct DataBuffer {
     buffer: Buffer,
 }
 
-impl DatumBuffer {
+impl DataBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("datums buffer")),
+            label: Some(Cow::Borrowed("data buffer")),
             size: 0,
             usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -839,23 +839,23 @@ impl DatumBuffer {
         self.buffer.size() / std::mem::size_of::<f32>()
     }
 
-    pub fn resize(&mut self, device: &Device, num_datums: usize, num_axes: usize) {
-        if self.len() != num_datums * num_axes {
+    pub fn resize(&mut self, device: &Device, num_data_points: usize, num_axes: usize) {
+        if self.len() != num_data_points * num_axes {
             self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
-                label: Some(Cow::Borrowed("datums buffer")),
-                size: num_datums * num_axes * std::mem::size_of::<f32>(),
+                label: Some(Cow::Borrowed("data buffer")),
+                size: num_data_points * num_axes * std::mem::size_of::<f32>(),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
             });
         }
     }
 
-    pub fn update(&self, device: &Device, datums: &[f32], index: usize) {
-        let buffer_offset = (index * std::mem::size_of_val(datums)) as u32;
+    pub fn update(&self, device: &Device, data: &[f32], index: usize) {
+        let buffer_offset = (index * std::mem::size_of_val(data)) as u32;
         device
             .queue()
-            .write_buffer(&self.buffer, buffer_offset, datums)
+            .write_buffer(&self.buffer, buffer_offset, data)
     }
 }
 
@@ -867,7 +867,7 @@ pub struct ColorValuesBuffer {
 impl ColorValuesBuffer {
     fn new(device: &Device) -> Self {
         let buffer = device.create_buffer(BufferDescriptor {
-            label: Some(Cow::Borrowed("datum color values buffer")),
+            label: Some(Cow::Borrowed("data color values buffer")),
             size: 0,
             usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
             mapped_at_creation: None,
@@ -884,12 +884,12 @@ impl ColorValuesBuffer {
         self.buffer.size() / std::mem::size_of::<f32>()
     }
 
-    pub fn resize(&mut self, device: &Device, num_datums: usize) {
-        if self.len() != num_datums {
+    pub fn resize(&mut self, device: &Device, num_data_points: usize) {
+        if self.len() != num_data_points {
             self.buffer.destroy();
             self.buffer = device.create_buffer(BufferDescriptor {
-                label: Some(Cow::Borrowed("datum color values buffer")),
-                size: num_datums * std::mem::size_of::<f32>(),
+                label: Some(Cow::Borrowed("data color values buffer")),
+                size: num_data_points * std::mem::size_of::<f32>(),
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
                 mapped_at_creation: None,
             });

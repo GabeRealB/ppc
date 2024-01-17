@@ -24,6 +24,7 @@ mod lerp;
 mod pipelines;
 mod selection;
 mod spline;
+mod wasm_bridge;
 
 const DEFAULT_BACKGROUND_COLOR: fn() -> ColorTransparent<SRgb> =
     || ColorTransparent::<SRgb>::from_f32_with_alpha([1.0, 1.0, 1.0, 1.0]);
@@ -38,738 +39,13 @@ const DEFAULT_UNSELECTED_COLOR: fn() -> ColorTransparent<Xyz> = || {
     query.resolve_with_alpha()
 };
 
-const DEFAULT_DATUMS_COLORING: fn() -> DatumsColoring = || DatumsColoring::Constant(0.5);
+const DEFAULT_DATA_COLOR_MODE: fn() -> wasm_bridge::DataColorMode =
+    || wasm_bridge::DataColorMode::Constant(0.5);
 
 const DEFAULT_COLOR_SCALE: fn() -> ColorScaleDescriptor<'static> =
     || ColorScaleDescriptor::Constant(ColorQuery::Named("blue".into()));
 
 const MSAA_SAMPLES: u32 = 4;
-
-/// An event queue to interact with the renderer.
-#[wasm_bindgen]
-pub struct EventQueue {
-    sender: Sender<Event>,
-}
-
-#[wasm_bindgen]
-impl EventQueue {
-    /// Spawns an event to shut down the renderer.
-    pub fn exit(&self) {
-        self.sender
-            .send_blocking(Event::Exit)
-            .expect("the channel should be open");
-    }
-
-    /// Updates the data of the renderer.
-    #[wasm_bindgen(js_name = updateData)]
-    pub fn update_data(&self, payload: UpdateDataPayload) {
-        let axes = if payload.axes.is_empty() {
-            None
-        } else {
-            Some(payload.axes.into())
-        };
-
-        let order = if payload.order.is_empty() {
-            None
-        } else {
-            Some(payload.order.into())
-        };
-
-        self.sender
-            .send_blocking(Event::UpdateData { axes, order })
-            .expect("the channel should be open");
-    }
-
-    /// Spawns a `resize` event.
-    pub fn resize(&self, width: u32, height: u32, device_pixel_ratio: f32) {
-        self.sender
-            .send_blocking(Event::Resize {
-                width,
-                height,
-                device_pixel_ratio,
-            })
-            .expect("the channel should be open");
-    }
-
-    /// Spawns a `pointer_down` event.
-    #[wasm_bindgen(js_name = pointerDown)]
-    pub fn pointer_down(&self, event: web_sys::PointerEvent) {
-        self.sender
-            .send_blocking(Event::PointerDown { event })
-            .expect("the channel should be open");
-    }
-
-    /// Spawns a `pointer_up` event.
-    #[wasm_bindgen(js_name = pointerUp)]
-    pub fn pointer_up(&self, event: web_sys::PointerEvent) {
-        self.sender
-            .send_blocking(Event::PointerUp { event })
-            .expect("the channel should be open");
-    }
-
-    /// Spawns a `pointer_move` event.
-    #[wasm_bindgen(js_name = pointerMove)]
-    pub fn pointer_move(&self, event: web_sys::PointerEvent) {
-        self.sender
-            .send_blocking(Event::PointerMove { event })
-            .expect("the channel should be open");
-    }
-
-    /// Sets an element to the default color.
-    #[wasm_bindgen(js_name = setDefaultColor)]
-    pub fn set_default_color(&self, element: Element) {
-        let color = match element {
-            Element::Background => {
-                let color = DEFAULT_BACKGROUND_COLOR();
-                ColorQuery::SRgb(color.to_f32(), Some(color.alpha))
-            }
-            Element::Brush => {
-                let color = DEFAULT_BRUSH_COLOR();
-                ColorQuery::Xyz(color.to_f32(), None)
-            }
-            Element::Unselected => {
-                let color = DEFAULT_UNSELECTED_COLOR();
-                ColorQuery::Xyz(color.to_f32(), Some(color.alpha))
-            }
-        };
-        let event = match element {
-            Element::Background => Event::SetBackgroundColor { color },
-            Element::Brush => Event::SetBrushColor { color },
-            Element::Unselected => Event::SetUnselectedColor { color },
-        };
-
-        self.sender
-            .send_blocking(event)
-            .expect("the channel should be open");
-    }
-
-    /// Sets the color of an element from a color name string.
-    #[wasm_bindgen(js_name = setColorNamed)]
-    pub fn set_color_named(&self, element: Element, color: &str) {
-        let color = ColorQuery::Named(color.to_string().into());
-        let event = match element {
-            Element::Background => Event::SetBackgroundColor { color },
-            Element::Brush => Event::SetBrushColor { color },
-            Element::Unselected => Event::SetUnselectedColor { color },
-        };
-
-        self.sender
-            .send_blocking(event)
-            .expect("the channel should be open");
-    }
-
-    /// Sets the color of an element from a color value.
-    #[wasm_bindgen(js_name = setColorValue)]
-    pub fn set_color_value(&self, element: Element, color: ColorDescription) {
-        let ColorDescription {
-            color_space,
-            values,
-            alpha,
-        } = color;
-
-        let color = match color_space {
-            ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
-            ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
-            ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
-            ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
-        };
-        let event = match element {
-            Element::Background => Event::SetBackgroundColor { color },
-            Element::Brush => Event::SetBrushColor { color },
-            Element::Unselected => Event::SetUnselectedColor { color },
-        };
-
-        self.sender
-            .send_blocking(event)
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setDefaultColorScaleColor)]
-    pub fn set_default_color_scale_color(&self) {
-        let descriptor = DEFAULT_COLOR_SCALE();
-
-        self.sender
-            .send_blocking(Event::SetColorScale {
-                color_space: ColorSpace::SRgb,
-                scale: descriptor,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setColorScaleNamed)]
-    pub fn set_color_scale_named(&self, name: &str) {
-        let descriptor = ColorScaleDescriptor::Named(name.to_string().into());
-
-        self.sender
-            .send_blocking(Event::SetColorScale {
-                color_space: ColorSpace::Xyz,
-                scale: descriptor,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setColorScaleConstant)]
-    pub fn set_color_scale_constant(&self, color: ColorDescription) {
-        let ColorDescription {
-            color_space,
-            values,
-            alpha,
-        } = color;
-
-        let color = match color_space {
-            ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
-            ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
-            ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
-            ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
-        };
-        let descriptor = ColorScaleDescriptor::Constant(color);
-
-        self.sender
-            .send_blocking(Event::SetColorScale {
-                color_space: ColorSpace::SRgb,
-                scale: descriptor,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setColorScaleGradient)]
-    pub fn set_color_scale_gradient(&self, scale: ColorScaleDescription) {
-        let ColorScaleDescription {
-            color_space,
-            gradient,
-        } = scale;
-        let gradient = gradient
-            .into_iter()
-            .map(|(t, color)| {
-                let ColorDescription {
-                    color_space,
-                    values,
-                    alpha,
-                } = color;
-
-                let color = match color_space {
-                    ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
-                    ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
-                    ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
-                    ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
-                };
-
-                (t, color)
-            })
-            .collect::<Vec<_>>();
-
-        let descriptor = ColorScaleDescriptor::Gradient(gradient);
-        self.sender
-            .send_blocking(Event::SetColorScale {
-                color_space,
-                scale: descriptor,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setDefaultSelectedDatumColoring)]
-    pub fn set_default_selected_datum_coloring(&self) {
-        self.sender
-            .send_blocking(Event::SetDatumsColoring {
-                coloring: DEFAULT_DATUMS_COLORING(),
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setSelectedDatumColoringConstant)]
-    pub fn set_selected_datum_coloring_constant(&self, value: f32) {
-        if !(0.0..=1.0).contains(&value) {
-            panic!("constant must lie in the interval [0, 1], got '{value}'");
-        }
-
-        self.sender
-            .send_blocking(Event::SetDatumsColoring {
-                coloring: DatumsColoring::Constant(value),
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setSelectedDatumColoringAttribute)]
-    pub fn set_selected_datum_coloring_attribute(&self, id: &str) {
-        self.sender
-            .send_blocking(Event::SetDatumsColoring {
-                coloring: DatumsColoring::Attribute(id.into()),
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setSelectedDatumColoringByProbability)]
-    pub fn set_selected_datum_coloring_by_probability(&self) {
-        self.sender
-            .send_blocking(Event::SetDatumsColoring {
-                coloring: DatumsColoring::Probability,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setColorBarVisibility)]
-    pub fn set_color_bar_visibility(&self, visible: bool) {
-        self.sender
-            .send_blocking(Event::SetColorBarVisibility {
-                visibility: visible,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = addLabel)]
-    pub fn add_label(
-        &self,
-        id: String,
-        color: Option<ColorDescription>,
-        has_selection_bounds: bool,
-        selection_bounds_start: f32,
-        selection_bounds_end: f32,
-    ) {
-        let color = color.map(|color| {
-            let ColorDescription {
-                color_space,
-                values,
-                alpha,
-            } = color;
-
-            match color_space {
-                ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
-                ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
-                ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
-                ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
-            }
-        });
-        let selection_bounds = if has_selection_bounds {
-            Some((
-                selection_bounds_start.clamp(f32::EPSILON, 1.0),
-                selection_bounds_end.clamp(f32::EPSILON, 1.0),
-            ))
-        } else {
-            None
-        };
-
-        self.sender
-            .send_blocking(Event::AddLabel {
-                id,
-                color,
-                selection_bounds,
-                easing: selection::EasingType::Linear,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = removeLabel)]
-    pub fn remove_label(&self, id: String) {
-        self.sender
-            .send_blocking(Event::RemoveLabel { id })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = switchActiveLabel)]
-    pub fn switch_active_label(&self, id: String) {
-        self.sender
-            .send_blocking(Event::SwitchActiveLabel { id })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setLabelColor)]
-    pub fn set_label_color(&self, id: String, color: Option<ColorDescription>) {
-        let color = color.map(|color| {
-            let ColorDescription {
-                color_space,
-                values,
-                alpha,
-            } = color;
-
-            match color_space {
-                ColorSpace::SRgb => ColorQuery::SRgb(values, alpha),
-                ColorSpace::Xyz => ColorQuery::Xyz(values, alpha),
-                ColorSpace::CieLab => ColorQuery::Lab(values, alpha),
-                ColorSpace::CieLch => ColorQuery::Lch(values, alpha),
-            }
-        });
-
-        self.sender
-            .send_blocking(Event::SetLabelColor { id, color })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setLabelSelectionBounds)]
-    pub fn set_label_selection_bounds(
-        &self,
-        id: String,
-        has_selection_bounds: bool,
-        selection_bounds_start: f32,
-        selection_bounds_end: f32,
-    ) {
-        let selection_bounds = if has_selection_bounds {
-            Some((
-                selection_bounds_start.clamp(f32::EPSILON, 1.0),
-                selection_bounds_end.clamp(f32::EPSILON, 1.0),
-            ))
-        } else {
-            None
-        };
-        self.sender
-            .send_blocking(Event::SetLabelSelectionBounds {
-                id,
-                selection_bounds,
-            })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setLabelEasing)]
-    pub fn set_label_easing(&self, easing_type: Option<String>) {
-        let easing = match easing_type.as_deref() {
-            Some("linear") | None => selection::EasingType::Linear,
-            Some("in") => selection::EasingType::EaseIn,
-            Some("out") => selection::EasingType::EaseOut,
-            Some("inout") => selection::EasingType::EaseInOut,
-            _ => {
-                web_sys::console::warn_1(&format!("unknown easing {easing_type:?}").into());
-                selection::EasingType::Linear
-            }
-        };
-
-        self.sender
-            .send_blocking(Event::SetLabelEasing { easing })
-            .expect("the channel should be open");
-    }
-
-    #[wasm_bindgen(js_name = setDebugOptions)]
-    pub fn set_debug_options(&self, options: DebugOptions) {
-        self.sender
-            .send_blocking(Event::SetDebugOptions { options })
-            .expect("the channel should be open");
-    }
-
-    /// Spawns a `draw` event.
-    pub async fn draw(&self) {
-        let (sx, rx) = async_channel::bounded(1);
-
-        // Spawn the event.
-        self.sender
-            .send(Event::Draw { completion: sx })
-            .await
-            .expect("the channel should be open when trying to send a message");
-
-        // Wait for the event to complete.
-        rx.recv().await.expect("the channel should be open");
-    }
-}
-
-#[wasm_bindgen]
-
-pub struct ColorScaleDescription {
-    color_space: ColorSpace,
-    gradient: Vec<(Option<f32>, ColorDescription)>,
-}
-
-#[wasm_bindgen]
-pub struct ColorDescription {
-    color_space: ColorSpace,
-    values: [f32; 3],
-    alpha: Option<f32>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum ColorSpace {
-    SRgb,
-    Xyz,
-    CieLab,
-    CieLch,
-}
-
-#[wasm_bindgen]
-impl ColorScaleDescription {
-    #[wasm_bindgen(constructor)]
-    pub fn new(color_space: &str) -> Self {
-        let color_space = match color_space {
-            "srgb" => ColorSpace::SRgb,
-            "xyz" => ColorSpace::Xyz,
-            "cie_lab" => ColorSpace::CieLab,
-            "cie_lch" => ColorSpace::CieLch,
-            _ => panic!("unknown color space {color_space:?}"),
-        };
-
-        Self {
-            color_space,
-            gradient: Vec::new(),
-        }
-    }
-
-    #[wasm_bindgen(js_name = withSample)]
-    pub fn with_sample(&mut self, sample: Option<f32>, color: ColorDescription) {
-        if let Some(sample) = sample {
-            if self.gradient.is_empty() && sample != 0.0 {
-                panic!("the first sample must be at position 0.0");
-            }
-
-            if !(0.0..=1.0).contains(&sample) {
-                panic!("sample must lie in the [0, 1] range");
-            }
-        }
-
-        self.gradient.push((sample, color));
-    }
-}
-
-#[wasm_bindgen]
-impl ColorDescription {
-    #[wasm_bindgen(constructor)]
-    pub fn new(color_space: &str, values: &[f32]) -> Self {
-        assert!(values.len() == 3 || values.len() == 4);
-
-        let color_space = match color_space {
-            "srgb" => ColorSpace::SRgb,
-            "xyz" => ColorSpace::Xyz,
-            "cie_lab" => ColorSpace::CieLab,
-            "cie_lch" => ColorSpace::CieLch,
-            _ => panic!("unknown color space {color_space:?}"),
-        };
-
-        let opaque = [values[0], values[1], values[2]];
-        let alpha = if values.len() == 4 {
-            Some(values[3])
-        } else {
-            None
-        };
-
-        Self {
-            color_space,
-            values: opaque,
-            alpha,
-        }
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Element {
-    Background,
-    Brush,
-    Unselected,
-}
-
-enum Event {
-    Exit,
-    Resize {
-        width: u32,
-        height: u32,
-        device_pixel_ratio: f32,
-    },
-    UpdateData {
-        axes: Option<Box<[AxisDef]>>,
-        order: Option<Box<[String]>>,
-    },
-    SetBackgroundColor {
-        color: colors::ColorQuery<'static>,
-    },
-    SetBrushColor {
-        color: colors::ColorQuery<'static>,
-    },
-    SetUnselectedColor {
-        color: colors::ColorQuery<'static>,
-    },
-    SetColorScale {
-        color_space: ColorSpace,
-        scale: color_scale::ColorScaleDescriptor<'static>,
-    },
-    SetDatumsColoring {
-        coloring: DatumsColoring,
-    },
-    SetColorBarVisibility {
-        visibility: bool,
-    },
-    AddLabel {
-        id: String,
-        color: Option<colors::ColorQuery<'static>>,
-        selection_bounds: Option<(f32, f32)>,
-        easing: selection::EasingType,
-    },
-    RemoveLabel {
-        id: String,
-    },
-    SwitchActiveLabel {
-        id: String,
-    },
-    SetLabelColor {
-        id: String,
-        color: Option<colors::ColorQuery<'static>>,
-    },
-    SetLabelSelectionBounds {
-        id: String,
-        selection_bounds: Option<(f32, f32)>,
-    },
-    SetLabelEasing {
-        easing: selection::EasingType,
-    },
-    SetDebugOptions {
-        options: DebugOptions,
-    },
-    Draw {
-        completion: Sender<()>,
-    },
-    PointerDown {
-        event: web_sys::PointerEvent,
-    },
-    PointerUp {
-        event: web_sys::PointerEvent,
-    },
-    PointerMove {
-        event: web_sys::PointerEvent,
-    },
-}
-
-enum DatumsColoring {
-    Constant(f32),
-    Attribute(String),
-    Probability,
-}
-
-/// Definition of an axis.
-#[wasm_bindgen]
-#[derive(Default)]
-pub struct UpdateDataPayload {
-    axes: Vec<AxisDef>,
-    order: Vec<String>,
-}
-
-struct AxisDef {
-    key: Box<str>,
-    label: Box<str>,
-    datums: Box<[f32]>,
-    range: Option<(f32, f32)>,
-    visible_range: Option<(f32, f32)>,
-    ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
-    hidden: bool,
-}
-
-#[wasm_bindgen]
-impl UpdateDataPayload {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
-            axes: Vec::new(),
-            order: Vec::new(),
-        }
-    }
-
-    #[wasm_bindgen(js_name = newAxis)]
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_axis(
-        &mut self,
-        key: &str,
-        label: &str,
-        datums: Box<[f32]>,
-        range: Option<Box<[f32]>>,
-        visible_range: Option<Box<[f32]>>,
-        ticks: Option<AxisTicksDef>,
-        hidden: Option<bool>,
-    ) {
-        let ticks = if let Some(ticks) = ticks {
-            assert!(
-                ticks.tick_labels.is_empty()
-                    || ticks.tick_positions.len() == ticks.tick_labels.len()
-            );
-
-            let positions = ticks.tick_positions.into_iter();
-            let labels = ticks
-                .tick_labels
-                .into_iter()
-                .map(Some)
-                .chain(std::iter::repeat(None));
-
-            Some(positions.zip(labels).collect::<Vec<_>>())
-        } else {
-            None
-        };
-
-        self.axes.push(AxisDef {
-            key: key.into(),
-            label: label.into(),
-            datums,
-            range: range.map(|v| (v[0], v[1])),
-            visible_range: visible_range.map(|v| (v[0], v[1])),
-            ticks,
-            hidden: hidden.unwrap_or(false),
-        });
-    }
-
-    #[wasm_bindgen(js_name = addOrder)]
-    pub fn add_order(&mut self, key: &str) {
-        self.order.push(key.into())
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Default)]
-pub struct AxisTicksDef {
-    tick_positions: Vec<f32>,
-    tick_labels: Vec<Rc<str>>,
-}
-
-#[wasm_bindgen]
-impl AxisTicksDef {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
-            tick_positions: Vec::new(),
-            tick_labels: Vec::new(),
-        }
-    }
-
-    #[wasm_bindgen(js_name = addTick)]
-    pub fn add_tick(&mut self, value: f32) {
-        assert!(!self.tick_positions.contains(&value));
-        self.tick_positions.push(value);
-    }
-
-    #[wasm_bindgen(js_name = addTickLabel)]
-    pub fn add_label(&mut self, label: &str) {
-        self.tick_labels.push(label.into());
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Default)]
-pub struct DebugOptions {
-    #[wasm_bindgen(js_name = showAxisBoundingBox)]
-    pub show_axis_bounding_box: bool,
-    #[wasm_bindgen(js_name = showLabelBoundingBox)]
-    pub show_label_bounding_box: bool,
-    #[wasm_bindgen(js_name = showCurvesBoundingBox)]
-    pub show_curves_bounding_box: bool,
-    #[wasm_bindgen(js_name = showAxisLineBoundingBox)]
-    pub show_axis_line_bounding_box: bool,
-    #[wasm_bindgen(js_name = showSelectionsBoundingBox)]
-    pub show_selections_bounding_box: bool,
-    #[wasm_bindgen(js_name = showColorBarBoundingBox)]
-    pub show_color_bar_bounding_box: bool,
-}
-
-#[wasm_bindgen]
-impl DebugOptions {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        DebugOptions::default()
-    }
-
-    #[wasm_bindgen(js_name = anyIsActive)]
-    pub fn any_is_active(&self) -> bool {
-        self.show_axis_bounding_box
-            || self.show_label_bounding_box
-            || self.show_curves_bounding_box
-            || self.show_axis_line_bounding_box
-            || self.show_selections_bounding_box
-            || self.show_color_bar_bounding_box
-    }
-
-    #[wasm_bindgen(js_name = noneIsActive)]
-    pub fn none_is_active(&self) -> bool {
-        !self.any_is_active()
-    }
-}
 
 /// Implementation of the renderer for the parallel coordinates.
 #[wasm_bindgen]
@@ -783,7 +59,7 @@ pub struct Renderer {
     pipelines: pipelines::Pipelines,
     buffers: buffers::Buffers,
     render_texture: webgpu::Texture,
-    event_queue: Option<Receiver<Event>>,
+    event_queue: Option<Receiver<wasm_bridge::Event>>,
     axes: Rc<RefCell<axis::Axes>>,
     color_bar: color_bar::ColorBar,
     events: Vec<event::Event>,
@@ -791,11 +67,11 @@ pub struct Renderer {
     active_label_idx: Option<usize>,
     labels: Vec<LabelInfo>,
     label_color_generator: LabelColorGenerator,
-    datums_coloring: DatumsColoring,
+    data_color_mode: wasm_bridge::DataColorMode,
     background_color: ColorTransparent<SRgb>,
     brush_color: ColorOpaque<Xyz>,
     unselected_color: ColorTransparent<Xyz>,
-    debug: DebugOptions,
+    debug: wasm_bridge::DebugOptions,
     pixel_ratio: f32,
     staging_data: StagingData,
 }
@@ -844,12 +120,15 @@ impl LabelColorGenerator {
 #[derive(Default)]
 #[allow(clippy::type_complexity)]
 struct StagingData {
-    update_data: Vec<(Option<Box<[AxisDef]>>, Option<Box<[String]>>)>,
+    update_data: Vec<(Option<Box<[wasm_bridge::AxisDef]>>, Option<Box<[String]>>)>,
     background_color: Vec<ColorQuery<'static>>,
     brush_color: Vec<ColorQuery<'static>>,
     unselected_color: Vec<ColorQuery<'static>>,
-    color_scale: Vec<(ColorSpace, color_scale::ColorScaleDescriptor<'static>)>,
-    datums_coloring: Vec<DatumsColoring>,
+    color_scale: Vec<(
+        wasm_bridge::ColorSpace,
+        color_scale::ColorScaleDescriptor<'static>,
+    )>,
+    data_color_mode: Vec<wasm_bridge::DataColorMode>,
     color_bar_visibility: Vec<bool>,
     resize: Vec<(u32, u32, f32)>,
     label_additions: Vec<(
@@ -863,7 +142,7 @@ struct StagingData {
     label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
     label_threshold_changes: Vec<(String, Option<(f32, f32)>)>,
     label_easing_changes: Vec<selection::EasingType>,
-    debug_options_changes: Vec<DebugOptions>,
+    debug_options_changes: Vec<wasm_bridge::DebugOptions>,
 }
 
 #[wasm_bindgen]
@@ -999,11 +278,11 @@ impl Renderer {
             labels: vec![],
             label_color_generator: LabelColorGenerator::default(),
             pixel_ratio: window.device_pixel_ratio() as f32,
-            datums_coloring: DEFAULT_DATUMS_COLORING(),
+            data_color_mode: DEFAULT_DATA_COLOR_MODE(),
             background_color: DEFAULT_BACKGROUND_COLOR(),
             brush_color: DEFAULT_BRUSH_COLOR(),
             unselected_color: DEFAULT_UNSELECTED_COLOR(),
-            debug: DebugOptions::default(),
+            debug: Default::default(),
             staging_data: StagingData::default(),
         };
 
@@ -1025,14 +304,14 @@ impl Renderer {
     ///
     /// Panics if called multiple times.
     #[wasm_bindgen(js_name = constructEventQueue)]
-    pub fn construct_event_queue(&mut self) -> EventQueue {
+    pub fn construct_event_queue(&mut self) -> wasm_bridge::EventQueue {
         if self.event_queue.is_some() {
             panic!("EventQueue was already constructed.");
         }
 
         let (sx, rx) = async_channel::unbounded();
         self.event_queue = Some(rx);
-        EventQueue { sender: sx }
+        wasm_bridge::EventQueue { sender: sx }
     }
 
     /// Starts the event loop of the renderer.
@@ -1049,8 +328,8 @@ impl Renderer {
         let events = self.event_queue.take().unwrap();
         loop {
             match events.recv().await.expect("the channel should be open") {
-                Event::Exit => break,
-                Event::Resize {
+                wasm_bridge::Event::Exit => break,
+                wasm_bridge::Event::Resize {
                     width,
                     height,
                     device_pixel_ratio,
@@ -1060,35 +339,35 @@ impl Renderer {
                         .push((width, height, device_pixel_ratio));
                     self.events.push(event::Event::RESIZE);
                 }
-                Event::UpdateData { axes, order } => {
+                wasm_bridge::Event::UpdateData { axes, order } => {
                     self.staging_data.update_data.push((axes, order));
                     self.events.push(event::Event::DATA_UPDATE);
                 }
-                Event::SetBackgroundColor { color } => {
+                wasm_bridge::Event::SetBackgroundColor { color } => {
                     self.staging_data.background_color.push(color);
                     self.events.push(event::Event::BACKGROUND_COLOR_CHANGE);
                 }
-                Event::SetBrushColor { color } => {
+                wasm_bridge::Event::SetBrushColor { color } => {
                     self.staging_data.brush_color.push(color);
                     self.events.push(event::Event::BRUSH_COLOR_CHANGE);
                 }
-                Event::SetUnselectedColor { color } => {
+                wasm_bridge::Event::SetUnselectedColor { color } => {
                     self.staging_data.unselected_color.push(color);
                     self.events.push(event::Event::UNSELECTED_COLOR_CHANGE);
                 }
-                Event::SetColorScale { color_space, scale } => {
+                wasm_bridge::Event::SetColorScale { color_space, scale } => {
                     self.staging_data.color_scale.push((color_space, scale));
                     self.events.push(event::Event::COLOR_SCALE_CHANGE);
                 }
-                Event::SetDatumsColoring { coloring } => {
-                    self.staging_data.datums_coloring.push(coloring);
-                    self.events.push(event::Event::DATUMS_COLORING_CHANGE);
+                wasm_bridge::Event::SetDataColorMode { color_mode } => {
+                    self.staging_data.data_color_mode.push(color_mode);
+                    self.events.push(event::Event::DATA_COLOR_MODE_CHANGE);
                 }
-                Event::SetColorBarVisibility { visibility } => {
+                wasm_bridge::Event::SetColorBarVisibility { visibility } => {
                     self.staging_data.color_bar_visibility.push(visibility);
                     self.events.push(event::Event::COLOR_BAR_VISIBILITY_CHANGE);
                 }
-                Event::AddLabel {
+                wasm_bridge::Event::AddLabel {
                     id,
                     color,
                     selection_bounds,
@@ -1099,19 +378,19 @@ impl Renderer {
                         .push((id, color, selection_bounds, easing));
                     self.events.push(event::Event::LABEL_ADDITION);
                 }
-                Event::RemoveLabel { id } => {
+                wasm_bridge::Event::RemoveLabel { id } => {
                     self.staging_data.label_removals.push(id);
                     self.events.push(event::Event::LABEL_REMOVAL);
                 }
-                Event::SwitchActiveLabel { id } => {
+                wasm_bridge::Event::SwitchActiveLabel { id } => {
                     self.staging_data.active_label.push(id);
                     self.events.push(event::Event::ACTIVE_LABEL_CHANGE);
                 }
-                Event::SetLabelColor { id, color } => {
+                wasm_bridge::Event::SetLabelColor { id, color } => {
                     self.staging_data.label_color_changes.push((id, color));
                     self.events.push(event::Event::LABEL_COLOR_CHANGE);
                 }
-                Event::SetLabelSelectionBounds {
+                wasm_bridge::Event::SetLabelSelectionBounds {
                     id,
                     selection_bounds,
                 } => {
@@ -1121,18 +400,18 @@ impl Renderer {
                     self.events
                         .push(event::Event::LABEL_SELECTION_BOUNDS_CHANGE);
                 }
-                Event::SetLabelEasing { easing } => {
+                wasm_bridge::Event::SetLabelEasing { easing } => {
                     self.staging_data.label_easing_changes.push(easing);
                     self.events.push(event::Event::LABEL_EASING_CHANGE);
                 }
-                Event::SetDebugOptions { options } => {
+                wasm_bridge::Event::SetDebugOptions { options } => {
                     self.staging_data.debug_options_changes.push(options);
                     self.events.push(event::Event::DEBUG_OPTIONS_CHANGE);
                 }
-                Event::Draw { completion } => self.render(completion).await,
-                Event::PointerDown { event } => self.pointer_down(event),
-                Event::PointerUp { event } => self.pointer_up(event),
-                Event::PointerMove { event } => self.pointer_move(event),
+                wasm_bridge::Event::Draw { completion } => self.render(completion).await,
+                wasm_bridge::Event::PointerDown { event } => self.pointer_down(event),
+                wasm_bridge::Event::PointerUp { event } => self.pointer_up(event),
+                wasm_bridge::Event::PointerMove { event } => self.pointer_move(event),
             }
         }
 
@@ -1142,7 +421,7 @@ impl Renderer {
 
 // Rendering
 impl Renderer {
-    fn render_datums(
+    fn render_data(
         &self,
         encoder: &webgpu::CommandEncoder,
         msaa_texture: &webgpu::TextureView,
@@ -1151,21 +430,18 @@ impl Renderer {
         let axes = self.axes.borrow();
         let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
         let probabilities = if let Some(active_label_idx) = self.active_label_idx {
-            self.buffers
-                .datums()
-                .probabilities(active_label_idx)
-                .clone()
+            self.buffers.data().probabilities(active_label_idx).clone()
         } else {
             buffers::ProbabilitiesBuffer::empty(&self.device)
         };
 
-        self.pipelines.render().datum_lines().render(
+        self.pipelines.render().data_lines().render(
             self.background_color,
             self.buffers.shared().matrices(),
-            self.buffers.datums().config(),
+            self.buffers.data().config(),
             self.buffers.shared().axes(),
-            self.buffers.datums().lines(),
-            self.buffers.datums().color_values(),
+            self.buffers.data().lines(),
+            self.buffers.data().color_values(),
             &probabilities,
             self.buffers.shared().color_scale(),
             viewport_start,
@@ -1641,7 +917,7 @@ impl Renderer {
         let probabilities_changed = self.update_probabilities(&command_encoder);
 
         // Draw the main view into the framebuffer.
-        self.render_datums(&command_encoder, &msaa_texture_view, &texture_view);
+        self.render_data(&command_encoder, &msaa_texture_view, &texture_view);
         self.render_axes(&command_encoder, &msaa_texture_view, &texture_view);
         self.render_selections(&command_encoder, &msaa_texture_view, &texture_view);
         self.render_curve_segments(&command_encoder, &msaa_texture_view, &texture_view);
@@ -1668,7 +944,7 @@ impl Renderer {
         let mut probabilities_change = Vec::new();
         for label_idx in probabilities_changed.iter().copied() {
             let id = self.labels[label_idx].id.clone();
-            let (probabilities, attributions) = self
+            let (probabilities, attributions): (Box<[f32]>, Box<[usize]>) = self
                 .extract_label_attribution_and_probability(label_idx)
                 .await;
             probabilities_change.push((id, probabilities, attributions));
@@ -1729,9 +1005,9 @@ impl Renderer {
                 self.set_color_scale(color_space, scale);
             }
 
-            if events.signaled(event::Event::DATUMS_COLORING_CHANGE) {
-                let coloring = self.staging_data.datums_coloring.pop().unwrap();
-                self.set_datums_coloring(coloring);
+            if events.signaled(event::Event::DATA_COLOR_MODE_CHANGE) {
+                let coloring = self.staging_data.data_color_mode.pop().unwrap();
+                self.set_data_color_mode(coloring);
             }
 
             if events.signaled(event::Event::COLOR_BAR_VISIBILITY_CHANGE) {
@@ -1794,12 +1070,12 @@ impl Renderer {
                 self.update_selection_lines_buffer();
             }
 
-            let update_datum_lines_buffer = events.signaled_any(&[
+            let update_data_lines_buffer = events.signaled_any(&[
                 event::Event::AXIS_STATE_CHANGE,
                 event::Event::AXIS_ORDER_CHANGE,
             ]);
-            if update_datum_lines_buffer {
-                self.update_datum_lines_buffer();
+            if update_data_lines_buffer {
+                self.update_data_lines_buffer();
             }
         }
 
@@ -1828,7 +1104,11 @@ impl Renderer {
 
 // External events
 impl Renderer {
-    fn update_data(&mut self, axes: Option<Box<[AxisDef]>>, order: Option<Box<[String]>>) {
+    fn update_data(
+        &mut self,
+        axes: Option<Box<[wasm_bridge::AxisDef]>>,
+        order: Option<Box<[String]>>,
+    ) {
         let axes_keys = axes
             .iter()
             .flat_map(|x| x.iter())
@@ -1843,7 +1123,7 @@ impl Renderer {
                 &self.axes,
                 &axis.key,
                 &axis.label,
-                axis.datums,
+                axis.points,
                 axis.range,
                 axis.visible_range,
                 axis.ticks,
@@ -1855,7 +1135,7 @@ impl Renderer {
             guard.set_axes_order(&order);
         }
 
-        if let DatumsColoring::Attribute(id) = &self.datums_coloring {
+        if let wasm_bridge::DataColorMode::Attribute(id) = &self.data_color_mode {
             let axis = guard.axis(id).unwrap();
             self.color_bar.set_to_axis(&axis);
         }
@@ -1863,13 +1143,13 @@ impl Renderer {
         drop(guard);
 
         self.update_axes_config_buffer();
-        self.update_datums_config_buffer();
+        self.update_data_config_buffer();
 
         self.update_matrix_buffer();
         self.update_axes_buffer();
         self.update_axes_lines_buffer();
-        self.update_datum_lines_buffer();
-        self.update_datums_buffer();
+        self.update_data_lines_buffer();
+        self.update_data_buffer();
         self.update_color_values_buffer();
 
         self.update_curves_config_buffer();
@@ -1892,21 +1172,25 @@ impl Renderer {
     fn set_unselected_color(&mut self, color: ColorQuery<'_>) {
         let color = color.resolve_with_alpha::<Xyz>();
         self.unselected_color = color;
-        self.update_datums_config_buffer();
+        self.update_data_config_buffer();
     }
 
-    fn set_color_scale(&mut self, color_space: ColorSpace, scale: ColorScaleDescriptor<'_>) {
+    fn set_color_scale(
+        &mut self,
+        color_space: wasm_bridge::ColorSpace,
+        scale: ColorScaleDescriptor<'_>,
+    ) {
         let scale = match color_space {
-            ColorSpace::SRgb => scale
+            wasm_bridge::ColorSpace::SRgb => scale
                 .to_color_scale::<SRgbLinear>()
                 .transform::<colors::UnknownColorSpace>(),
-            ColorSpace::Xyz => scale
+            wasm_bridge::ColorSpace::Xyz => scale
                 .to_color_scale::<Xyz>()
                 .transform::<colors::UnknownColorSpace>(),
-            ColorSpace::CieLab => scale
+            wasm_bridge::ColorSpace::CieLab => scale
                 .to_color_scale::<colors::CieLab>()
                 .transform::<colors::UnknownColorSpace>(),
-            ColorSpace::CieLch => scale
+            wasm_bridge::ColorSpace::CieLch => scale
                 .to_color_scale::<colors::CieLch>()
                 .transform::<colors::UnknownColorSpace>(),
         };
@@ -1914,17 +1198,17 @@ impl Renderer {
         self.update_color_scale_texture(color_space, scale);
     }
 
-    fn set_datums_coloring(&mut self, coloring: DatumsColoring) {
-        self.datums_coloring = coloring;
+    fn set_data_color_mode(&mut self, coloring: wasm_bridge::DataColorMode) {
+        self.data_color_mode = coloring;
 
-        match &self.datums_coloring {
-            DatumsColoring::Constant(_) => self.color_bar.set_to_empty(),
-            DatumsColoring::Attribute(id) => {
+        match &self.data_color_mode {
+            wasm_bridge::DataColorMode::Constant(_) => self.color_bar.set_to_empty(),
+            wasm_bridge::DataColorMode::Attribute(id) => {
                 let axes = self.axes.borrow();
                 let axis = axes.axis(id).unwrap();
                 self.color_bar.set_to_axis(&axis);
             }
-            DatumsColoring::Probability => {
+            wasm_bridge::DataColorMode::Probability => {
                 if let Some(active_label_idx) = self.active_label_idx {
                     let label = &self.labels[active_label_idx].id;
                     self.color_bar.set_to_label_probability(label);
@@ -1952,7 +1236,7 @@ impl Renderer {
         }
 
         self.update_color_values_buffer();
-        self.update_datums_config_buffer();
+        self.update_data_config_buffer();
         self.update_color_scale_bounds_buffer();
     }
 
@@ -2027,7 +1311,7 @@ impl Renderer {
         }
 
         self.update_axes_config_buffer();
-        self.update_datums_config_buffer();
+        self.update_data_config_buffer();
         self.update_curves_config_buffer();
         self.update_selections_config_buffer();
 
@@ -2066,7 +1350,7 @@ impl Renderer {
 
         self.active_label_idx = Some(self.labels.len());
         self.labels.push(label);
-        self.buffers.datums_mut().push_label(&self.device);
+        self.buffers.data_mut().push_label(&self.device);
         self.buffers.curves_mut().push_label(&self.device);
         self.buffers.selections_mut().push_label(&self.device);
 
@@ -2076,7 +1360,7 @@ impl Renderer {
         }
         drop(axes);
 
-        if let DatumsColoring::Probability = &self.datums_coloring {
+        if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
             let label = &self.labels[self.active_label_idx.unwrap()].id;
             self.color_bar.set_to_label_probability(label);
         }
@@ -2097,7 +1381,7 @@ impl Renderer {
             .expect("no label with a matching id found");
 
         self.labels.remove(label_idx);
-        self.buffers.datums_mut().remove_label(label_idx);
+        self.buffers.data_mut().remove_label(label_idx);
         self.buffers.curves_mut().remove_label(label_idx);
         self.buffers.selections_mut().remove_label(label_idx);
 
@@ -2113,7 +1397,7 @@ impl Renderer {
         }
         drop(axes);
 
-        if let DatumsColoring::Probability = &self.datums_coloring {
+        if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
             if let Some(active_label_idx) = self.active_label_idx {
                 let label = &self.labels[active_label_idx].id;
                 self.color_bar.set_to_label_probability(label);
@@ -2138,7 +1422,7 @@ impl Renderer {
             .expect("no label with a matching id found");
         self.active_label_idx = Some(label_idx);
 
-        if let DatumsColoring::Probability = &self.datums_coloring {
+        if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
             let label = &self.labels[self.active_label_idx.unwrap()].id;
             self.color_bar.set_to_label_probability(label);
         }
@@ -2186,7 +1470,7 @@ impl Renderer {
 
         if let Some(active_label_idx) = self.active_label_idx {
             if label_idx == active_label_idx {
-                self.update_datums_config_buffer();
+                self.update_data_config_buffer();
                 self.update_color_scale_bounds_buffer();
             }
         }
@@ -2199,7 +1483,7 @@ impl Renderer {
         let axes = self.axes.borrow();
         for axis in axes.visible_axes() {
             let curve_builder = axis.borrow_selection_curve_builder(label_idx);
-            let curve = curve_builder.build(axis.visible_datums_range_normalized().into(), easing);
+            let curve = curve_builder.build(axis.visible_data_range_normalized().into(), easing);
             axis.borrow_selection_curve_mut(label_idx).set_curve(curve);
         }
         drop(axes);
@@ -2208,7 +1492,7 @@ impl Renderer {
         self.notify_easing_change();
     }
 
-    fn change_debug_options(&mut self, options: DebugOptions) {
+    fn change_debug_options(&mut self, options: wasm_bridge::DebugOptions) {
         self.debug = options;
     }
 
@@ -2445,7 +1729,7 @@ impl Renderer {
 
     fn update_color_scale_texture(
         &mut self,
-        color_space: ColorSpace,
+        color_space: wasm_bridge::ColorSpace,
         scale: color_scale::ColorScale<colors::UnknownColorSpace>,
     ) {
         let color_scale_elements = scale
@@ -2556,9 +1840,9 @@ impl Renderer {
     }
 }
 
-// Datums buffers
+// Data buffers
 impl Renderer {
-    fn update_datums_config_buffer(&mut self) {
+    fn update_data_config_buffer(&mut self) {
         let selection_bounds = if let Some(active_label_idx) = self.active_label_idx {
             self.labels[active_label_idx].selection_bounds
         } else {
@@ -2566,12 +1850,14 @@ impl Renderer {
         };
 
         let guard = self.axes.borrow();
-        let color_probabilities =
-            matches!(self.datums_coloring, DatumsColoring::Probability) as u32;
-        let (width, height) = guard.datums_line_size();
-        self.buffers.datums_mut().config_mut().update(
+        let color_probabilities = matches!(
+            self.data_color_mode,
+            wasm_bridge::DataColorMode::Probability
+        ) as u32;
+        let (width, height) = guard.data_line_size();
+        self.buffers.data_mut().config_mut().update(
             &self.device,
-            &buffers::ValueLineConfig {
+            &buffers::DataLineConfig {
                 line_width: wgsl::Vec2([width.0, height.0]),
                 selection_bounds: wgsl::Vec2(selection_bounds.into()),
                 color_probabilities,
@@ -2580,11 +1866,11 @@ impl Renderer {
         );
     }
 
-    fn update_datum_lines_buffer(&mut self) {
+    fn update_data_lines_buffer(&mut self) {
         let axes = self.axes.borrow();
 
         // Compute the curves.
-        let mut curves = vec![Vec::new(); axes.num_datums()];
+        let mut curves = vec![Vec::new(); axes.num_data_points()];
         let mut axis_indices = Vec::new();
         for axis in axes.visible_axes() {
             let axis_idx = axis
@@ -2592,12 +1878,12 @@ impl Renderer {
                 .expect("all visible axes must have an axis index");
             axis_indices.push(axis_idx);
 
-            let (start, end) = axis.visible_datums_range_normalized();
+            let (start, end) = axis.visible_data_range_normalized();
             let range = start..=end;
 
-            for (i, datum) in axis.datums_normalized().iter().enumerate() {
-                if range.contains(datum) {
-                    curves[i].push(*datum);
+            for (i, data_point) in axis.data_normalized().iter().enumerate() {
+                if range.contains(data_point) {
+                    curves[i].push(*data_point);
                 } else {
                     curves[i].push(f32::NAN);
                 }
@@ -2623,7 +1909,7 @@ impl Renderer {
                 let start_value = values[0];
                 let end_value = values[1];
 
-                lines.push(buffers::ValueLine {
+                lines.push(buffers::DataLine {
                     curve_idx,
                     start_axis,
                     start_value,
@@ -2634,63 +1920,63 @@ impl Renderer {
         }
 
         self.buffers
-            .datums_mut()
+            .data_mut()
             .lines_mut()
             .update(&self.device, &lines)
     }
 
     fn update_color_values_buffer(&mut self) {
         let axes = self.axes.borrow();
-        let num_datums = axes.num_datums();
+        let num_data_points = axes.num_data_points();
 
         self.buffers
-            .datums_mut()
+            .data_mut()
             .color_values_mut()
-            .resize(&self.device, num_datums);
+            .resize(&self.device, num_data_points);
 
-        match &self.datums_coloring {
-            DatumsColoring::Constant(x) => {
-                let values = vec![*x; num_datums];
+        match &self.data_color_mode {
+            wasm_bridge::DataColorMode::Constant(x) => {
+                let values = vec![*x; num_data_points];
                 self.buffers
-                    .datums()
+                    .data()
                     .color_values()
                     .update(&self.device, &values);
             }
-            DatumsColoring::Attribute(key) => {
+            wasm_bridge::DataColorMode::Attribute(key) => {
                 let axis = axes.axis(key).expect("unknown attribute");
-                let values = axis.datums_normalized();
+                let values = axis.data_normalized();
                 self.buffers
-                    .datums()
+                    .data()
                     .color_values()
                     .update(&self.device, values);
             }
-            DatumsColoring::Probability => {}
+            wasm_bridge::DataColorMode::Probability => {}
         }
     }
 
-    fn update_datums_buffer(&mut self) {
+    fn update_data_buffer(&mut self) {
         let axes = self.axes.borrow();
-        let num_datums = axes.num_datums();
+        let num_data_points = axes.num_data_points();
         let num_visible_axes = axes.num_visible_axes();
 
         self.buffers
-            .datums_mut()
-            .datums_mut()
-            .resize(&self.device, num_datums, num_visible_axes);
+            .data_mut()
+            .data_mut()
+            .resize(&self.device, num_data_points, num_visible_axes);
 
-        if num_datums == 0 || num_visible_axes == 0 {
+        if num_data_points == 0 || num_visible_axes == 0 {
             return;
         }
 
         for axis in axes.visible_axes() {
-            let datums = axis.datums_normalized();
+            let data = axis.data_normalized();
             let axis_idx = axis
                 .axis_index()
                 .expect("all visible axes should have an index");
             self.buffers
-                .datums()
-                .datums()
-                .update(&self.device, datums, axis_idx);
+                .data()
+                .data()
+                .update(&self.device, data, axis_idx);
         }
     }
 }
@@ -2739,12 +2025,12 @@ impl Renderer {
             let axis_index = axis
                 .axis_index()
                 .expect("all visible axes must have an index");
-            let datums_range = axis.visible_datums_range_normalized().into();
+            let data_range = axis.visible_data_range_normalized().into();
             let curve_builder = axis.borrow_selection_curve_builder(active_label_idx);
 
             if is_expanded {
                 for segment in curve_builder
-                    .get_selection_segment_info_in_range(datums_range)
+                    .get_selection_segment_info_in_range(data_range)
                     .iter()
                 {
                     let (offset_x, range) =
@@ -2760,7 +2046,7 @@ impl Renderer {
                     });
                 }
 
-                for range in curve_builder.get_group_ranges_between(datums_range).iter() {
+                for range in curve_builder.get_group_ranges_between(data_range).iter() {
                     segments.push(buffers::SelectionLineInfo {
                         axis: axis_index as u32,
                         use_color: 0,
@@ -2771,7 +2057,7 @@ impl Renderer {
                     });
                 }
             } else {
-                for range in curve_builder.get_group_ranges_between(datums_range).iter() {
+                for range in curve_builder.get_group_ranges_between(data_range).iter() {
                     segments.push(buffers::SelectionLineInfo {
                         axis: axis_index as u32,
                         use_color: 0,
@@ -2890,33 +2176,35 @@ impl Renderer {
 
     fn apply_probability_curves(&mut self, encoder: &webgpu::CommandEncoder, label_idx: usize) {
         let axes = self.axes.borrow();
-        let num_datums = axes.num_datums();
+        let num_data_points = axes.num_data_points();
 
         // Ensure that the buffer is large enough.
         self.buffers
-            .datums_mut()
+            .data_mut()
             .probabilities_mut(label_idx)
-            .set_len(&self.device, num_datums);
+            .set_len(&self.device, num_data_points);
 
-        // If there are no datums we can skip the rest.
-        if num_datums == 0 {
+        // If there are no data points we can skip the rest.
+        if num_data_points == 0 {
             return;
         }
 
-        let num_datums_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
-            label: Some(Cow::Borrowed("num datums")),
+        let num_data_points_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
+            label: Some(Cow::Borrowed("num data points")),
             size: std::mem::size_of::<u32>(),
             usage: webgpu::BufferUsage::UNIFORM | webgpu::BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
-        self.device
-            .queue()
-            .write_buffer_single(&num_datums_buffer, 0, &(num_datums as u32));
+        self.device.queue().write_buffer_single(
+            &num_data_points_buffer,
+            0,
+            &(num_data_points as u32),
+        );
 
         let curve_samples = self.buffers.curves().sample_texture(label_idx).array_view();
         let output_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
             label: Some(Cow::Borrowed("curve application output")),
-            size: std::mem::size_of::<u32>() * self.buffers.datums().datums().len(),
+            size: std::mem::size_of::<u32>() * self.buffers.data().data().len(),
             usage: webgpu::BufferUsage::STORAGE,
             mapped_at_creation: None,
         });
@@ -2940,7 +2228,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 2,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: self.buffers.datums().datums().buffer().clone(),
+                        buffer: self.buffers.data().data().buffer().clone(),
                         offset: None,
                         size: None,
                     }),
@@ -2948,7 +2236,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 3,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: num_datums_buffer.clone(),
+                        buffer: num_data_points_buffer.clone(),
                         offset: None,
                         size: None,
                     }),
@@ -2962,7 +2250,7 @@ impl Renderer {
                 .clone(),
         });
 
-        let num_workgroups = ((self.buffers.datums().datums().len() + 63) / 64) as u32;
+        let num_workgroups = ((self.buffers.data().data().len() + 63) / 64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(
@@ -2985,7 +2273,7 @@ impl Renderer {
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
                         buffer: self
                             .buffers
-                            .datums()
+                            .data()
                             .probabilities(label_idx)
                             .buffer()
                             .clone(),
@@ -3004,7 +2292,7 @@ impl Renderer {
                 webgpu::BindGroupEntry {
                     binding: 2,
                     resource: webgpu::BindGroupEntryResource::Buffer(webgpu::BufferBinding {
-                        buffer: num_datums_buffer,
+                        buffer: num_data_points_buffer,
                         offset: None,
                         size: None,
                     }),
@@ -3018,7 +2306,7 @@ impl Renderer {
                 .clone(),
         });
 
-        let num_workgroups = ((num_datums + 63) / 64) as u32;
+        let num_workgroups = ((num_data_points + 63) / 64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(&self.pipelines.compute().compute_probability.reduce_pipeline);
@@ -3033,7 +2321,7 @@ impl Renderer {
     ) -> (Box<[f32]>, Box<[usize]>) {
         {
             let axes = self.axes.borrow();
-            if axes.num_datums() == 0 {
+            if axes.num_data_points() == 0 {
                 return (Box::new([]), Box::new([]));
             }
         }
@@ -3044,12 +2332,12 @@ impl Renderer {
             .create_command_encoder(webgpu::CommandEncoderDescriptor { label: None });
         let staging_buffer = self.device.create_buffer(webgpu::BufferDescriptor {
             label: Some(Cow::Borrowed("probability staging buffer")),
-            size: self.buffers.datums().probabilities(label_idx).size(),
+            size: self.buffers.data().probabilities(label_idx).size(),
             usage: webgpu::BufferUsage::MAP_READ | webgpu::BufferUsage::COPY_DST,
             mapped_at_creation: None,
         });
         encoder.copy_buffer_to_buffer(
-            self.buffers.datums().probabilities(label_idx).buffer(),
+            self.buffers.data().probabilities(label_idx).buffer(),
             0,
             &staging_buffer,
             0,

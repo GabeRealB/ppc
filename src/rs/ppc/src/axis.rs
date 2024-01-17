@@ -29,7 +29,7 @@ const SELECTION_LINE_PADDING_REM: f32 = 0.15;
 const SELECTION_LINE_MARGIN_REM: f32 = 1.0;
 
 const CURVE_LINE_SIZE_REM: f32 = 0.075;
-const DATUMS_LINE_SIZE_REM: f32 = 0.1;
+const DATA_LINE_SIZE_REM: f32 = 0.1;
 const CONTROL_POINTS_RADIUS_REM: f32 = 0.3;
 
 const LABEL_PADDING_REM: f32 = 1.0;
@@ -46,7 +46,7 @@ const MAX_CURVE_T: f32 = 0.95;
 #[derive(Debug)]
 pub struct AxisArgs {
     label: Rc<str>,
-    datums: Box<[f32]>,
+    data: Box<[f32]>,
     range: (f32, f32),
     min_range: (f32, f32),
     visible_range: Option<(f32, f32)>,
@@ -56,15 +56,15 @@ pub struct AxisArgs {
 
 impl AxisArgs {
     /// Constructs a new instance with default settings.
-    pub fn new(label: &str, datums: Box<[f32]>) -> Self {
-        let mut datums: Vec<_> = datums.into();
-        datums.retain(|x| !x.is_nan());
+    pub fn new(label: &str, data: Box<[f32]>) -> Self {
+        let mut data: Vec<_> = data.into();
+        data.retain(|x| !x.is_nan());
 
-        let min = datums
+        let min = data
             .iter()
             .cloned()
             .min_by(|x, y| x.partial_cmp(y).unwrap());
-        let max = datums
+        let max = data
             .iter()
             .cloned()
             .max_by(|x, y| x.partial_cmp(y).unwrap());
@@ -79,7 +79,7 @@ impl AxisArgs {
 
         Self {
             label: label.into(),
-            datums: datums.into(),
+            data: data.into(),
             range,
             min_range,
             visible_range: None,
@@ -98,7 +98,7 @@ impl AxisArgs {
         assert!(max.is_finite(), "the maximum must be finite");
         assert!(
             min <= self.min_range.0 && max >= self.min_range.1,
-            "the range must be bigger or equal to the min/max of the datums, min = {min}, max = {max}, range = {:?}", 
+            "the range must be bigger or equal to the min/max of the data, min = {min}, max = {max}, range = {:?}", 
             self.min_range
         );
 
@@ -128,7 +128,7 @@ impl AxisArgs {
         assert!(max.is_finite(), "the maximum must be finite");
         assert!(
             min >= self.range.0 && max <= self.range.1,
-            "the range must be smaller or equal to the datums range, min = {min}, max = {max}, range = {:?}",
+            "the range must be smaller or equal to the data range, min = {min}, max = {max}, range = {:?}",
             self.range
         );
 
@@ -167,12 +167,12 @@ pub struct Axis {
     state: Cell<AxisState>,
     axis_index: Option<usize>,
 
-    datums: Box<[f32]>,
-    datums_normalized: Box<[f32]>,
+    data: Box<[f32]>,
+    data_normalized: Box<[f32]>,
 
-    datums_range: (f32, f32),
-    visible_datums_range: (f32, f32),
-    visible_datums_range_normalized: (f32, f32),
+    data_range: (f32, f32),
+    visible_data_range: (f32, f32),
+    visible_data_range_normalized: (f32, f32),
 
     ticks: Vec<(f32, Rc<str>)>,
     max_tick_height: Length<LocalSpace>,
@@ -202,24 +202,20 @@ impl Axis {
         get_text_length: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
     ) -> Self {
         let label = args.label;
-        let datums = args.datums;
-        let datums_range = args.range;
-        let visible_datums_range = args.visible_range.unwrap_or(datums_range);
+        let data = args.data;
+        let data_range = args.range;
+        let visible_data_range = args.visible_range.unwrap_or(data_range);
         let ticks = args.ticks;
         let state = args.state;
 
-        let datums_normalized = datums
+        let data_normalized = data
             .iter()
-            .map(|d| d.inv_lerp(datums_range.0, datums_range.1))
+            .map(|d| d.inv_lerp(data_range.0, data_range.1))
             .collect();
 
-        let visible_datums_range_normalized = (
-            visible_datums_range
-                .0
-                .inv_lerp(datums_range.0, datums_range.1),
-            visible_datums_range
-                .1
-                .inv_lerp(datums_range.0, datums_range.1),
+        let visible_data_range_normalized = (
+            visible_data_range.0.inv_lerp(data_range.0, data_range.1),
+            visible_data_range.1.inv_lerp(data_range.0, data_range.1),
         );
 
         let locales = wasm_bindgen::JsValue::undefined().unchecked_into();
@@ -227,8 +223,8 @@ impl Axis {
         let formatter = js_sys::Intl::NumberFormat::new(&locales, &options);
         let format = formatter.format();
 
-        let min_num = wasm_bindgen::JsValue::from_f64(visible_datums_range.0 as f64);
-        let max_num = wasm_bindgen::JsValue::from_f64(visible_datums_range.1 as f64);
+        let min_num = wasm_bindgen::JsValue::from_f64(visible_data_range.0 as f64);
+        let max_num = wasm_bindgen::JsValue::from_f64(visible_data_range.1 as f64);
         let min_label = format.call1(&formatter, &min_num).unwrap();
         let max_label = format.call1(&formatter, &max_num).unwrap();
 
@@ -247,7 +243,7 @@ impl Axis {
                     });
 
                     (
-                        t.inv_lerp(visible_datums_range.0, visible_datums_range.1),
+                        t.inv_lerp(visible_data_range.0, visible_data_range.1),
                         label,
                     )
                 })
@@ -256,11 +252,10 @@ impl Axis {
             [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
                 .into_iter()
                 .filter(|t| {
-                    (visible_datums_range_normalized.0..=visible_datums_range_normalized.1)
-                        .contains(t)
+                    (visible_data_range_normalized.0..=visible_data_range_normalized.1).contains(t)
                 })
                 .map(|t| {
-                    let label_v = datums_range.0.lerp(datums_range.1, t);
+                    let label_v = data_range.0.lerp(data_range.1, t);
                     let label_v = wasm_bindgen::JsValue::from_f64(label_v as f64);
                     let label = format.call1(&formatter, &label_v).unwrap();
                     let label = label.as_string().unwrap().into();
@@ -281,11 +276,11 @@ impl Axis {
             max_label,
             state: Cell::new(state),
             axis_index,
-            datums,
-            datums_normalized,
-            datums_range,
-            visible_datums_range,
-            visible_datums_range_normalized,
+            data,
+            data_normalized,
+            data_range,
+            visible_data_range,
+            visible_data_range_normalized,
             ticks,
             max_tick_height,
             selection_curves: RefCell::new(vec![]),
@@ -369,33 +364,33 @@ impl Axis {
         self.axis_index
     }
 
-    /// Fetches the datums of the axis.
+    /// Fetches the data of the axis.
     #[allow(dead_code)]
-    pub fn datums(&self) -> &[f32] {
-        &self.datums
+    pub fn data(&self) -> &[f32] {
+        &self.data
     }
 
-    /// Fetches the normalized datums of the axis.
-    pub fn datums_normalized(&self) -> &[f32] {
-        &self.datums_normalized
+    /// Fetches the normalized data of the axis.
+    pub fn data_normalized(&self) -> &[f32] {
+        &self.data_normalized
     }
 
-    /// Returns the `min` and `max` value of the datums.
+    /// Returns the `min` and `max` value of the data.
     #[allow(dead_code)]
-    pub fn datums_range(&self) -> (f32, f32) {
-        self.datums_range
+    pub fn data_range(&self) -> (f32, f32) {
+        self.data_range
     }
 
-    /// Returns the `min` and `max` value of the visible datums.
+    /// Returns the `min` and `max` value of the visible data.
     #[allow(dead_code)]
-    pub fn visible_datums_range(&self) -> (f32, f32) {
-        self.visible_datums_range
+    pub fn visible_data_range(&self) -> (f32, f32) {
+        self.visible_data_range
     }
 
-    /// Returns the `min` and `max` value of the visible datums, normalized in
-    /// relation the the `min` and `max` of all datums.
-    pub fn visible_datums_range_normalized(&self) -> (f32, f32) {
-        self.visible_datums_range_normalized
+    /// Returns the `min` and `max` value of the visible data, normalized in
+    /// relation the the `min` and `max` of all data.
+    pub fn visible_data_range_normalized(&self) -> (f32, f32) {
+        self.visible_data_range_normalized
     }
 
     /// Borrows the selection curve.
@@ -435,7 +430,7 @@ impl Axis {
     /// Signals that the axis must allocate another selection curve and selection curve builder for the new label.
     pub fn push_label(&self) {
         self.selection_curves.borrow_mut().push(SelectionCurve::new(
-            self.visible_datums_range_normalized.into(),
+            self.visible_data_range_normalized.into(),
         ));
         self.curve_builders
             .borrow_mut()
@@ -640,8 +635,8 @@ impl Axis {
             - max_label_height
             - label_margin;
 
-        let start = start.lerp(end, self.visible_datums_range_normalized.0);
-        let end = start.lerp(end, self.visible_datums_range_normalized.1);
+        let start = start.lerp(end, self.visible_data_range_normalized.0);
+        let end = start.lerp(end, self.visible_data_range_normalized.1);
 
         (
             Position::new((POSITION_X, start.0)),
@@ -844,13 +839,13 @@ impl Debug for Axis {
             .field("max_label", &self.max_label)
             .field("state", &self.state)
             .field("axis_index", &self.axis_index)
-            .field("datums", &self.datums)
-            .field("datums_normalized", &self.datums_normalized)
-            .field("datums_range", &self.datums_range)
-            .field("visible_datums_range", &self.visible_datums_range)
+            .field("data", &self.data)
+            .field("data_normalized", &self.data_normalized)
+            .field("data_range", &self.data_range)
+            .field("visible_data_range", &self.visible_data_range)
             .field(
-                "visible_datums_range_normalized",
-                &self.visible_datums_range_normalized,
+                "visible_data_range_normalized",
+                &self.visible_data_range_normalized,
             )
             .field("world_offset", &self.world_offset)
             .field("axes", &self.axes)
@@ -881,16 +876,14 @@ pub struct Axes {
     visible_axis_start: Option<Rc<Axis>>,
     visible_axis_end: Option<Rc<Axis>>,
 
-    num_datums: Option<usize>,
+    num_data_points: Option<usize>,
     next_axis_index: usize,
 
     coordinate_mappings: Rc<RefCell<AxesCoordinateMappings>>,
 
     get_rem_length_screen: Rc<RemLengthFunc<ScreenSpace>>,
-    get_text_length_screen: Rc<TextLengthFunc<ScreenSpace>>,
 
     get_rem_length_world: Rc<RemLengthFunc2<WorldSpace>>,
-    get_text_length_world: Rc<TextLengthFunc<WorldSpace>>,
 
     get_rem_length_local: Rc<RemLengthFunc2<LocalSpace>>,
     get_text_length_local: Rc<TextLengthFunc<LocalSpace>>,
@@ -994,39 +987,6 @@ impl Axes {
             })
         };
 
-        let get_text_length_world = {
-            let coordinate_mappings = coordinate_mappings.clone();
-            let get_text_length_screen = get_text_length_screen.clone();
-            Rc::new(move |text: &str| {
-                let mappings = coordinate_mappings.borrow();
-
-                let (width, height) = get_text_length_screen(text);
-                let p0 = Offset::<ScreenSpace>::zero();
-                let p1 = Offset::<ScreenSpace>::from_length_at_axis(0, width);
-                let p2 = Offset::<ScreenSpace>::from_length_at_axis(1, height);
-
-                let mapper = ScreenViewTransformer::new(mappings.view_height);
-                let p0 = p0.transform(&mapper);
-                let p1 = p1.transform(&mapper);
-                let p2 = p2.transform(&mapper);
-
-                let mapper = ViewWorldTransformer::new(
-                    mappings.view_height,
-                    mappings.view_width,
-                    mappings.world_width,
-                    0.5,
-                );
-                let p0 = p0.transform(&mapper);
-                let p1 = p1.transform(&mapper);
-                let p2 = p2.transform(&mapper);
-
-                let w = p1 - p0;
-                let h = p2 - p0;
-
-                (w.into(), h.into())
-            })
-        };
-
         let get_text_length_local = {
             let coordinate_mappings = coordinate_mappings.clone();
             let get_text_length_screen = get_text_length_screen.clone();
@@ -1070,13 +1030,11 @@ impl Axes {
             num_visible_axes: 0,
             visible_axis_start: None,
             visible_axis_end: None,
-            num_datums: None,
+            num_data_points: None,
             next_axis_index: 0,
             coordinate_mappings,
             get_rem_length_screen,
-            get_text_length_screen,
             get_rem_length_world,
-            get_text_length_world,
             get_rem_length_local,
             get_text_length_local,
         }
@@ -1096,9 +1054,9 @@ impl Axes {
         )))
     }
 
-    /// Returns the number of datums for each axis.
-    pub fn num_datums(&self) -> usize {
-        self.num_datums.unwrap_or(0)
+    /// Returns the number of data points for each axis.
+    pub fn num_data_points(&self) -> usize {
+        self.num_data_points.unwrap_or(0)
     }
 
     /// Returns the number of visible axes.
@@ -1152,7 +1110,7 @@ impl Axes {
         this: &Rc<RefCell<Self>>,
         key: &str,
         label: &str,
-        datums: Box<[f32]>,
+        data: Box<[f32]>,
         range: Option<(f32, f32)>,
         visible_range: Option<(f32, f32)>,
         ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
@@ -1166,15 +1124,15 @@ impl Axes {
             panic!("axis {key:?} already exists");
         }
 
-        if let Some(num_datums) = self.num_datums {
-            if num_datums != datums.len() {
-                panic!("unexpected number of datums for axis {key:?}, expected {num_datums}, but got {}", datums.len());
+        if let Some(num_data_points) = self.num_data_points {
+            if num_data_points != data.len() {
+                panic!("unexpected number of data points for axis {key:?}, expected {num_data_points}, but got {}", data.len());
             }
         } else {
-            self.num_datums = Some(datums.len());
+            self.num_data_points = Some(data.len());
         }
 
-        let mut args = AxisArgs::new(label, datums);
+        let mut args = AxisArgs::new(label, data);
         if let Some((min, max)) = range {
             args = args.with_range(min, max);
         }
@@ -1296,9 +1254,9 @@ impl Axes {
         (self.get_rem_length_world)(AXIS_LINE_SIZE_REM)
     }
 
-    /// Returns the datums line size.
-    pub fn datums_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
-        (self.get_rem_length_world)(DATUMS_LINE_SIZE_REM)
+    /// Returns the data line size.
+    pub fn data_line_size(&self) -> (Length<WorldSpace>, Length<WorldSpace>) {
+        (self.get_rem_length_world)(DATA_LINE_SIZE_REM)
     }
 
     /// Returns the selections line size.
@@ -1643,7 +1601,7 @@ impl Debug for Axes {
             .field("num_visible_axes", &self.num_visible_axes)
             .field("visible_axis_start", &self.visible_axis_start)
             .field("visible_axis_end", &self.visible_axis_end)
-            .field("num_datums", &self.num_datums)
+            .field("num_data_points", &self.num_data_points)
             .field("next_axis_index", &self.next_axis_index)
             .field("coordinate_mappings", &self.coordinate_mappings)
             .finish_non_exhaustive()

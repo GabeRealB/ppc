@@ -293,7 +293,7 @@ impl SelectGroupAction {
         let mut curve_builder = self.curve_builder.clone();
         curve_builder.offset_group(self.group_idx, self.offset);
 
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
         self.axis
             .borrow_selection_curve_mut(self.active_label_idx)
             .set_curve(curve_builder.build(datums_range, self.easing_type));
@@ -306,7 +306,7 @@ impl SelectGroupAction {
 
     fn finish(self) -> Event {
         let mut curve_builder = self.curve_builder;
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
 
         if !self.moved {
             curve_builder.remove_group(self.group_idx);
@@ -396,7 +396,7 @@ impl CreateSelectionAction {
         let mut curve_builder = self.curve_builder.clone();
         curve_builder.add_selection(self.selection.clone());
 
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
         self.axis
             .borrow_selection_curve_mut(self.active_label_idx)
             .set_curve(curve_builder.build(datums_range, self.easing_type));
@@ -409,7 +409,7 @@ impl CreateSelectionAction {
 
     fn finish(self) -> Event {
         let mut curve_builder = self.curve_builder;
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
 
         if !self.selection.segment_is_point(0) {
             curve_builder.add_selection(self.selection);
@@ -478,7 +478,7 @@ impl SelectSelectionAction {
         let mut curve_builder = self.curve_builder.clone();
         curve_builder.insert_selection(self.selection.clone(), self.selection_idx);
 
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
         self.axis
             .borrow_selection_curve_mut(self.active_label_idx)
             .set_curve(curve_builder.build(datums_range, self.easing_type));
@@ -491,7 +491,7 @@ impl SelectSelectionAction {
 
     fn finish(self) -> Event {
         let mut curve_builder = self.curve_builder;
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
 
         // If we moved the mouse we do add the modified selection.
         if self.moved {
@@ -635,7 +635,7 @@ impl SelectSelectionControlPointAction {
         let mut curve_builder = self.curve_builder.clone();
         curve_builder.insert_selection(self.selection.clone(), self.selection_idx);
 
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
         self.axis
             .borrow_selection_curve_mut(self.active_label_idx)
             .set_curve(curve_builder.build(datums_range, self.easing_type));
@@ -649,7 +649,7 @@ impl SelectSelectionControlPointAction {
     fn finish(self) -> Event {
         let mut selection = self.selection;
         let mut curve_builder = self.curve_builder;
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
 
         let delete_segment = !self.moved || selection.segment_is_point(self.segment_idx);
         if delete_segment {
@@ -759,7 +759,7 @@ impl SelectCurveControlPointAction {
         let mut curve_builder = self.curve_builder.clone();
         curve_builder.insert_selection(self.selection.clone(), self.selection_idx);
 
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
         self.axis
             .borrow_selection_curve_mut(self.active_label_idx)
             .set_curve(curve_builder.build(datums_range, self.easing_type));
@@ -773,7 +773,7 @@ impl SelectCurveControlPointAction {
     fn finish(self) -> Event {
         let selection = self.selection;
         let mut curve_builder = self.curve_builder;
-        let datums_range = self.axis.visible_datums_range_normalized().into();
+        let datums_range = self.axis.visible_data_range_normalized().into();
         curve_builder.insert_selection(selection, self.selection_idx);
 
         self.axis

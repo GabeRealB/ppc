@@ -14,7 +14,7 @@ impl Event {
     pub const BRUSH_COLOR_CHANGE: Self = Self(1 << 3);
     pub const UNSELECTED_COLOR_CHANGE: Self = Self(1 << 4);
     pub const COLOR_SCALE_CHANGE: Self = Self(1 << 5);
-    pub const DATUMS_COLORING_CHANGE: Self = Self(1 << 6);
+    pub const DATA_COLOR_MODE_CHANGE: Self = Self(1 << 6);
     pub const COLOR_BAR_VISIBILITY_CHANGE: Self = Self(1 << 7);
     pub const LABEL_ADDITION: Self = Self(1 << 8);
     pub const LABEL_REMOVAL: Self = Self(1 << 9);

@@ -32,7 +32,7 @@ impl Pipelines {
 
 pub struct RenderPipelines {
     axis_lines: AxisLinesRenderPipeline,
-    datum_lines: DatumLinesRenderPipeline,
+    data_lines: DataLinesRenderPipeline,
     curve_lines: CurveLinesRenderPipeline,
     selections: SelectionsRenderPipeline,
     curve_segments: CurveSegmentsRenderPipeline,
@@ -43,7 +43,7 @@ impl RenderPipelines {
     pub async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
         Self {
             axis_lines: AxisLinesRenderPipeline::new(device, presentation_format).await,
-            datum_lines: DatumLinesRenderPipeline::new(device, presentation_format).await,
+            data_lines: DataLinesRenderPipeline::new(device, presentation_format).await,
             curve_lines: CurveLinesRenderPipeline::new(device, presentation_format).await,
             selections: SelectionsRenderPipeline::new(device, presentation_format).await,
             curve_segments: CurveSegmentsRenderPipeline::new(device, presentation_format).await,
@@ -55,8 +55,8 @@ impl RenderPipelines {
         &self.axis_lines
     }
 
-    pub fn datum_lines(&self) -> &DatumLinesRenderPipeline {
-        &self.datum_lines
+    pub fn data_lines(&self) -> &DataLinesRenderPipeline {
+        &self.data_lines
     }
 
     pub fn curve_lines(&self) -> &CurveLinesRenderPipeline {
@@ -259,20 +259,20 @@ impl AxisLinesRenderPipeline {
     }
 }
 
-pub struct DatumLinesRenderPipeline {
+pub struct DataLinesRenderPipeline {
     layout: BindGroupLayout,
     pipeline: RenderPipeline,
 }
 
-impl DatumLinesRenderPipeline {
+impl DataLinesRenderPipeline {
     async fn new(device: &Device, presentation_format: TextureFormat) -> Self {
         let shader_module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("datum lines shader".into()),
-            code: include_str!("./shaders/datum_lines.wgsl").into(),
+            label: Some("data lines shader".into()),
+            code: include_str!("./shaders/data_lines.wgsl").into(),
         });
 
         let layout = device.create_bind_group_layout(BindGroupLayoutDescriptor {
-            label: Some("datum lines render pipeline bind group layout".into()),
+            label: Some("data lines render pipeline bind group layout".into()),
             entries: [
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -336,7 +336,7 @@ impl DatumLinesRenderPipeline {
 
         let pipeline = device
             .create_render_pipeline_async(RenderPipelineDescriptor {
-                label: Some("datum lines render pipeline".into()),
+                label: Some("data lines render pipeline".into()),
                 layout: PipelineLayoutType::Layout(device.create_pipeline_layout(
                     PipelineLayoutDescriptor {
                         label: None,
@@ -390,9 +390,9 @@ impl DatumLinesRenderPipeline {
         &self,
         clear_value: colors::ColorTransparent<colors::SRgb>,
         matrices: &buffers::MatricesBuffer,
-        config: &buffers::DatumsConfigBuffer,
+        config: &buffers::DataConfigBuffer,
         axes: &buffers::AxesBuffer,
-        datum_lines: &buffers::DatumLinesBuffer,
+        data_lines: &buffers::DataLinesBuffer,
         color_values: &buffers::ColorValuesBuffer,
         probabilities: &buffers::ProbabilitiesBuffer,
         color_scale: &buffers::ColorScaleTexture,
@@ -403,13 +403,13 @@ impl DatumLinesRenderPipeline {
         msaa_texture: &TextureView,
         resolve_target: &TextureView,
     ) {
-        let num_lines = datum_lines.len();
+        let num_lines = data_lines.len();
         if num_lines == 0 {
             return;
         }
 
         let bind_group = device.create_bind_group(BindGroupDescriptor {
-            label: Some("datum lines bind group".into()),
+            label: Some("data lines bind group".into()),
             entries: [
                 BindGroupEntry {
                     binding: 0,
@@ -438,7 +438,7 @@ impl DatumLinesRenderPipeline {
                 BindGroupEntry {
                     binding: 3,
                     resource: BindGroupEntryResource::Buffer(BufferBinding {
-                        buffer: datum_lines.buffer().clone(),
+                        buffer: data_lines.buffer().clone(),
                         offset: None,
                         size: None,
                     }),
@@ -468,7 +468,7 @@ impl DatumLinesRenderPipeline {
         });
 
         let descriptor = RenderPassDescriptor {
-            label: Some("datum lines render pass descriptor".into()),
+            label: Some("data lines render pass descriptor".into()),
             color_attachments: [RenderPassColorAttachments {
                 clear_value: Some(clear_value.to_f32_with_alpha()),
                 load_op: RenderPassLoadOp::Clear,
@@ -1734,7 +1734,7 @@ impl ColorScaleSamplingComputePipeline {
 
     pub fn dispatch(
         &self,
-        color_space: crate::ColorSpace,
+        color_space: crate::wasm_bridge::ColorSpace,
         color_scale: &mut buffers::ColorScaleTexture,
         color_scale_elements: &buffers::ColorScaleElementBuffer,
         device: &Device,
@@ -1770,16 +1770,16 @@ impl ColorScaleSamplingComputePipeline {
         pass.end();
 
         // We don't need to transform the color space, since it is already correct.
-        if color_space == crate::ColorSpace::Xyz {
+        if color_space == crate::wasm_bridge::ColorSpace::Xyz {
             return;
         }
 
         let tmp_color_scale = buffers::ColorScaleTexture::new(device);
         let color_space: u32 = match color_space {
-            crate::ColorSpace::SRgb => 0,
-            crate::ColorSpace::Xyz => 1,
-            crate::ColorSpace::CieLab => 2,
-            crate::ColorSpace::CieLch => 3,
+            crate::wasm_bridge::ColorSpace::SRgb => 0,
+            crate::wasm_bridge::ColorSpace::Xyz => 1,
+            crate::wasm_bridge::ColorSpace::CieLab => 2,
+            crate::wasm_bridge::ColorSpace::CieLch => 3,
         };
         let color_space_buffer = device.create_buffer(BufferDescriptor {
             label: Some("color space buffer".into()),

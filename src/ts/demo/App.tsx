@@ -18,35 +18,35 @@ class App extends Component {
                     label: "Var 1",
                     range: [0, 100],
                     // visibleRange: [20, 70],
-                    datums: [...Array(100)].map(() => Math.random() * 100),
+                    data_points: [...Array(100)].map(() => Math.random() * 100),
                     tickPositions: [0, 25, 50, 75, 100],
                 },
                 "v_2": {
                     label: "Var 2",
                     range: [15, 30],
-                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    data_points: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
                 },
                 "v_3": {
                     label: "Var 3",
                     range: [0, 1],
-                    datums: [...Array(100)].map(() => (Math.random()) > 0.5 ? 0.9 : 0.1),
+                    data_points: [...Array(100)].map(() => (Math.random()) > 0.5 ? 0.9 : 0.1),
                     tickPositions: [0.1, 0.9],
                     tickLabels: ["False", "True"],
                 },
                 "v_4": {
                     label: "Var 4",
                     range: [15, 30],
-                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    data_points: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
                 },
                 "v_5": {
                     label: "Var 5",
                     range: [15, 30],
-                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    data_points: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
                 },
                 "v_6": {
                     label: "Var 6",
                     range: [15, 30],
-                    datums: [...Array(100)].map(() => Math.random() * (30 - 15) + 15),
+                    data_points: [...Array(100)].map(() => Math.random() * (30 - 15) + 15),
                     hidden: true
                 },
             },
@@ -73,8 +73,8 @@ class App extends Component {
             },
             demo_slider_value_start: EPSILON,
             demo_slider_value_end: 1.0,
-            coloring_constant_value: 0.5,
-            coloring_attribute: "v_1",
+            color_mode_constant_value: 0.5,
+            color_mode_attribute_value: "v_1",
         };
         this.setProps = this.setProps.bind(this);
     }
@@ -89,20 +89,20 @@ class App extends Component {
         const demoSliderValueEnd = this.state["demo_slider_value_end"];
         const colorBarState = this.state["colorBar"];
 
-        let coloringMode;
+        let colorMode;
         switch (typeof (this.state["colors"].selected.color)) {
             case 'number':
-                coloringMode = "constant";
+                colorMode = "constant";
                 break;
             case 'string':
-                coloringMode = "attribute";
+                colorMode = "attribute";
             default:
                 if (this.state["colors"].selected.color.type === "probability") {
-                    coloringMode = "probability";
+                    colorMode = "probability";
                 }
         }
-        const constantColoringValue = this.state["coloring_constant_value"];
-        const attributeColoringValue = this.state["coloring_attribute"];
+        const constantColorModeValue = this.state["color_mode_constant_value"];
+        const attributeColorModeValue = this.state["color_mode_attribute_value"];
         const colorMapValue = this.state["colors"].selected.scale;
 
         const debugShowAxisBB = this.state["debug"].showAxisBoundingBox;
@@ -180,17 +180,17 @@ class App extends Component {
                                 />
                             </FormControl>
                             <FormControl fullWidth>
-                                <FormLabel>Coloring</FormLabel>
+                                <FormLabel>Color Mode</FormLabel>
                                 <RadioGroup
-                                    value={coloringMode}
+                                    value={colorMode}
                                     onChange={(e, value) => {
                                         const colors = window.structuredClone(this.state["colors"]);
                                         switch (value) {
                                             case "constant":
-                                                colors.selected.color = this.state["coloring_constant_value"];
+                                                colors.selected.color = this.state["color_mode_constant_value"];
                                                 break;
                                             case "attribute":
-                                                colors.selected.color = this.state["coloring_attribute"];
+                                                colors.selected.color = this.state["color_mode_attribute_value"];
                                                 break;
                                             case "probability":
                                                 colors.selected.color = { type: "probability" };
@@ -216,29 +216,29 @@ class App extends Component {
                                     />
                                 </RadioGroup>
                             </FormControl>
-                            <FormControl fullWidth disabled={coloringMode !== "constant"}>
-                                <FormLabel>Coloring constant</FormLabel>
+                            <FormControl fullWidth disabled={colorMode !== "constant"}>
+                                <FormLabel>Color Mode: Constant</FormLabel>
                                 <Slider
                                     min={0}
                                     max={1.0}
                                     step={EPSILON}
-                                    value={constantColoringValue}
-                                    disabled={coloringMode !== "constant"}
+                                    value={constantColorModeValue}
+                                    disabled={colorMode !== "constant"}
                                     onChange={(e, value) => {
                                         const colors = window.structuredClone(this.state["colors"]);
                                         colors.selected.color = value;
-                                        this.setProps({ colors, coloring_constant_value: value })
+                                        this.setProps({ colors, color_mode_constant_value: value })
                                     }}
                                 />
                             </FormControl>
-                            <FormControl fullWidth disabled={coloringMode !== "attribute"}>
-                                <FormLabel>Coloring Attribute</FormLabel>
+                            <FormControl fullWidth disabled={colorMode !== "attribute"}>
+                                <FormLabel>Color Mode: Attribute</FormLabel>
                                 <RadioGroup
-                                    value={attributeColoringValue}
+                                    value={attributeColorModeValue}
                                     onChange={(e, value) => {
                                         const colors = window.structuredClone(this.state["colors"]);
                                         colors.selected.color = value;
-                                        this.setProps({ colors, coloring_attribute: value });
+                                        this.setProps({ colors, color_mode_attribute_value: value });
                                     }}
                                 >
                                     <FormControlLabel
@@ -274,7 +274,7 @@ class App extends Component {
                                 </RadioGroup>
                             </FormControl>
                             <FormControl fullWidth>
-                                <FormLabel>Coloring Map</FormLabel>
+                                <FormLabel>Color Map</FormLabel>
                                 <RadioGroup
                                     value={colorMapValue}
                                     onChange={(e, value) => {
