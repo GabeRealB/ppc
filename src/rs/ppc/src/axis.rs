@@ -1,6 +1,6 @@
 use std::{
     cell::{Cell, Ref, RefCell, RefMut},
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fmt::Debug,
     marker::PhantomData,
     rc::{Rc, Weak},
@@ -16,6 +16,7 @@ use crate::{
     },
     lerp::{InverseLerp, Lerp},
     selection::{SelectionCurve, SelectionCurveBuilder},
+    wasm_bridge,
 };
 
 const AXIS_LOCAL_Y_SCALE: f32 = 1.0;
@@ -165,7 +166,7 @@ pub struct Axis {
     max_label: Rc<str>,
 
     state: Cell<AxisState>,
-    axis_index: Option<usize>,
+    axis_index: Cell<Option<usize>>,
 
     data: Box<[f32]>,
     data_normalized: Box<[f32]>,
@@ -186,17 +187,19 @@ pub struct Axis {
     get_text_length: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
 
     axes: Weak<RefCell<Axes>>,
-    left: RefCell<Option<Weak<Self>>>,
-    right: RefCell<Option<Weak<Self>>>,
+    left: RefCell<Option<Rc<Self>>>,
+    right: RefCell<Option<Rc<Self>>>,
 }
 
 impl Axis {
     #[allow(clippy::type_complexity)]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         key: &str,
         args: AxisArgs,
         axis_index: Option<usize>,
         world_offset: f32,
+        num_labels: usize,
         axes: &Rc<RefCell<Axes>>,
         get_rem_length: Rc<dyn Fn(f32) -> (Length<LocalSpace>, Length<LocalSpace>)>,
         get_text_length: Rc<dyn Fn(&str) -> (Length<LocalSpace>, Length<LocalSpace>)>,
@@ -269,13 +272,20 @@ impl Axis {
             .max_by(|&l, &r| l.0.total_cmp(&r.0))
             .unwrap_or(Length::new(0.0));
 
+        let selection_curves = (0..num_labels)
+            .map(|_| SelectionCurve::new(visible_data_range_normalized.into()))
+            .collect();
+        let curve_builders = (0..num_labels)
+            .map(|_| SelectionCurveBuilder::new())
+            .collect();
+
         Self {
             key: key.into(),
             label,
             min_label,
             max_label,
             state: Cell::new(state),
-            axis_index,
+            axis_index: Cell::new(axis_index),
             data,
             data_normalized,
             data_range,
@@ -283,8 +293,8 @@ impl Axis {
             visible_data_range_normalized,
             ticks,
             max_tick_height,
-            selection_curves: RefCell::new(vec![]),
-            curve_builders: RefCell::new(vec![]),
+            selection_curves: RefCell::new(selection_curves),
+            curve_builders: RefCell::new(curve_builders),
             world_offset: Cell::new(world_offset),
             get_rem_length,
             get_text_length,
@@ -361,7 +371,7 @@ impl Axis {
 
     /// Fetches the index of the axis.
     pub fn axis_index(&self) -> Option<usize> {
-        self.axis_index
+        self.axis_index.get()
     }
 
     /// Fetches the data of the axis.
@@ -722,32 +732,22 @@ impl Axis {
 
     /// Returns the left neighbor of the axis.
     pub fn left_neighbor(&self) -> Option<Rc<Self>> {
-        let left = self.left.borrow().clone()?;
-        left.upgrade()
+        self.left.borrow().clone()
     }
 
     /// Sets the left neighbor of the axis.
     pub fn set_left_neighbor(&self, axis: Option<&Rc<Self>>) {
-        if let Some(axis) = axis {
-            *self.left.borrow_mut() = Some(Rc::downgrade(axis));
-        } else {
-            *self.left.borrow_mut() = None;
-        }
+        *self.left.borrow_mut() = axis.cloned();
     }
 
     /// Returns the left neighbor of the axis.
     pub fn right_neighbor(&self) -> Option<Rc<Self>> {
-        let right = self.right.borrow().clone()?;
-        right.upgrade()
+        self.right.borrow().clone()
     }
 
     /// Sets the left neighbor of the axis.
     pub fn set_right_neighbor(&self, axis: Option<&Rc<Self>>) {
-        if let Some(axis) = axis {
-            *self.right.borrow_mut() = Some(Rc::downgrade(axis));
-        } else {
-            *self.right.borrow_mut() = None;
-        }
+        *self.right.borrow_mut() = axis.cloned();
     }
 
     pub fn swap_axis_order_left(this: &Rc<Self>) -> bool {
@@ -1065,19 +1065,47 @@ impl Axes {
     }
 
     /// Removes all axes that are not specified.
-    pub fn retain_axes(&mut self, axes: BTreeSet<&str>) {
-        self.axes.retain(|k, _| axes.contains(k as &str));
+    pub fn retain_axes(&mut self, axes: BTreeMap<&str, &wasm_bridge::AxisDef>) {
+        // Remove modified axes.
+        self.axes.retain(|k, ax| {
+            let new_ax = axes.get(k as &str);
+            if new_ax.is_none() {
+                return false;
+            }
+            let new_ax = *new_ax.unwrap();
+
+            let label_changed = *ax.label != *new_ax.label;
+            let points_changed = ax.data != new_ax.points;
+            let visibility_changed = ax.is_hidden() != new_ax.hidden;
+
+            let changed = label_changed || points_changed || visibility_changed;
+            !changed
+        });
 
         let visible_axes = self
             .visible_axes()
-            .filter(|ax| axes.contains(&ax.key() as &str))
+            .filter(|ax: &Rc<Axis>| {
+                let new_ax = axes.get(&ax.key() as &str);
+                new_ax.map(|ax| !ax.hidden).unwrap_or(false)
+            })
             .collect::<Box<_>>();
+
+        self.next_axis_index = 0;
+        for axis in visible_axes.iter() {
+            axis.axis_index.set(Some(self.next_axis_index));
+            axis.set_world_offset(0.0);
+            self.next_axis_index += 1;
+        }
 
         for window in visible_axes.windows(2) {
             let left = &window[0];
             let right = &window[1];
             left.set_right_neighbor(Some(right));
             right.set_left_neighbor(Some(left));
+
+            let left_axis_offset = left.world_offset();
+            let right_axis_offset = left_axis_offset.floor() + 1.0;
+            right.set_world_offset(right_axis_offset);
         }
 
         self.num_visible_axes = visible_axes.len();
@@ -1152,11 +1180,17 @@ impl Axes {
             x
         };
 
+        let num_labels = self
+            .axes
+            .first_entry()
+            .map(|e| e.get().curve_builders.borrow().len())
+            .unwrap_or(0);
         let axis = Rc::new(Axis::new(
             key,
             args,
             axis_index,
             0.0,
+            num_labels,
             this,
             self.get_rem_length_local.clone(),
             self.get_text_length_local.clone(),

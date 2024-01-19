@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, mem::MaybeUninit, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, mem::MaybeUninit, rc::Rc};
 
 use async_channel::{Receiver, Sender};
 use color_scale::ColorScaleDescriptor;
@@ -421,12 +421,7 @@ impl Renderer {
 
 // Rendering
 impl Renderer {
-    fn render_data(
-        &self,
-        encoder: &webgpu::CommandEncoder,
-        msaa_texture: &webgpu::TextureView,
-        resolve_target: &webgpu::TextureView,
-    ) {
+    fn render_data(&self, render_pass: &webgpu::RenderPassEncoder) {
         let axes = self.axes.borrow();
         let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
         let probabilities = if let Some(active_label_idx) = self.active_label_idx {
@@ -436,7 +431,6 @@ impl Renderer {
         };
 
         self.pipelines.render().data_lines().render(
-            self.background_color,
             self.buffers.shared().matrices(),
             self.buffers.data().config(),
             self.buffers.shared().axes(),
@@ -447,18 +441,11 @@ impl Renderer {
             viewport_start,
             viewport_size,
             &self.device,
-            encoder,
-            msaa_texture,
-            resolve_target,
+            render_pass,
         );
     }
 
-    fn render_axes(
-        &self,
-        encoder: &webgpu::CommandEncoder,
-        msaa_texture: &webgpu::TextureView,
-        resolve_target: &webgpu::TextureView,
-    ) {
+    fn render_axes(&self, render_pass: &webgpu::RenderPassEncoder) {
         let axes = self.axes.borrow();
         let (viewport_start, viewport_size) = axes.viewport(self.pixel_ratio);
 
@@ -470,18 +457,11 @@ impl Renderer {
             viewport_start,
             viewport_size,
             &self.device,
-            encoder,
-            msaa_texture,
-            resolve_target,
+            render_pass,
         );
     }
 
-    fn render_selections(
-        &self,
-        encoder: &webgpu::CommandEncoder,
-        msaa_texture: &webgpu::TextureView,
-        resolve_target: &webgpu::TextureView,
-    ) {
+    fn render_selections(&self, render_pass: &webgpu::RenderPassEncoder) {
         if self.active_label_idx.is_none() {
             return;
         }
@@ -500,18 +480,11 @@ impl Renderer {
             viewport_start,
             viewport_size,
             &self.device,
-            encoder,
-            msaa_texture,
-            resolve_target,
+            render_pass,
         );
     }
 
-    fn render_curve_segments(
-        &self,
-        encoder: &webgpu::CommandEncoder,
-        msaa_texture: &webgpu::TextureView,
-        resolve_target: &webgpu::TextureView,
-    ) {
+    fn render_curve_segments(&self, render_pass: &webgpu::RenderPassEncoder) {
         if self.active_label_idx.is_none() {
             return;
         }
@@ -533,9 +506,7 @@ impl Renderer {
                 viewport_start,
                 viewport_size,
                 &self.device,
-                encoder,
-                msaa_texture,
-                resolve_target,
+                render_pass,
             );
         };
 
@@ -548,12 +519,7 @@ impl Renderer {
         render(active_label_idx)
     }
 
-    fn render_curves(
-        &self,
-        encoder: &webgpu::CommandEncoder,
-        msaa_texture: &webgpu::TextureView,
-        resolve_target: &webgpu::TextureView,
-    ) {
+    fn render_curves(&self, render_pass: &webgpu::RenderPassEncoder) {
         if self.active_label_idx.is_none() {
             return;
         }
@@ -570,18 +536,11 @@ impl Renderer {
             viewport_start,
             viewport_size,
             &self.device,
-            encoder,
-            msaa_texture,
-            resolve_target,
+            render_pass,
         );
     }
 
-    fn render_color_bar(
-        &self,
-        encoder: &webgpu::CommandEncoder,
-        msaa_texture: &webgpu::TextureView,
-        resolve_target: &webgpu::TextureView,
-    ) {
+    fn render_color_bar(&self, render_pass: &webgpu::RenderPassEncoder) {
         if !self.color_bar.is_visible() {
             return;
         }
@@ -591,13 +550,10 @@ impl Renderer {
         self.pipelines.render().color_bar().render(
             self.buffers.shared().color_scale(),
             self.buffers.shared().color_scale_bounds(),
-            self.background_color,
             viewport_start,
             viewport_size,
             &self.device,
-            encoder,
-            msaa_texture,
-            resolve_target,
+            render_pass,
         );
     }
 
@@ -897,7 +853,7 @@ impl Renderer {
     }
 
     async fn render(&mut self, completion: Sender<()>) {
-        let redraw = self.handle_events();
+        let (redraw, resample) = self.handle_events();
         if !redraw {
             completion
                 .send(())
@@ -909,20 +865,42 @@ impl Renderer {
         let command_encoder = self
             .device
             .create_command_encoder(webgpu::CommandEncoderDescriptor { label: None });
-        let texture_view =
-            webgpu::Texture::from_raw(self.context_gpu.get_current_texture()).create_view(None);
-        let msaa_texture_view = self.render_texture.create_view(None);
 
         // Update the probability curves and probabilities.
-        let probabilities_changed = self.update_probabilities(&command_encoder);
+        let changed_probabilities = if resample {
+            self.update_probabilities(&command_encoder)
+        } else {
+            Box::new([])
+        };
 
         // Draw the main view into the framebuffer.
-        self.render_data(&command_encoder, &msaa_texture_view, &texture_view);
-        self.render_axes(&command_encoder, &msaa_texture_view, &texture_view);
-        self.render_selections(&command_encoder, &msaa_texture_view, &texture_view);
-        self.render_curve_segments(&command_encoder, &msaa_texture_view, &texture_view);
-        self.render_curves(&command_encoder, &msaa_texture_view, &texture_view);
-        self.render_color_bar(&command_encoder, &msaa_texture_view, &texture_view);
+        if self.canvas_gpu.width() != 0 && self.canvas_gpu.height() != 0 {
+            let texture_view =
+                webgpu::Texture::from_raw(self.context_gpu.get_current_texture()).create_view(None);
+            let msaa_texture_view = self.render_texture.create_view(None);
+
+            let render_pass_descriptor = webgpu::RenderPassDescriptor {
+                label: Some("render pass".into()),
+                color_attachments: [webgpu::RenderPassColorAttachments {
+                    clear_value: Some(self.background_color.to_f32_with_alpha()),
+                    load_op: webgpu::RenderPassLoadOp::Clear,
+                    store_op: webgpu::RenderPassStoreOp::Store,
+                    resolve_target: Some(texture_view.clone()),
+                    view: msaa_texture_view.clone(),
+                }],
+                max_draw_count: None,
+            };
+            let render_pass = command_encoder.begin_render_pass(render_pass_descriptor);
+
+            self.render_data(&render_pass);
+            self.render_axes(&render_pass);
+            self.render_selections(&render_pass);
+            self.render_curve_segments(&render_pass);
+            self.render_curves(&render_pass);
+            self.render_color_bar(&render_pass);
+
+            render_pass.end();
+        }
 
         self.device.queue().submit(&[command_encoder.finish(None)]);
 
@@ -942,7 +920,7 @@ impl Renderer {
         self.render_bounding_boxes();
 
         let mut probabilities_change = Vec::new();
-        for label_idx in probabilities_changed.iter().copied() {
+        for label_idx in changed_probabilities.iter().copied() {
             let id = self.labels[label_idx].id.clone();
             let (probabilities, attributions): (Box<[f32]>, Box<[usize]>) = self
                 .extract_label_attribution_and_probability(label_idx)
@@ -963,11 +941,12 @@ impl Renderer {
 
 // Event handling
 impl Renderer {
-    fn handle_events(&mut self) -> bool {
+    fn handle_events(&mut self) -> (bool, bool) {
         if self.events.is_empty() {
-            return false;
+            return (false, false);
         }
 
+        let mut resample = false;
         let events = std::mem::take(&mut self.events);
         for events in events {
             if events.is_empty() {
@@ -1077,9 +1056,17 @@ impl Renderer {
             if update_data_lines_buffer {
                 self.update_data_lines_buffer();
             }
+
+            resample |= events.signaled_any(&[
+                event::Event::DATA_UPDATE,
+                event::Event::LABEL_ADDITION,
+                event::Event::LABEL_REMOVAL,
+                event::Event::LABEL_EASING_CHANGE,
+                event::Event::SELECTIONS_CHANGE,
+            ]);
         }
 
-        true
+        (true, resample)
     }
 }
 
@@ -1109,16 +1096,20 @@ impl Renderer {
         axes: Option<Box<[wasm_bridge::AxisDef]>>,
         order: Option<Box<[String]>>,
     ) {
-        let axes_keys = axes
+        let axes_map = axes
             .iter()
             .flat_map(|x| x.iter())
-            .map(|a| &*a.key)
-            .collect::<BTreeSet<_>>();
+            .map(|a| (&*a.key, a))
+            .collect::<BTreeMap<_, _>>();
 
         let mut guard = self.axes.borrow_mut();
-        guard.retain_axes(axes_keys);
+        guard.retain_axes(axes_map);
 
         for axis in axes.into_iter().flat_map(Vec::from) {
+            if guard.axis(&axis.key).is_some() {
+                continue;
+            }
+
             guard.construct_axis(
                 &self.axes,
                 &axis.key,
@@ -1129,6 +1120,17 @@ impl Renderer {
                 axis.ticks,
                 axis.hidden,
             );
+        }
+
+        for axis in guard.visible_axes() {
+            for (label_idx, label_info) in self.labels.iter().enumerate() {
+                let curve_builder = axis.borrow_selection_curve_builder(label_idx);
+                let curve = curve_builder.build(
+                    axis.visible_data_range_normalized().into(),
+                    label_info.easing,
+                );
+                axis.borrow_selection_curve_mut(label_idx).set_curve(curve);
+            }
         }
 
         if let Some(order) = order {
@@ -1355,7 +1357,7 @@ impl Renderer {
         self.buffers.selections_mut().push_label(&self.device);
 
         let axes = self.axes.borrow();
-        for axis in axes.visible_axes() {
+        for axis in axes.axes() {
             axis.push_label();
         }
         drop(axes);
@@ -1392,7 +1394,7 @@ impl Renderer {
         }
 
         let axes = self.axes.borrow();
-        for axis in axes.visible_axes() {
+        for axis in axes.axes() {
             axis.remove_label(label_idx);
         }
         drop(axes);
@@ -2089,7 +2091,7 @@ impl Renderer {
             .sample_texture_mut(label_idx)
             .set_num_curves(&self.device, axes.num_visible_axes());
 
-        let mut changed = false;
+        let mut changed = axes.num_visible_axes() == 0;
         for axis in axes.visible_axes() {
             let mut selection_curve = axis.borrow_selection_curve_mut(label_idx);
             let spline = match selection_curve.get_changed_curve() {
@@ -2142,6 +2144,10 @@ impl Renderer {
             .lines_mut(label_idx)
             .set_len(&self.device, num_lines);
 
+        if num_lines == 0 {
+            return;
+        }
+
         let lines_buffer = self.buffers.curves().lines(label_idx).buffer().clone();
         let samples = self.buffers.curves().sample_texture(label_idx).array_view();
 
@@ -2177,6 +2183,7 @@ impl Renderer {
     fn apply_probability_curves(&mut self, encoder: &webgpu::CommandEncoder, label_idx: usize) {
         let axes = self.axes.borrow();
         let num_data_points = axes.num_data_points();
+        let num_visible_axes = axes.num_visible_axes();
 
         // Ensure that the buffer is large enough.
         self.buffers
@@ -2184,8 +2191,7 @@ impl Renderer {
             .probabilities_mut(label_idx)
             .set_len(&self.device, num_data_points);
 
-        // If there are no data points we can skip the rest.
-        if num_data_points == 0 {
+        if num_data_points == 0 || num_visible_axes == 0 {
             return;
         }
 

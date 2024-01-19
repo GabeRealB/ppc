@@ -15,46 +15,46 @@ import easingInOutUnRes from '../resources/easing_inout_unselected.png'
 
 import styles from './PPC.module.css'
 
-type ColorSpace = "srgb" | "xyz" | "cie_lab" | "cie lch";
+export type ColorSpace = "srgb" | "xyz" | "cie_lab" | "cie lch";
 
-type Color = {
+export type Color = {
     colorSpace: ColorSpace,
     values: number[]
 };
 
-type ColorScale = {
+export type ColorScale = {
     colorSpace: ColorSpace,
     gradient: [Color][] | [Color, number][]
 }
 
-type SelectedColor = {
+export type SelectedColor = {
     scale: string | Color | ColorScale,
     color: number | string | { type: "probability" }
 }
 
-type Colors = {
+export type Colors = {
     background?: string | Color
     brush?: string | Color
     unselected?: string | Color
     selected: SelectedColor
 };
 
-type Axis = {
+export type Axis = {
     label: string,
-    data_points: number[],
+    dataPoints: number[],
     range?: [number, number],
     visibleRange?: [number, number],
-    tickPositions?: [number],
-    tickLabels?: [string],
+    tickPositions?: number[],
+    tickLabels?: string[],
     hidden?: boolean
 };
 
-type LabelInfo = {
+export type LabelInfo = {
     color?: Color,
     selectionBounds?: [number, number]
 }
 
-type DebugOptions = {
+export type DebugOptions = {
     showAxisBoundingBox?: boolean,
     showLabelBoundingBox?: boolean,
     showCurvesBoundingBox?: boolean,
@@ -63,13 +63,34 @@ type DebugOptions = {
     showColorBarBoundingBox?: boolean,
 }
 
-type Props = {
+export type Props = {
+    /**
+     * Attribute axes.
+     */
     axes?: { [id: string]: Axis },
+    /**
+     * Order of the attribute axes.
+     */
     order?: string[],
+    /**
+     * Color settings.
+     */
     colors?: Colors,
+    /**
+     * Color bar visibility.
+     */
     colorBar?: "hidden" | "visible",
+    /**
+     * Labels of the selections.
+     */
     labels: { [id: string]: LabelInfo },
+    /**
+     * Currently active label.
+     */
     activeLabel: string,
+    /**
+     * Debug options.
+     */
     debug?: DebugOptions,
 } & DashComponentProps;
 
@@ -223,7 +244,7 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        const data_points = new Float32Array(axis.data_points);
+                        const data_points = new Float32Array(axis.dataPoints);
                         const range = axis.range ? new Float32Array(axis.range) : undefined;
                         const visibleRange = axis.visibleRange ? new Float32Array(axis.visibleRange) : undefined;
                         const ticks = has_valid_ticks ? new AxisTicksDef() : undefined;

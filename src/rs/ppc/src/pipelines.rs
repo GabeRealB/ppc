@@ -1,6 +1,4 @@
 use crate::buffers;
-use crate::colors;
-use crate::colors::Color;
 use crate::webgpu::*;
 
 const NUM_SAMPLES: u32 = 4;
@@ -187,9 +185,7 @@ impl AxisLinesRenderPipeline {
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
         device: &Device,
-        encoder: &CommandEncoder,
-        msaa_texture: &TextureView,
-        resolve_target: &TextureView,
+        render_pass: &RenderPassEncoder,
     ) {
         let num_lines = axis_lines.len();
         if num_lines == 0 {
@@ -235,27 +231,13 @@ impl AxisLinesRenderPipeline {
             layout: self.layout.clone(),
         });
 
-        let descriptor = RenderPassDescriptor {
-            label: Some("axis lines render pass descriptor".into()),
-            color_attachments: [RenderPassColorAttachments {
-                clear_value: None,
-                load_op: RenderPassLoadOp::Load,
-                store_op: RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
         let (x, y) = viewport_start;
         let (width, height) = viewport_size;
 
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group);
-        pass.set_viewport(x, y, width, height, 0.0, 1.0);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &bind_group);
+        render_pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        render_pass.draw_with_instance_count(6, num_lines);
     }
 }
 
@@ -388,7 +370,6 @@ impl DataLinesRenderPipeline {
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
-        clear_value: colors::ColorTransparent<colors::SRgb>,
         matrices: &buffers::MatricesBuffer,
         config: &buffers::DataConfigBuffer,
         axes: &buffers::AxesBuffer,
@@ -399,9 +380,7 @@ impl DataLinesRenderPipeline {
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
         device: &Device,
-        encoder: &CommandEncoder,
-        msaa_texture: &TextureView,
-        resolve_target: &TextureView,
+        render_pass: &RenderPassEncoder,
     ) {
         let num_lines = data_lines.len();
         if num_lines == 0 {
@@ -467,27 +446,13 @@ impl DataLinesRenderPipeline {
             layout: self.layout.clone(),
         });
 
-        let descriptor = RenderPassDescriptor {
-            label: Some("data lines render pass descriptor".into()),
-            color_attachments: [RenderPassColorAttachments {
-                clear_value: Some(clear_value.to_f32_with_alpha()),
-                load_op: RenderPassLoadOp::Clear,
-                store_op: RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
         let (x, y) = viewport_start;
         let (width, height) = viewport_size;
 
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group);
-        pass.set_viewport(x, y, width, height, 0.0, 1.0);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &bind_group);
+        render_pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        render_pass.draw_with_instance_count(6, num_lines);
     }
 }
 
@@ -602,9 +567,7 @@ impl CurveLinesRenderPipeline {
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
         device: &Device,
-        encoder: &CommandEncoder,
-        msaa_texture: &TextureView,
-        resolve_target: &TextureView,
+        render_pass: &RenderPassEncoder,
     ) {
         let num_lines = curve_lines.len();
         if num_lines == 0 {
@@ -612,7 +575,7 @@ impl CurveLinesRenderPipeline {
         }
 
         let bind_group = device.create_bind_group(BindGroupDescriptor {
-            label: Some("axis lines bind group".into()),
+            label: Some("curve lines bind group".into()),
             entries: [
                 BindGroupEntry {
                     binding: 0,
@@ -650,27 +613,13 @@ impl CurveLinesRenderPipeline {
             layout: self.layout.clone(),
         });
 
-        let descriptor = RenderPassDescriptor {
-            label: Some("axis lines render pass descriptor".into()),
-            color_attachments: [RenderPassColorAttachments {
-                clear_value: None,
-                load_op: RenderPassLoadOp::Load,
-                store_op: RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
         let (x, y) = viewport_start;
         let (width, height) = viewport_size;
 
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group);
-        pass.set_viewport(x, y, width, height, 0.0, 1.0);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &bind_group);
+        render_pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        render_pass.draw_with_instance_count(6, num_lines);
     }
 }
 
@@ -804,9 +753,7 @@ impl SelectionsRenderPipeline {
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
         device: &Device,
-        encoder: &CommandEncoder,
-        msaa_texture: &TextureView,
-        resolve_target: &TextureView,
+        render_pass: &RenderPassEncoder,
     ) {
         let num_selections = selection_infos.len();
         if num_selections == 0 {
@@ -864,27 +811,13 @@ impl SelectionsRenderPipeline {
             layout: self.layout.clone(),
         });
 
-        let descriptor = RenderPassDescriptor {
-            label: Some("selections render pass descriptor".into()),
-            color_attachments: [RenderPassColorAttachments {
-                clear_value: None,
-                load_op: RenderPassLoadOp::Load,
-                store_op: RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
         let (x, y) = viewport_start;
         let (width, height) = viewport_size;
 
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group);
-        pass.set_viewport(x, y, width, height, 0.0, 1.0);
-        pass.draw_with_instance_count(6, num_selections);
-        pass.end();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &bind_group);
+        render_pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        render_pass.draw_with_instance_count(6, num_selections);
     }
 }
 
@@ -1010,9 +943,7 @@ impl CurveSegmentsRenderPipeline {
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
         device: &Device,
-        encoder: &CommandEncoder,
-        msaa_texture: &TextureView,
-        resolve_target: &TextureView,
+        render_pass: &RenderPassEncoder,
     ) {
         let num_lines = curve_lines.len();
         if num_lines == 0 {
@@ -1029,7 +960,7 @@ impl CurveSegmentsRenderPipeline {
         );
 
         let bind_group = device.create_bind_group(BindGroupDescriptor {
-            label: Some("axis lines bind group".into()),
+            label: Some("curve segments bind group".into()),
             entries: [
                 BindGroupEntry {
                     binding: 0,
@@ -1075,27 +1006,13 @@ impl CurveSegmentsRenderPipeline {
             layout: self.layout.clone(),
         });
 
-        let descriptor = RenderPassDescriptor {
-            label: Some("probability curve segments render pass".into()),
-            color_attachments: [RenderPassColorAttachments {
-                clear_value: None,
-                load_op: RenderPassLoadOp::Load,
-                store_op: RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
         let (x, y) = viewport_start;
         let (width, height) = viewport_size;
 
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group);
-        pass.set_viewport(x, y, width, height, 0.0, 1.0);
-        pass.draw_with_instance_count(6, num_lines);
-        pass.end();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &bind_group);
+        render_pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        render_pass.draw_with_instance_count(6, num_lines);
     }
 }
 
@@ -1191,13 +1108,10 @@ impl ColorBarRenderPipeline {
         &self,
         color_scale: &buffers::ColorScaleTexture,
         color_scale_bounds: &buffers::ColorScaleBoundsBuffer,
-        clear_value: colors::ColorTransparent<colors::SRgb>,
         viewport_start: (f32, f32),
         viewport_size: (f32, f32),
         device: &Device,
-        encoder: &CommandEncoder,
-        msaa_texture: &TextureView,
-        resolve_target: &TextureView,
+        render_pass: &RenderPassEncoder,
     ) {
         let bind_group = device.create_bind_group(BindGroupDescriptor {
             label: Some("color bar bind group".into()),
@@ -1218,27 +1132,13 @@ impl ColorBarRenderPipeline {
             layout: self.layout.clone(),
         });
 
-        let descriptor = RenderPassDescriptor {
-            label: Some("color bar render pass".into()),
-            color_attachments: [RenderPassColorAttachments {
-                clear_value: Some(clear_value.to_f32_with_alpha()),
-                load_op: RenderPassLoadOp::Load,
-                store_op: RenderPassStoreOp::Store,
-                resolve_target: Some(resolve_target.clone()),
-                view: msaa_texture.clone(),
-            }],
-            max_draw_count: None,
-        };
-
         let (x, y) = viewport_start;
         let (width, height) = viewport_size;
 
-        let pass = encoder.begin_render_pass(descriptor);
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group);
-        pass.set_viewport(x, y, width, height, 0.0, 1.0);
-        pass.draw(6);
-        pass.end();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &bind_group);
+        render_pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        render_pass.draw(6);
     }
 }
 

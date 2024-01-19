@@ -9,7 +9,8 @@ config.output = {
 config.performance = {
     hints: false
 };
-config.mode = 'development';
 config.externals = undefined; // eslint-disable-line
-config.devtool = 'inline-source-map';
+if (config.mode !== "production") {
+    config.devtool = 'inline-source-map';
+}
 module.exports = config;
