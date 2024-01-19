@@ -6,6 +6,7 @@
   "scripts": {
     "start": "webpack serve --config ./webpack.serve.config.js --mode=production",
     "start::dev": "webpack serve --config ./webpack.serve.config.js --mode=development",
+    "build:demo": "webpack --config ./webpack.serve.config.js --mode=production",
     "build:js::dev": "webpack --mode development",
     "build:js": "webpack",
     "build:backends": "dash-generate-components ./src/ts/components ppc -p package-info.json --r-prefix '' --jl-prefix '' --ignore \\.test\\.",
