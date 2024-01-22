@@ -87,7 +87,7 @@ export type Props = {
     /**
      * Currently active label.
      */
-    activeLabel: string,
+    activeLabel?: string,
     /**
      * Debug options.
      */

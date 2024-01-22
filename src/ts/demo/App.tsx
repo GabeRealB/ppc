@@ -3,11 +3,9 @@ import React, { Component } from 'react';
 import { v4 as uuid } from 'uuid';
 
 import List from '@mui/material/List';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
+import InputBase from '@mui/material/InputBase';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -48,8 +46,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import OpenWithIcon from '@mui/icons-material/OpenWith';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
 
 import PPC, { Axis, Props } from '../components/PPC';
+import { Paper } from '@mui/material';
 
 const EPSILON = 1.17549435082228750797e-38;
 
@@ -79,6 +80,165 @@ type AppState = {
     ppcState: Props,
     demo: DemoState,
 };
+
+class App extends Component<any, AppState> {
+    constructor(props) {
+        super(props);
+        this.setProps = this.setProps.bind(this);
+
+        const searchParams = new URLSearchParams(window.location.search);
+        const debugMode = searchParams.has("debug");
+        var userGroup = searchParams.get("userGroup");
+        if (userGroup !== "PC" && userGroup !== "PPC") {
+            userGroup = Math.random() < 0.5 ? "PC" : "PPC";
+        }
+
+        this.state = {
+            ppcState: {
+                axes: {
+                    "v_1": {
+                        label: "Var 1",
+                        range: [0, 100],
+                        // visibleRange: [20, 70],
+                        dataPoints: [...Array(100)].map(() => Math.random() * 100),
+                        tickPositions: [0, 25, 50, 75, 100],
+                    },
+                    "v_2": {
+                        label: "Var 2",
+                        range: [15, 30],
+                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    },
+                    "v_3": {
+                        label: "Var 3",
+                        range: [0, 1],
+                        dataPoints: [...Array(100)].map(() => (Math.random()) > 0.5 ? 0.9 : 0.1),
+                        tickPositions: [0.1, 0.9],
+                        tickLabels: ["False", "True"],
+                    },
+                    "v_4": {
+                        label: "Var 4",
+                        range: [15, 30],
+                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    },
+                    "v_5": {
+                        label: "Var 5",
+                        range: [15, 30],
+                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
+                    },
+                    "v_6": {
+                        label: "Var 6",
+                        range: [15, 30],
+                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15),
+                        hidden: true
+                    },
+                },
+                colors: {
+                    selected: {
+                        scale: "plasma",
+                        color: 0.5,
+                    }
+                },
+                colorBar: "visible",
+                labels: {
+                    "label_1": {},
+                    "label_2": {},
+                    "label_3": {}
+                },
+                activeLabel: "label_1",
+                debug: {
+                    showAxisBoundingBox: false,
+                    showLabelBoundingBox: false,
+                    showCurvesBoundingBox: false,
+                    showAxisLineBoundingBox: false,
+                    showSelectionsBoundingBox: false,
+                    showColorBarBoundingBox: false,
+                },
+                setProps: this.setProps,
+            },
+            demo: {
+                userId: uuid(),
+                userGroup: userGroup as "PC" | "PPC",
+                showInstructions: true,
+                currentTask: 0,
+                tasks: [
+                    { name: "Task 1 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 2 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 3 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => false },
+                    { name: "Task 4 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 5 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 6 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 7 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 8 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 9 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 10 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 11 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 12 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 13 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 14 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                    { name: "Task 15 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
+                ],
+                probabilityRangeStart: EPSILON,
+                probabilityRangeEnd: 1.0,
+                constantColorModeValue: 0.5,
+                attributeColorModeValue: "v_1",
+                showDebugInfo: debugMode
+            },
+        };
+    }
+
+    setProps(newProps) {
+        this.setState(newProps);
+    }
+
+    render() {
+        const {
+            ppcState,
+            demo,
+        } = this.state;
+        const {
+            axes,
+        } = ppcState;
+
+        return (
+            <Box style={{ height: "95%", padding: "2rem" }}>
+                <Grid container style={{ height: "100%" }} spacing={2}>
+                    <Grid xs={10}>
+                        <PPC
+                            {...ppcState}
+                        />
+                    </Grid>
+                    <Grid xs={2} maxHeight={"95%"} sx={{ overflow: "auto" }}>
+                        <Stack
+                            spacing={2}
+                            justifyContent="flex-start"
+                            alignItems="flex-start"
+                            paddingX={"2rem"}
+                        >
+                            {InstructionsDialog(demo, this.setProps)}
+
+                            {TaskView(ppcState, demo, this.setProps)}
+
+                            <Divider flexItem />
+
+                            <div>
+                                {AttributeList(ppcState, axes, this.setProps)}
+                                {ColorSettings(ppcState, demo, this.setProps)}
+                                {ActionsInfo(demo)}
+                                {DebugInfo(ppcState, demo, this.setProps)}
+                            </div>
+
+                            <Divider flexItem />
+
+                            {LabelsView(ppcState, demo, this.setProps)}
+                        </Stack>
+                    </Grid>
+                </Grid>
+            </Box>
+        )
+    }
+}
+
+export default App;
 
 const InstructionsDialog = (demo: DemoState, setProps: (newProps) => void) => {
     const { showInstructions, currentTask, tasks } = demo;
@@ -512,191 +672,112 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =>
     return debug_item;
 }
 
-class App extends Component<any, AppState> {
-    constructor(props) {
-        super(props);
-        this.setProps = this.setProps.bind(this);
-        this.state = {
-            ppcState: {
-                axes: {
-                    "v_1": {
-                        label: "Var 1",
-                        range: [0, 100],
-                        // visibleRange: [20, 70],
-                        dataPoints: [...Array(100)].map(() => Math.random() * 100),
-                        tickPositions: [0, 25, 50, 75, 100],
-                    },
-                    "v_2": {
-                        label: "Var 2",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
-                    },
-                    "v_3": {
-                        label: "Var 3",
-                        range: [0, 1],
-                        dataPoints: [...Array(100)].map(() => (Math.random()) > 0.5 ? 0.9 : 0.1),
-                        tickPositions: [0.1, 0.9],
-                        tickLabels: ["False", "True"],
-                    },
-                    "v_4": {
-                        label: "Var 4",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
-                    },
-                    "v_5": {
-                        label: "Var 5",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
-                    },
-                    "v_6": {
-                        label: "Var 6",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15),
-                        hidden: true
-                    },
-                },
-                colors: {
-                    selected: {
-                        scale: "plasma",
-                        color: 0.5,
-                    }
-                },
-                colorBar: "visible",
-                labels: {
-                    "label_1": {},
-                    "label_2": {},
-                    "label_3": {}
-                },
-                activeLabel: "label_1",
-                debug: {
-                    showAxisBoundingBox: false,
-                    showLabelBoundingBox: false,
-                    showCurvesBoundingBox: false,
-                    showAxisLineBoundingBox: false,
-                    showSelectionsBoundingBox: false,
-                    showColorBarBoundingBox: false,
-                },
-                setProps: this.setProps,
-            },
-            demo: {
-                userId: uuid(),
-                userGroup: Math.random() < 0.5 ? "PC" : "PPC",
-                showInstructions: true,
-                currentTask: 0,
-                tasks: [
-                    { name: "Task 1 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 2 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 3 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => false },
-                    { name: "Task 4 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 5 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 6 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 7 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 8 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 9 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 10 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 11 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 12 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 13 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 14 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 15 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                ],
-                probabilityRangeStart: EPSILON,
-                probabilityRangeEnd: 1.0,
-                constantColorModeValue: 0.5,
-                attributeColorModeValue: "v_1",
-                showDebugInfo: true
-            },
-        };
-    }
-
-    setProps(newProps) {
-        this.setState(newProps);
-    }
-
-    render() {
-        const {
-            ppcState,
-            demo,
-        } = this.state;
-        const {
-            axes,
-            colors,
-            labels,
-            activeLabel,
-        } = ppcState;
-
-        const {
-            probabilityRangeStart,
-            probabilityRangeEnd,
-        } = demo;
-
-        return (
-            <Box style={{ height: "95%", padding: "2rem" }}>
-                <Grid container style={{ height: "100%" }} spacing={2}>
-                    <Grid xs={10}>
-                        <PPC
-                            {...ppcState}
-                        />
-                    </Grid>
-                    <Grid xs={2} maxHeight={"95%"} sx={{ overflow: "auto" }}>
-                        <Stack
-                            spacing={2}
-                            justifyContent="flex-start"
-                            alignItems="flex-start"
-                            paddingX={"2rem"}
-                        >
-                            {InstructionsDialog(demo, this.setProps)}
-
-                            {TaskView(ppcState, demo, this.setProps)}
-
-                            <Divider flexItem />
-
-                            <div>
-                                {AttributeList(ppcState, axes, this.setProps)}
-                                {ColorSettings(ppcState, demo, this.setProps)}
-                                {ActionsInfo(demo)}
-                                {DebugInfo(ppcState, demo, this.setProps)}
-                            </div>
-
-                            <Typography variant='h4'>Labels</Typography>
-                            <FormControl fullWidth>
-                                <InputLabel>Label</InputLabel>
-                                <Select
-                                    value={activeLabel}
-                                    label="Label"
-                                    onChange={e => {
-                                        ppcState.activeLabel = e.target.value;
-                                        this.setProps({ ppcState });
-                                    }}
-                                >
-                                    <MenuItem value={"label_1"}>Label 1</MenuItem>
-                                    <MenuItem value={"label_2"}>Label 2</MenuItem>
-                                    <MenuItem value={"label_3"}>Label 3</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <FormControl fullWidth>
-                                <FormLabel>Selection probability bounds</FormLabel>
-                                <Slider
-                                    min={EPSILON}
-                                    max={1.0}
-                                    step={EPSILON}
-                                    value={[probabilityRangeStart, probabilityRangeEnd]}
-                                    onChange={(e, value) => {
-                                        const labels_clone = window.structuredClone(labels);
-                                        labels_clone[activeLabel].selectionBounds = value as [number, number];
-                                        ppcState.labels = labels_clone;
-                                        demo.probabilityRangeStart = value[0];
-                                        demo.probabilityRangeEnd = value[1];
-                                        this.setProps({ ppcState, demo })
-                                    }}
-                                />
-                            </FormControl>
-                        </Stack>
-                    </Grid>
-                </Grid>
-            </Box>
-        )
-    }
+const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, toggleActive: () => void) => {
+    return (
+        <Paper
+            sx={{ display: 'flex', alignItems: 'center' }}
+        >
+            <IconButton onClick={toggleActive}>
+                {active ? <StopIcon /> : <PlayArrowIcon />}
+            </IconButton>
+            <Typography
+                sx={{ ml: 1, flex: 1 }}
+                variant='body1'
+            >
+                {name}
+            </Typography>
+            <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+            <IconButton onClick={deleteLabel}>
+                <DeleteIcon />
+            </IconButton>
+        </Paper>
+    )
 }
 
-export default App;
+const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
+    const { labels, activeLabel } = ppc;
+    const { probabilityRangeStart, probabilityRangeEnd } = demo;
+
+    const items = Object.entries(labels).map(([k, v]) => {
+        const deleteLabel = () => {
+            const labels_clone = window.structuredClone(labels);
+            delete labels_clone[k];
+            ppc.labels = labels_clone;
+            if (activeLabel === k) {
+                const keys = Object.keys(labels_clone);
+                if (keys.length == 0) {
+                    ppc.activeLabel = null;
+                } else {
+                    ppc.activeLabel = keys[keys.length - 1];
+                    const new_active_label = labels_clone[ppc.activeLabel];
+                    if (new_active_label.selectionBounds) {
+                        demo.probabilityRangeStart = new_active_label.selectionBounds[0];
+                        demo.probabilityRangeEnd = new_active_label.selectionBounds[1];
+                    } else {
+                        demo.probabilityRangeStart = 0.0;
+                        demo.probabilityRangeEnd = 1.0;
+                    }
+                }
+            }
+            setProps({ ppcState: ppc, demo });
+        }
+        const toggleActive = () => {
+            ppc.activeLabel = k;
+            if (v.selectionBounds) {
+                demo.probabilityRangeStart = v.selectionBounds[0];
+                demo.probabilityRangeEnd = v.selectionBounds[1];
+            } else {
+                demo.probabilityRangeStart = 0.0;
+                demo.probabilityRangeEnd = 1.0;
+            }
+            setProps({ ppcState: ppc, demo });
+        }
+
+        return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
+    });
+
+    const handleProbabilityRangeChange = (e, range) => {
+        const labels_clone = window.structuredClone(labels);
+        labels_clone[activeLabel].selectionBounds = range as [number, number];
+        ppc.labels = labels_clone;
+        demo.probabilityRangeStart = range[0];
+        demo.probabilityRangeEnd = range[1];
+        setProps({ ppcState: ppc, demo })
+    };
+
+    return (
+        <Box width={"100%"}>
+            <Typography variant='h5'>Labels</Typography>
+            <Stack spacing={1}>
+                {items}
+
+                <Paper
+                    component="form"
+                    sx={{ display: 'flex', alignItems: 'center' }}
+                >
+                    <InputBase
+                        sx={{ ml: 1, flex: 1 }}
+                        placeholder="New Label Name"
+                    />
+                    <IconButton type="button" sx={{ p: '10px' }}>
+                        <AddIcon />
+                    </IconButton>
+                </Paper>
+
+                {activeLabel ?
+                    <FormControl>
+                        <FormLabel>Selection probability bounds</FormLabel>
+                        <Slider
+                            min={EPSILON}
+                            max={1.0}
+                            step={EPSILON}
+                            value={[probabilityRangeStart, probabilityRangeEnd]}
+                            onChange={handleProbabilityRangeChange}
+                            valueLabelDisplay="auto"
+                            size="small"
+                        />
+                    </FormControl> : null}
+            </Stack>
+        </Box>
+    )
+}
