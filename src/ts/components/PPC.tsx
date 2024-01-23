@@ -63,6 +63,33 @@ export type DebugOptions = {
     showColorBarBoundingBox?: boolean,
 }
 
+export enum InteractionMode {
+    /**
+     * No interaction enabled.
+     */
+    Disabled = 0,
+    /**
+     * Only allow interactions compatible with
+     * Parallel Coordinates that don't modify 
+     * the selection probabilities.
+     */
+    RestrictedCompatibility = 1,
+    /**
+     * Only allow interactions compatible with
+     * Parallel Coordinates.
+     */
+    Compatibility = 2,
+    /**
+     * Only allow interactions that don't modify 
+     * the selection probabilities.
+     */
+    Restricted = 3,
+    /**
+     * Enable all interactions.
+     */
+    Full = 4
+}
+
 export type Props = {
     /**
      * Attribute axes.
@@ -89,6 +116,10 @@ export type Props = {
      */
     activeLabel?: string,
     /**
+     * Interaction mode of the plot.
+     */
+    interactionMode?: InteractionMode,
+    /**
      * Debug options.
      */
     debug?: DebugOptions,
@@ -101,6 +132,7 @@ enum MessageKind {
     SetColorBarVisibility,
     SetLabels,
     SetEasing,
+    SetInteractionMode,
     SetDebugOptions,
 }
 
@@ -126,6 +158,8 @@ type SetLabelsMsgPayload = {
 
 type SetEasingMsgPayload = string;
 
+type SetInteractionModeMsgPayload = InteractionMode;
+
 type SetDebugOptionsPayload = DebugOptions;
 
 interface Message {
@@ -148,7 +182,16 @@ const PPC = (props: Props) => {
 
     useEffect(() => {
         async function eventLoop() {
-            const { Renderer, UpdateDataPayload, ColorScaleDescription, ColorDescription, Element, AxisTicksDef, DebugOptions } = await (await import('../../../pkg')).default;
+            const {
+                Renderer,
+                UpdateDataPayload,
+                ColorScaleDescription,
+                ColorDescription,
+                Element,
+                AxisTicksDef,
+                InteractionMode,
+                DebugOptions,
+            } = await (await import('../../../pkg')).default;
 
             const canvasGPU = canvasGPURef.current;
             const canvas2D = canvas2DRef.current;
@@ -425,6 +468,12 @@ const PPC = (props: Props) => {
                 }
                 rendererState.queue.setLabelEasing(data);
             }
+            const setInteractionMode = (data: SetInteractionModeMsgPayload) => {
+                if (rendererState.exited) {
+                    return;
+                }
+                rendererState.queue.setInteractionMode(data);
+            }
             const setDebugOptions = (data?: SetDebugOptionsPayload) => {
                 if (rendererState.exited) {
                     return;
@@ -460,6 +509,9 @@ const PPC = (props: Props) => {
                         break;
                     case MessageKind.SetEasing:
                         setEasing(data.payload);
+                        break;
+                    case MessageKind.SetInteractionMode:
+                        setInteractionMode(data.payload);
                         break;
                     case MessageKind.SetDebugOptions:
                         setDebugOptions(data.payload);
@@ -572,6 +624,11 @@ const PPC = (props: Props) => {
         });
     }, [easing]);
 
+    // Interaction mode
+    useEffect(() => {
+        sx.postMessage({ kind: MessageKind.SetInteractionMode, payload: props.interactionMode });
+    }, [props.interactionMode]);
+
     // Debug options
     useEffect(() => {
         sx.postMessage({ kind: MessageKind.SetDebugOptions, payload: props.debug });
@@ -602,21 +659,21 @@ const PPC = (props: Props) => {
         <div id={id} className={styles.plot}>
             <canvas ref={canvasGPURef} className={styles.gpu}></canvas>
             <canvas ref={canvas2DRef} className={styles.non_gpu}></canvas>
-            <div className={styles.toolbar}>
-                <input type="image" src={easingLinearRes} className={styles.toolbar_element} value="linear" onClick={setEasingCallback}></input>
-                <input type="image" src={easingInRes} className={styles.toolbar_element} value="in" onClick={setEasingCallback}></input>
-                <input type="image" src={easingOutRes} className={styles.toolbar_element} value="out" onClick={setEasingCallback}></input>
-                <input type="image" src={easingInOutRes} className={styles.toolbar_element} value="inout" onClick={setEasingCallback}></input>
-            </div>
+            {props.interactionMode == InteractionMode.Full ?
+                <div className={styles.toolbar}>
+                    <input type="image" src={easingLinearRes} className={styles.toolbar_element} value="linear" onClick={setEasingCallback}></input>
+                    <input type="image" src={easingInRes} className={styles.toolbar_element} value="in" onClick={setEasingCallback}></input>
+                    <input type="image" src={easingOutRes} className={styles.toolbar_element} value="out" onClick={setEasingCallback}></input>
+                    <input type="image" src={easingInOutRes} className={styles.toolbar_element} value="inout" onClick={setEasingCallback}></input>
+                </div> : null}
         </div>
     )
 }
 
 PPC.defaultProps = {
-    labels: {
-        "unknown": {}
-    },
-    activeLabel: "unknown"
+    labels: {},
+    activeLabel: null,
+    interactionMode: InteractionMode.Full
 };
 
 export default PPC;

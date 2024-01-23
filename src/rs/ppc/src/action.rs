@@ -8,6 +8,7 @@ use crate::{
     event::Event,
     lerp::InverseLerp,
     selection::{EasingType, Selection, SelectionCurveBuilder},
+    wasm_bridge::InteractionMode,
 };
 
 #[derive(Debug)]
@@ -30,9 +31,15 @@ impl Action {
         axis: Rc<Axis>,
         event: PointerEvent,
         active_label_idx: Option<usize>,
+        interaction_mode: InteractionMode,
     ) -> Self {
         Self {
-            inner: ActionInner::MoveAxis(MoveAxisAction::new(axis, event, active_label_idx)),
+            inner: ActionInner::MoveAxis(MoveAxisAction::new(
+                axis,
+                event,
+                active_label_idx,
+                interaction_mode,
+            )),
         }
     }
 
@@ -155,10 +162,16 @@ struct MoveAxisAction {
     moved: bool,
     active_label_idx: Option<usize>,
     start_position: Position<ScreenSpace>,
+    interaction_mode: InteractionMode,
 }
 
 impl MoveAxisAction {
-    fn new(axis: Rc<Axis>, event: PointerEvent, active_label_idx: Option<usize>) -> Self {
+    fn new(
+        axis: Rc<Axis>,
+        event: PointerEvent,
+        active_label_idx: Option<usize>,
+        interaction_mode: InteractionMode,
+    ) -> Self {
         let position =
             Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
 
@@ -167,6 +180,7 @@ impl MoveAxisAction {
             moved: false,
             active_label_idx,
             start_position: position,
+            interaction_mode,
         }
     }
 
@@ -225,7 +239,12 @@ impl MoveAxisAction {
             self.axis.set_world_offset(right.world_offset() - 1.0);
         }
 
-        if !self.moved {
+        let enable_state_change = matches!(
+            self.interaction_mode,
+            InteractionMode::Restricted | InteractionMode::Full
+        );
+
+        if !self.moved && enable_state_change {
             match self.axis.state() {
                 crate::axis::AxisState::Collapsed => self.axis.expand(),
                 crate::axis::AxisState::Expanded => self.axis.collapse(),

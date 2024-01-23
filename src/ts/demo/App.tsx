@@ -49,7 +49,7 @@ import OpenWithIcon from '@mui/icons-material/OpenWith';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 
-import PPC, { Axis, Props } from '../components/PPC';
+import PPC, { Axis, Props, InteractionMode } from '../components/PPC';
 import { Paper } from '@mui/material';
 
 const EPSILON = 1.17549435082228750797e-38;
@@ -145,6 +145,7 @@ class App extends Component<any, AppState> {
                     "label_3": {}
                 },
                 activeLabel: "label_1",
+                interactionMode: InteractionMode.RestrictedCompatibility,
                 debug: {
                     showAxisBoundingBox: false,
                     showLabelBoundingBox: false,

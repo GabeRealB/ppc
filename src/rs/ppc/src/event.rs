@@ -22,7 +22,8 @@ impl Event {
     pub const LABEL_COLOR_CHANGE: Self = Self(1 << 11);
     pub const LABEL_SELECTION_BOUNDS_CHANGE: Self = Self(1 << 12);
     pub const LABEL_EASING_CHANGE: Self = Self(1 << 13);
-    pub const DEBUG_OPTIONS_CHANGE: Self = Self(1 << 14);
+    pub const INTERACTION_MODE_CHANGE: Self = Self(1 << 14);
+    pub const DEBUG_OPTIONS_CHANGE: Self = Self(1 << 15);
 
     // Internal events
     pub const AXIS_STATE_CHANGE: Self = Self(1 << 20);

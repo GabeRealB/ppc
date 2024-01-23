@@ -71,6 +71,7 @@ pub struct Renderer {
     background_color: ColorTransparent<SRgb>,
     brush_color: ColorOpaque<Xyz>,
     unselected_color: ColorTransparent<Xyz>,
+    interaction_mode: wasm_bridge::InteractionMode,
     debug: wasm_bridge::DebugOptions,
     pixel_ratio: f32,
     staging_data: StagingData,
@@ -141,6 +142,7 @@ struct StagingData {
     active_label: Vec<String>,
     label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
     label_threshold_changes: Vec<(String, Option<(f32, f32)>)>,
+    interaction_mode_changes: Vec<wasm_bridge::InteractionMode>,
     label_easing_changes: Vec<selection::EasingType>,
     debug_options_changes: Vec<wasm_bridge::DebugOptions>,
 }
@@ -282,6 +284,7 @@ impl Renderer {
             background_color: DEFAULT_BACKGROUND_COLOR(),
             brush_color: DEFAULT_BRUSH_COLOR(),
             unselected_color: DEFAULT_UNSELECTED_COLOR(),
+            interaction_mode: wasm_bridge::InteractionMode::Full,
             debug: Default::default(),
             staging_data: StagingData::default(),
         };
@@ -403,6 +406,10 @@ impl Renderer {
                 wasm_bridge::Event::SetLabelEasing { easing } => {
                     self.staging_data.label_easing_changes.push(easing);
                     self.events.push(event::Event::LABEL_EASING_CHANGE);
+                }
+                wasm_bridge::Event::SetInteractionMode { mode } => {
+                    self.staging_data.interaction_mode_changes.push(mode);
+                    self.events.push(event::Event::INTERACTION_MODE_CHANGE);
                 }
                 wasm_bridge::Event::SetDebugOptions { options } => {
                     self.staging_data.debug_options_changes.push(options);
@@ -1026,6 +1033,11 @@ impl Renderer {
                 self.change_label_easing(easing);
             }
 
+            if events.signaled(event::Event::INTERACTION_MODE_CHANGE) {
+                let mode = self.staging_data.interaction_mode_changes.pop().unwrap();
+                self.change_interaction_mode(mode);
+            }
+
             if events.signaled(event::Event::DEBUG_OPTIONS_CHANGE) {
                 let options = self.staging_data.debug_options_changes.pop().unwrap();
                 self.change_debug_options(options);
@@ -1494,6 +1506,20 @@ impl Renderer {
         self.notify_easing_change();
     }
 
+    fn change_interaction_mode(&mut self, mode: wasm_bridge::InteractionMode) {
+        self.finish_action();
+        self.interaction_mode = mode;
+
+        if mode <= wasm_bridge::InteractionMode::Compatibility {
+            let guard = self.axes.borrow();
+            for ax in guard.visible_axes() {
+                if ax.is_expanded() {
+                    ax.collapse();
+                }
+            }
+        }
+    }
+
     fn change_debug_options(&mut self, options: wasm_bridge::DebugOptions) {
         self.debug = options;
     }
@@ -1528,21 +1554,33 @@ impl Renderer {
     fn create_action(&mut self, event: web_sys::PointerEvent) {
         self.finish_action();
 
+        if self.interaction_mode == wasm_bridge::InteractionMode::Disabled {
+            return;
+        }
+
         let position =
             Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
+
+        use wasm_bridge::InteractionMode;
+        let enable_reorder = !matches!(self.interaction_mode, InteractionMode::Disabled);
+        let enable_modification = matches!(
+            self.interaction_mode,
+            InteractionMode::Compatibility | InteractionMode::Full
+        );
 
         let axes = self.axes.borrow();
         let element = axes.element_at_position(position, self.active_label_idx);
         if let Some(element) = element {
             match element {
-                axis::Element::Label { axis } => {
+                axis::Element::Label { axis } if enable_reorder => {
                     self.active_action = Some(action::Action::new_move_axis_action(
                         axis,
                         event,
                         self.active_label_idx,
+                        self.interaction_mode,
                     ))
                 }
-                axis::Element::Group { axis, group_idx } => {
+                axis::Element::Group { axis, group_idx } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
                         self.active_action = Some(action::Action::new_select_group_action(
                             axis,
@@ -1555,7 +1593,7 @@ impl Renderer {
                 axis::Element::Selection {
                     axis,
                     selection_idx,
-                } => {
+                } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
                         self.active_action = Some(action::Action::new_select_selection_action(
                             axis,
@@ -1569,7 +1607,7 @@ impl Renderer {
                     axis,
                     selection_idx,
                     segment_idx,
-                } => {
+                } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
                         self.active_action =
                             Some(action::Action::new_select_selection_control_point_action(
@@ -1587,7 +1625,7 @@ impl Renderer {
                     selection_idx,
                     segment_idx,
                     is_upper,
-                } => {
+                } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
                         self.active_action =
                             Some(action::Action::new_select_curve_control_point_action(
@@ -1600,7 +1638,7 @@ impl Renderer {
                             ))
                     }
                 }
-                axis::Element::AxisLine { axis } => {
+                axis::Element::AxisLine { axis } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
                         self.active_action = Some(action::Action::new_create_selection_action(
                             axis,
@@ -1610,6 +1648,7 @@ impl Renderer {
                         ))
                     }
                 }
+                _ => {}
             }
         }
     }
@@ -1621,40 +1660,47 @@ impl Renderer {
             let position =
                 Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
 
+            use wasm_bridge::InteractionMode;
+            let enable_reorder = !matches!(self.interaction_mode, InteractionMode::Disabled);
+            let enable_modification = matches!(
+                self.interaction_mode,
+                InteractionMode::Compatibility | InteractionMode::Full
+            );
+
             let axes = self.axes.borrow();
             let element = axes.element_at_position(position, self.active_label_idx);
             match element {
-                Some(axis::Element::Label { .. }) => self
+                Some(axis::Element::Label { .. }) if enable_reorder => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "ew-resize")
                     .unwrap(),
-                Some(axis::Element::Group { .. }) => self
+                Some(axis::Element::Group { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "ns-resize")
                     .unwrap(),
-                Some(axis::Element::Selection { .. }) => self
+                Some(axis::Element::Selection { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "ns-resize")
                     .unwrap(),
-                Some(axis::Element::SelectionControlPoint { .. }) => self
+                Some(axis::Element::SelectionControlPoint { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "row-resize")
                     .unwrap(),
-                Some(axis::Element::CurveControlPoint { .. }) => self
+                Some(axis::Element::CurveControlPoint { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "move")
                     .unwrap(),
-                Some(axis::Element::AxisLine { .. }) => self
+                Some(axis::Element::AxisLine { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "crosshair")
                     .unwrap(),
-                None => self
+                _ => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "default")

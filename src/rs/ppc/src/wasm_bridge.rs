@@ -252,6 +252,16 @@ pub enum Element {
     Unselected,
 }
 
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum InteractionMode {
+    Disabled,
+    RestrictedCompatibility,
+    Compatibility,
+    Restricted,
+    Full,
+}
+
 pub enum Event {
     Exit,
     Resize {
@@ -304,6 +314,9 @@ pub enum Event {
     },
     SetLabelEasing {
         easing: selection::EasingType,
+    },
+    SetInteractionMode {
+        mode: InteractionMode,
     },
     SetDebugOptions {
         options: DebugOptions,
@@ -710,6 +723,13 @@ impl EventQueue {
 
         self.sender
             .send_blocking(Event::SetLabelEasing { easing })
+            .expect("the channel should be open");
+    }
+
+    #[wasm_bindgen(js_name = setInteractionMode)]
+    pub fn set_interaction_mode(&self, mode: InteractionMode) {
+        self.sender
+            .send_blocking(Event::SetInteractionMode { mode })
             .expect("the channel should be open");
     }
 
