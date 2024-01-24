@@ -34,9 +34,11 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Skeleton from '@mui/material/Skeleton';
+import Paper from '@mui/material/Paper';
 import Grid from '@mui/material/Unstable_Grid2';
 
 import HelpIcon from '@mui/icons-material/Help';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -49,16 +51,20 @@ import OpenWithIcon from '@mui/icons-material/OpenWith';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 
+import moveAxesInstr from './resources/move_axes_instr.mp4'
+
 import PPC, { Axis, Props, InteractionMode } from '../components/PPC';
-import { Paper } from '@mui/material';
 
 const EPSILON = 1.17549435082228750797e-38;
 
 type DemoTask = {
     name: string,
     shortDescription: string,
+    instructions: () => React.JSX.Element,
     viewed: boolean,
-    canContinue: (Props) => boolean,
+    initialState: Props,
+    finalState: Props,
+    canContinue: (ppc: Props) => boolean,
 };
 
 type DemoState = {
@@ -85,99 +91,27 @@ class App extends Component<any, AppState> {
     constructor(props) {
         super(props);
         this.setProps = this.setProps.bind(this);
+        this.setPPCProps = this.setPPCProps.bind(this);
 
         const searchParams = new URLSearchParams(window.location.search);
         const debugMode = searchParams.has("debug");
-        var userGroup = searchParams.get("userGroup");
+        let userGroup = searchParams.get("userGroup");
         if (userGroup !== "PC" && userGroup !== "PPC") {
             userGroup = Math.random() < 0.5 ? "PC" : "PPC";
         }
 
+        const tasks = constructTasks(userGroup as "PC" | "PPC");
+        const ppc = window.structuredClone(tasks[0].initialState);
+        ppc.setProps = this.setPPCProps;
+
         this.state = {
-            ppcState: {
-                axes: {
-                    "v_1": {
-                        label: "Var 1",
-                        range: [0, 100],
-                        // visibleRange: [20, 70],
-                        dataPoints: [...Array(100)].map(() => Math.random() * 100),
-                        tickPositions: [0, 25, 50, 75, 100],
-                    },
-                    "v_2": {
-                        label: "Var 2",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
-                    },
-                    "v_3": {
-                        label: "Var 3",
-                        range: [0, 1],
-                        dataPoints: [...Array(100)].map(() => (Math.random()) > 0.5 ? 0.9 : 0.1),
-                        tickPositions: [0.1, 0.9],
-                        tickLabels: ["False", "True"],
-                    },
-                    "v_4": {
-                        label: "Var 4",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
-                    },
-                    "v_5": {
-                        label: "Var 5",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15)
-                    },
-                    "v_6": {
-                        label: "Var 6",
-                        range: [15, 30],
-                        dataPoints: [...Array(100)].map(() => Math.random() * (30 - 15) + 15),
-                        hidden: true
-                    },
-                },
-                colors: {
-                    selected: {
-                        scale: "plasma",
-                        color: 0.5,
-                    }
-                },
-                colorBar: "visible",
-                labels: {
-                    "label_1": {},
-                    "label_2": {},
-                    "label_3": {}
-                },
-                activeLabel: "label_1",
-                interactionMode: InteractionMode.RestrictedCompatibility,
-                debug: {
-                    showAxisBoundingBox: false,
-                    showLabelBoundingBox: false,
-                    showCurvesBoundingBox: false,
-                    showAxisLineBoundingBox: false,
-                    showSelectionsBoundingBox: false,
-                    showColorBarBoundingBox: false,
-                },
-                setProps: this.setProps,
-            },
+            ppcState: ppc,
             demo: {
                 userId: uuid(),
                 userGroup: userGroup as "PC" | "PPC",
                 showInstructions: true,
                 currentTask: 0,
-                tasks: [
-                    { name: "Task 1 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 2 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 3 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => false },
-                    { name: "Task 4 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 5 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 6 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 7 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 8 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 9 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 10 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 11 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 12 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 13 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 14 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                    { name: "Task 15 name", shortDescription: "Lorem ipsum dolor sit amet.", viewed: false, canContinue: () => true },
-                ],
+                tasks: tasks,
                 probabilityRangeStart: EPSILON,
                 probabilityRangeEnd: 1.0,
                 constantColorModeValue: 0.5,
@@ -189,6 +123,17 @@ class App extends Component<any, AppState> {
 
     setProps(newProps) {
         this.setState(newProps);
+    }
+
+    setPPCProps(newProps) {
+        const { ppcState } = this.state;
+        for (const [k, v] of Object.entries(newProps)) {
+            if (k in ppcState) {
+                ppcState[k] = v;
+            }
+        }
+
+        this.setProps({ ppcState });
     }
 
     render() {
@@ -218,19 +163,16 @@ class App extends Component<any, AppState> {
                             {InstructionsDialog(demo, this.setProps)}
 
                             {TaskView(ppcState, demo, this.setProps)}
-
+                            <Divider flexItem />
+                            {LabelsView(ppcState, demo, this.setProps)}
                             <Divider flexItem />
 
                             <div>
                                 {AttributeList(ppcState, axes, this.setProps)}
                                 {ColorSettings(ppcState, demo, this.setProps)}
-                                {ActionsInfo(demo)}
+                                {ActionsInfo(ppcState)}
                                 {DebugInfo(ppcState, demo, this.setProps)}
                             </div>
-
-                            <Divider flexItem />
-
-                            {LabelsView(ppcState, demo, this.setProps)}
                         </Stack>
                     </Grid>
                 </Grid>
@@ -262,10 +204,7 @@ const InstructionsDialog = (demo: DemoState, setProps: (newProps) => void) => {
                 {name}
             </DialogTitle>
             <DialogContent id="instructions-dialog-description">
-                <Skeleton variant='rectangular' animation={false} height={480} />
-                <DialogContentText>
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-                </DialogContentText>
+                {task.instructions()}
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose} autoFocus>
@@ -282,15 +221,46 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
     const { name, shortDescription } = task;
 
     const handleNext = () => {
+        const current = tasks[currentTask];
+        const next = tasks[currentTask + 1];
+
+        const setPpcProps = ppc.setProps;
+        ppc.setProps = undefined;
+        current.finalState = window.structuredClone(ppc);
+
+        let nextPpc = window.structuredClone(next.finalState);
+        if (!nextPpc) {
+            nextPpc = window.structuredClone(next.initialState);
+        }
+        nextPpc.setProps = setPpcProps;
+
         demo.currentTask = currentTask + 1;
-        demo.showInstructions = !tasks[currentTask + 1].viewed;
-        setProps({ demo });
+        demo.showInstructions = !next.viewed;
+        setProps({ ppcState: nextPpc, demo });
     };
 
     const handleBack = () => {
+        const current = tasks[currentTask];
+        const prev = tasks[currentTask - 1];
+
+        const setPpcProps = ppc.setProps;
+        ppc.setProps = undefined;
+        current.finalState = window.structuredClone(ppc);
+
+        const prevPpc = window.structuredClone(prev.finalState);
+        prevPpc.setProps = setPpcProps;
+
         demo.currentTask = currentTask - 1;
-        setProps({ demo });
+        setProps({ ppcState: prevPpc, demo });
     };
+
+    const handleReset = () => {
+        const current = tasks[currentTask];
+
+        const newPPC = window.structuredClone(current.initialState);
+        newPPC.setProps = ppc.setProps;
+        setProps({ ppcState: newPPC });
+    }
 
     const openInstructionsDialog = () => {
         demo.showInstructions = true;
@@ -303,27 +273,37 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
     }
 
     return (
-        <Box width={"100%"}>
+        <Stack width={"100%"} spacing={1}>
             <Typography variant='h5'>{name}</Typography>
             <Typography variant='subtitle1'>{shortDescription}</Typography>
             <Container>
                 <Button
                     variant="contained"
                     startIcon={<HelpIcon />}
-                    sx={{ width: "100%" }}
+                    sx={{ width: "95%" }}
                     onClick={openInstructionsDialog}
                 >
-                    Show Instructions
+                    Instructions
+                </Button>
+            </Container>
+            <Container>
+                <Button
+                    variant="contained"
+                    startIcon={<RestartAltIcon />}
+                    sx={{ width: "95%" }}
+                    onClick={handleReset}
+                >
+                    Reset
                 </Button>
             </Container>
             <MobileStepper
                 variant="progress"
                 steps={tasks.length}
-                position="static"
+                position="bottom"
                 activeStep={currentTask}
                 nextButton={
                     <Button size="small" onClick={handleNext} disabled={currentTask === tasks.length - 1 || !task.canContinue(ppc)}>
-                        Next
+                        {currentTask !== tasks.length - 1 ? "Next" : "Finish"}
                         <KeyboardArrowRight />
                     </Button>
                 }
@@ -334,7 +314,7 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
                     </Button>
                 }
             />
-        </Box>
+        </Stack>
     )
 }
 
@@ -368,6 +348,20 @@ const AttributeList = (ppcState: Props, axes: { [id: string]: Axis }, setProps: 
             const new_axes = window.structuredClone(axes);
             new_axes[key] = axis;
             ppcState.axes = new_axes;
+
+            if (ppcState.order) {
+                const order_clone = window.structuredClone(ppcState.order);
+                if (axis.hidden) {
+                    const index = order_clone.indexOf(key);
+                    if (index > -1) {
+                        order_clone.splice(index, 1);
+                    }
+                } else {
+                    order_clone.push(key);
+                }
+                ppcState.order = order_clone;
+            }
+
             setProps({ ppcState });
         };
         const axis = axes[key];
@@ -552,19 +546,38 @@ const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void
     );
 }
 
-const ActionsInfo = (demo: DemoState) => {
-    const { userGroup } = demo;
+const ActionsInfo = (ppc: Props) => {
+    const { interactionMode } = ppc;
 
-    const sharedActions = [
-        { icon: <PanToolIcon />, desc: "Move attribute axis", sec: "Left mouse button on axis label" },
-        { icon: <AddIcon />, desc: "Create selection", sec: "Left mouse button on empty axis line" },
-        { icon: <DragHandleIcon />, desc: "Move selection", sec: "Left mouse button on selection" },
-        { icon: <DeleteIcon />, desc: "Delete selection", sec: "Left click on selection" },
-    ];
-    const ppcActions = [
-        { icon: <OpenInFullIcon />, desc: "Expand/Collapse axis", sec: "Left click on axis label" },
-        { icon: <OpenWithIcon />, desc: "Move control point", sec: "Left mouse button on selection control point" },
-        { icon: <DeleteIcon />, desc: "Delete control point", sec: "Left click on selection control point" },
+    const actions = [
+        {
+            icon: <PanToolIcon />, desc: "Move attribute axis", sec: "Left mouse button on axis label",
+            modes_check: (m: InteractionMode) => m != InteractionMode.Disabled
+        },
+        {
+            icon: <AddIcon />, desc: "Create selection", sec: "Left mouse button on empty axis line",
+            modes_check: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
+        },
+        {
+            icon: <DragHandleIcon />, desc: "Move selection", sec: "Left mouse button on selection",
+            modes_check: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
+        },
+        {
+            icon: <DeleteIcon />, desc: "Delete selection", sec: "Left click on selection",
+            modes_check: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
+        },
+        {
+            icon: <OpenInFullIcon />, desc: "Expand/Collapse axis", sec: "Left click on axis label",
+            modes_check: (m: InteractionMode) => m == InteractionMode.Restricted || m == InteractionMode.Full
+        },
+        {
+            icon: <OpenWithIcon />, desc: "Move control point", sec: "Left mouse button on selection control point",
+            modes_check: (m: InteractionMode) => m == InteractionMode.Full
+        },
+        {
+            icon: <DeleteIcon />, desc: "Delete control point", sec: "Left click on selection control point",
+            modes_check: (m: InteractionMode) => m == InteractionMode.Full
+        },
     ];
 
     return (
@@ -578,7 +591,7 @@ const ActionsInfo = (demo: DemoState) => {
             </AccordionSummary>
             <AccordionDetails>
                 <List dense>
-                    {sharedActions.map((a) => <ListItem>
+                    {actions.map((a) => a.modes_check(interactionMode) ? <ListItem>
                         <ListItemAvatar>
                             {a.icon}
                         </ListItemAvatar>
@@ -586,16 +599,7 @@ const ActionsInfo = (demo: DemoState) => {
                             primary={a.desc}
                             secondary={a.sec}
                         />
-                    </ListItem>)}
-                    {userGroup === 'PPC' ? ppcActions.map((a) => <ListItem>
-                        <ListItemAvatar>
-                            {a.icon}
-                        </ListItemAvatar>
-                        <ListItemText
-                            primary={a.desc}
-                            secondary={a.sec}
-                        />
-                    </ListItem>) : null}
+                    </ListItem> : null)}
                 </List>
             </AccordionDetails>
         </Accordion>
@@ -612,7 +616,7 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =>
     const debugShowSelectionsBB = ppc.debug.showSelectionsBoundingBox;
     const debugShowColorBarBB = ppc.debug.showColorBarBoundingBox;
 
-    var debug_item = null;
+    let debug_item = null;
     if (demo.showDebugInfo) {
         debug_item = (
             <Accordion sx={{ width: "100%" }}>
@@ -781,4 +785,154 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
             </Stack>
         </Box>
     )
+}
+
+const constructTasks = (userGroup: "PC" | "PPC") => {
+    return [
+        task_0(userGroup),
+        task_1(userGroup),
+    ];
+}
+
+const task_0 = (userGroup: "PC" | "PPC"): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.RestrictedCompatibility
+        : InteractionMode.Restricted;
+
+    const buildInstructions = () => {
+        return (
+            <Stack spacing={1}>
+                <video autoPlay loop>
+                    <source src={moveAxesInstr} type='video/mp4'></source>
+                </video>
+                <DialogContentText>
+                    Attribute axes can be moved by holding the left mouse button on the label of an attribute.
+                    Move the axis of the attribute <b>A1</b>, such that it lies in between the attribute axes
+                    <b>A2</b> and <b>A3</b>.
+                    <br /><br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    }
+
+    return {
+        name: "Reorder attribute axes.",
+        shortDescription: "Reorder A1 in between A2 and A3",
+        instructions: buildInstructions,
+        viewed: true,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            interactionMode: interactionMode,
+            debug: {
+                showAxisBoundingBox: false,
+                showLabelBoundingBox: false,
+                showCurvesBoundingBox: false,
+                showAxisLineBoundingBox: false,
+                showSelectionsBoundingBox: false,
+                showColorBarBoundingBox: false,
+            },
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => (ppc.order[0] == "a2"
+            && ppc.order[1] == "a1" && ppc.order[2] == "a3")
+            || (ppc.order[0] == "a3" && ppc.order[1] == "a1"
+                && ppc.order[2] == "a2")
+    };
+}
+
+const task_1 = (userGroup: "PC" | "PPC"): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.RestrictedCompatibility
+        : InteractionMode.Restricted;
+
+    const buildInstructions = () => {
+        return (
+            <>
+                <Skeleton variant='rectangular' animation={false} height={480} />
+                <DialogContentText>
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                </DialogContentText>
+            </>);
+    }
+
+    return {
+        name: "Task 2",
+        shortDescription: "Todo",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                },
+            },
+            order: ["a3", "a2", "a1"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            interactionMode: interactionMode,
+            debug: {
+                showAxisBoundingBox: false,
+                showLabelBoundingBox: false,
+                showCurvesBoundingBox: false,
+                showAxisLineBoundingBox: false,
+                showSelectionsBoundingBox: false,
+                showColorBarBoundingBox: false,
+            },
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => ppc.order[0] == "a2"
+            && ppc.order[1] == "a1"
+            && ppc.order[2] == "a3"
+    };
 }

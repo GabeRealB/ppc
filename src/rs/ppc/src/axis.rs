@@ -1084,6 +1084,7 @@ impl Axes {
 
         let visible_axes = self
             .visible_axes()
+            .filter(|ax: &Rc<Axis>| self.axes.contains_key(&ax.key as &str))
             .filter(|ax: &Rc<Axis>| {
                 let new_ax = axes.get(&ax.key() as &str);
                 new_ax.map(|ax| !ax.hidden).unwrap_or(false)
@@ -1143,6 +1144,7 @@ impl Axes {
         visible_range: Option<(f32, f32)>,
         ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
         hidden: bool,
+        num_labels: usize,
     ) -> Rc<Axis> {
         if !std::ptr::eq(self, this.as_ptr()) {
             panic!("this does not point to the same instance as self");
@@ -1180,11 +1182,6 @@ impl Axes {
             x
         };
 
-        let num_labels = self
-            .axes
-            .first_entry()
-            .map(|e| e.get().curve_builders.borrow().len())
-            .unwrap_or(0);
         let axis = Rc::new(Axis::new(
             key,
             args,
@@ -1249,10 +1246,11 @@ impl Axes {
             let axis = self.axes[key].clone();
 
             // Set the position.
-            axis.set_world_offset(i as f32 + 1.0);
+            axis.set_world_offset(i as f32);
 
             // Set left neighbor.
             if i == 0 {
+                self.visible_axis_start = Some(axis.clone());
                 axis.set_left_neighbor(None);
             } else {
                 let previous = &self.axes[order[i - 1].as_ref()];
@@ -1264,6 +1262,7 @@ impl Axes {
                 axis.set_right_neighbor(Some(next));
             } else {
                 axis.set_right_neighbor(None);
+                self.visible_axis_end = Some(axis.clone());
             }
         }
     }

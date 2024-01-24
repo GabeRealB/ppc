@@ -63,6 +63,7 @@ pub struct Renderer {
     axes: Rc<RefCell<axis::Axes>>,
     color_bar: color_bar::ColorBar,
     events: Vec<event::Event>,
+    handled_events: event::Event,
     active_action: Option<action::Action>,
     active_label_idx: Option<usize>,
     labels: Vec<LabelInfo>,
@@ -275,6 +276,7 @@ impl Renderer {
             axes,
             color_bar,
             events: Vec::default(),
+            handled_events: event::Event::NONE,
             active_action: None,
             active_label_idx: None,
             labels: vec![],
@@ -926,18 +928,20 @@ impl Renderer {
 
         self.render_bounding_boxes();
 
-        let mut probabilities_change = Vec::new();
-        for label_idx in changed_probabilities.iter().copied() {
-            let id = self.labels[label_idx].id.clone();
-            let (probabilities, attributions): (Box<[f32]>, Box<[usize]>) = self
-                .extract_label_attribution_and_probability(label_idx)
-                .await;
-            probabilities_change.push((id, probabilities, attributions));
-        }
+        // let mut probabilities_change = Vec::new();
+        // for label_idx in changed_probabilities.iter().copied() {
+        //     let id = self.labels[label_idx].id.clone();
+        //     let (probabilities, attributions): (Box<[f32]>, Box<[usize]>) = self
+        //         .extract_label_attribution_and_probability(label_idx)
+        //         .await;
+        //     probabilities_change.push((id, probabilities, attributions));
+        // }
 
-        if !probabilities_change.is_empty() {
-            // web_sys::console::log_1(&format!("{probabilities_change:?}").into());
-        }
+        // if !probabilities_change.is_empty() {
+        //     web_sys::console::log_1(&format!("{probabilities_change:?}").into());
+        // }
+
+        self.notify_changes();
 
         completion
             .send(())
@@ -959,6 +963,7 @@ impl Renderer {
             if events.is_empty() {
                 continue;
             }
+            self.handled_events.signal(events);
 
             // External events.
             if events.signaled(event::Event::RESIZE) {
@@ -1084,7 +1089,53 @@ impl Renderer {
 
 // Callback events
 impl Renderer {
-    fn notify_easing_change(&self) {
+    fn notify_changes(&mut self) {
+        if self.active_action.is_some() {
+            return;
+        }
+
+        let events = std::mem::take(&mut self.handled_events);
+        if events.is_empty() {
+            return;
+        }
+
+        let plot_diff = js_sys::Array::new();
+
+        if events.signaled_any(&[event::Event::AXIS_ORDER_CHANGE]) {
+            plot_diff.push(&self.create_axis_order_diff().into());
+        }
+
+        if events.signaled_any(&[
+            event::Event::LABEL_ADDITION,
+            event::Event::LABEL_REMOVAL,
+            event::Event::ACTIVE_LABEL_CHANGE,
+            event::Event::LABEL_EASING_CHANGE,
+        ]) {
+            if let Some(diff) = self.create_easing_diff() {
+                plot_diff.push(&diff.into());
+            }
+        }
+
+        if plot_diff.length() != 0 {
+            let this = JsValue::null();
+            self.callback.call1(&this, &plot_diff).unwrap();
+        }
+    }
+
+    fn create_axis_order_diff(&self) -> js_sys::Object {
+        let guard = self.axes.borrow();
+        let order = js_sys::Array::new();
+        for ax in guard.visible_axes() {
+            order.push(&(*ax.key()).into());
+        }
+
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &"type".into(), &"axis_order".into()).unwrap();
+        js_sys::Reflect::set(&obj, &"value".into(), &order.into()).unwrap();
+        obj
+    }
+
+    fn create_easing_diff(&self) -> Option<js_sys::Object> {
         if let Some(active_label_idx) = self.active_label_idx {
             let easing = match self.labels[active_label_idx].easing {
                 selection::EasingType::Linear => "linear",
@@ -1093,10 +1144,12 @@ impl Renderer {
                 selection::EasingType::EaseInOut => "inout",
             };
 
-            let this = JsValue::null();
-            self.callback
-                .call2(&this, &"easing".into(), &easing.into())
-                .unwrap();
+            let obj = js_sys::Object::new();
+            js_sys::Reflect::set(&obj, &"type".into(), &"easing".into()).unwrap();
+            js_sys::Reflect::set(&obj, &"value".into(), &easing.into()).unwrap();
+            Some(obj)
+        } else {
+            None
         }
     }
 }
@@ -1131,6 +1184,7 @@ impl Renderer {
                 axis.visible_range,
                 axis.ticks,
                 axis.hidden,
+                self.labels.len(),
             );
         }
 
@@ -1383,8 +1437,6 @@ impl Renderer {
         self.update_selection_lines_buffer();
         self.update_label_colors_buffer();
         self.update_color_scale_bounds_buffer();
-
-        self.notify_easing_change();
     }
 
     fn remove_label(&mut self, id: String) {
@@ -1424,8 +1476,6 @@ impl Renderer {
         self.update_selection_lines_buffer();
         self.update_label_colors_buffer();
         self.update_color_scale_bounds_buffer();
-
-        self.notify_easing_change();
     }
 
     fn change_active_label(&mut self, id: String) {
@@ -1444,8 +1494,6 @@ impl Renderer {
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
         self.update_color_scale_bounds_buffer();
-
-        self.notify_easing_change();
     }
 
     fn change_label_color(&mut self, id: String, color: Option<ColorQuery<'_>>) {
@@ -1503,7 +1551,6 @@ impl Renderer {
         drop(axes);
 
         self.update_selection_lines_buffer();
-        self.notify_easing_change();
     }
 
     fn change_interaction_mode(&mut self, mode: wasm_bridge::InteractionMode) {

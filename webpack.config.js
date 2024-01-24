@@ -81,6 +81,10 @@ module.exports = function (env, argv) {
                     ],
                 },
                 {
+                    test: /\.mp4$/,
+                    use: 'file-loader?name=videos/[name].[ext]',
+                },
+                {
                     test: /\.css$/,
                     use: [
                         {

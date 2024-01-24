@@ -24,6 +24,7 @@ pub struct UpdateDataPayload {
     order: Vec<String>,
 }
 
+#[derive(Debug)]
 pub struct AxisDef {
     pub key: Box<str>,
     pub label: Box<str>,

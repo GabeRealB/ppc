@@ -189,7 +189,6 @@ const PPC = (props: Props) => {
                 ColorDescription,
                 Element,
                 AxisTicksDef,
-                InteractionMode,
                 DebugOptions,
             } = await (await import('../../../pkg')).default;
 
@@ -200,8 +199,8 @@ const PPC = (props: Props) => {
                 return;
             }
 
-            const callback = (event, data) => {
-                rx.postMessage({ event, data });
+            const callback = (events) => {
+                rx.postMessage({ events });
             };
 
             const renderer = await new Renderer(callback, canvasGPU, canvas2D);
@@ -555,9 +554,10 @@ const PPC = (props: Props) => {
             renderer.free();
             rendererState.exited = true;
         }
-        eventLoop();
+        eventLoop()
 
         return () => {
+            console.log("Cleanup");
             sx.postMessage({
                 kind: MessageKind.Shutdown
             });
@@ -567,34 +567,6 @@ const PPC = (props: Props) => {
     /////////////////////////////////////////////////////
     /// Events
     /////////////////////////////////////////////////////
-
-    // Data update
-    useEffect(() => {
-        sx.postMessage({
-            kind: MessageKind.UpdateData, payload: {
-                axes: props.axes,
-                order: props.order,
-            }
-        });
-    }, [props.axes, props.order]);
-
-    // Color update
-    useEffect(() => {
-        sx.postMessage({
-            kind: MessageKind.SetColors, payload: {
-                colors: props.colors
-            }
-        });
-    }, [props.colors]);
-
-    // Color bar update
-    useEffect(() => {
-        sx.postMessage({
-            kind: MessageKind.SetColorBarVisibility, payload: {
-                colorBar: props.colorBar
-            }
-        });
-    }, [props.colorBar]);
 
     // Labels update
     const previousLabels = useRef<{ [id: string]: LabelInfo }>(null);
@@ -624,6 +596,34 @@ const PPC = (props: Props) => {
         });
     }, [easing]);
 
+    // Data update
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.UpdateData, payload: {
+                axes: props.axes,
+                order: props.order,
+            }
+        });
+    }, [props.axes, props.order]);
+
+    // Color update
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.SetColors, payload: {
+                colors: props.colors
+            }
+        });
+    }, [props.colors]);
+
+    // Color bar update
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.SetColorBarVisibility, payload: {
+                colorBar: props.colorBar
+            }
+        });
+    }, [props.colorBar]);
+
     // Interaction mode
     useEffect(() => {
         sx.postMessage({ kind: MessageKind.SetInteractionMode, payload: props.interactionMode });
@@ -635,17 +635,35 @@ const PPC = (props: Props) => {
     }, [props.debug]);
 
     // Callback handling
-    const handleEasingChangeEvent = (easing) => {
+    const handleAxisOrderChangeEvent = (diff, order) => {
+        diff["order"] = order;
+    }
+    const handleEasingChangeEvent = (diff, easing) => {
         setEasing(easing);
     }
 
     // Events
     const handleMessage = (msg) => {
-        const event = msg.data.event;
-        const data = msg.data.data;
+        const { events } = msg.data;
 
-        if (event === "easing") {
-            handleEasingChangeEvent(data);
+        if (!events) {
+            return;
+        }
+
+        const diff = {};
+        for (const { type, value } of events) {
+            switch (type) {
+                case "axis_order":
+                    handleAxisOrderChangeEvent(diff, value);
+                    break;
+                case "easing":
+                    handleEasingChangeEvent(diff, value);
+                    break;
+            }
+        }
+
+        if (Object.keys(diff).length != 0) {
+            props.setProps(diff);
         }
     }
     sx.onmessage = handleMessage;
@@ -671,6 +689,10 @@ const PPC = (props: Props) => {
 }
 
 PPC.defaultProps = {
+    axes: {},
+    order: [],
+    colors: null,
+    colorBar: "hidden",
     labels: {},
     activeLabel: null,
     interactionMode: InteractionMode.Full
