@@ -1,0 +1,13 @@
+Package: ppc
+Title: Parallel Coordinates with probabilistic selection
+Version: 1.0.0
+Description: Parallel Coordinates with probabilistic selection
+Depends: R (>= 3.0.2)
+Imports: 
+Suggests: 
+License: MIT
+URL: 
+BugReports: 
+Encoding: UTF-8
+LazyData: true
+KeepSource: true
