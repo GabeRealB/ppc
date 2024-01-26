@@ -50,6 +50,7 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import OpenWithIcon from '@mui/icons-material/OpenWith';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
+import InfoIcon from '@mui/icons-material/Info';
 
 import moveAxesInstr from './resources/move_axes_instr.mp4'
 
@@ -318,9 +319,125 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
     )
 }
 
+const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, toggleActive: () => void) => {
+    return (
+        <Paper
+            sx={{ display: 'flex', alignItems: 'center' }}
+        >
+            <IconButton onClick={toggleActive}>
+                {active ? <StopIcon /> : <PlayArrowIcon />}
+            </IconButton>
+            <Typography
+                sx={{ ml: 1, flex: 1 }}
+                variant='body1'
+            >
+                {name}
+            </Typography>
+            <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+            <IconButton onClick={deleteLabel} disabled={deleteLabel == null}>
+                <DeleteIcon />
+            </IconButton>
+        </Paper>
+    )
+}
+
+const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
+    const { labels, activeLabel } = ppc;
+    const { probabilityRangeStart, probabilityRangeEnd } = demo;
+    const interactionMode = ppc.interactionMode ? ppc.interactionMode : InteractionMode.Full;
+
+    const items = Object.entries(labels).map(([k, v]) => {
+        const deleteLabel = interactionMode == InteractionMode.Compatibility
+            || interactionMode == InteractionMode.Full
+            ? () => {
+                const labels_clone = window.structuredClone(labels);
+                delete labels_clone[k];
+                ppc.labels = labels_clone;
+                if (activeLabel === k) {
+                    const keys = Object.keys(labels_clone);
+                    if (keys.length == 0) {
+                        ppc.activeLabel = null;
+                    } else {
+                        ppc.activeLabel = keys[keys.length - 1];
+                        const new_active_label = labels_clone[ppc.activeLabel];
+                        if (new_active_label.selectionBounds) {
+                            demo.probabilityRangeStart = new_active_label.selectionBounds[0];
+                            demo.probabilityRangeEnd = new_active_label.selectionBounds[1];
+                        } else {
+                            demo.probabilityRangeStart = 0.0;
+                            demo.probabilityRangeEnd = 1.0;
+                        }
+                    }
+                }
+                setProps({ ppcState: ppc, demo });
+            } : null;
+        const toggleActive = () => {
+            ppc.activeLabel = k;
+            if (v.selectionBounds) {
+                demo.probabilityRangeStart = v.selectionBounds[0];
+                demo.probabilityRangeEnd = v.selectionBounds[1];
+            } else {
+                demo.probabilityRangeStart = 0.0;
+                demo.probabilityRangeEnd = 1.0;
+            }
+            setProps({ ppcState: ppc, demo });
+        }
+
+        return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
+    });
+
+    const handleProbabilityRangeChange = (e, range) => {
+        const labels_clone = window.structuredClone(labels);
+        labels_clone[activeLabel].selectionBounds = range as [number, number];
+        ppc.labels = labels_clone;
+        demo.probabilityRangeStart = range[0];
+        demo.probabilityRangeEnd = range[1];
+        setProps({ ppcState: ppc, demo })
+    };
+
+    return (
+        <Box width={"100%"}>
+            <Typography variant='h5'>Labels</Typography>
+            <Stack spacing={1}>
+                <div />
+                {items}
+
+                {interactionMode == InteractionMode.Compatibility
+                    || interactionMode == InteractionMode.Full
+                    ? <Paper
+                        component="form"
+                        sx={{ display: 'flex', alignItems: 'center' }}
+                    >
+                        <InputBase
+                            sx={{ ml: 1, flex: 1 }}
+                            placeholder="New Label Name"
+                        />
+                        <IconButton type="button" sx={{ p: '10px' }}>
+                            <AddIcon />
+                        </IconButton>
+                    </Paper> : undefined}
+
+                {activeLabel && (interactionMode == InteractionMode.Full) ?
+                    <FormControl>
+                        <FormLabel>Selection probability bounds</FormLabel>
+                        <Slider
+                            min={EPSILON}
+                            max={1.0}
+                            step={EPSILON}
+                            value={[probabilityRangeStart, probabilityRangeEnd]}
+                            onChange={handleProbabilityRangeChange}
+                            valueLabelDisplay="auto"
+                            size="small"
+                        />
+                    </FormControl> : undefined}
+            </Stack>
+        </Box>
+    )
+}
+
 const AttributeListItem = (key: string, axis: Axis, update: (Axis) => void) => {
-    const visible = axis.hidden !== true;
-    const icon = visible ? <VisibilityIcon /> : <VisibilityOffIcon />;
+    const { label, hidden } = axis;
+    const visible = hidden !== true;
 
     const handle_click = () => {
         const new_axis = window.structuredClone(axis);
@@ -329,41 +446,50 @@ const AttributeListItem = (key: string, axis: Axis, update: (Axis) => void) => {
     }
 
     return (
-        <ListItem key={key}>
-            <IconButton
-                edge="start"
-                onClick={handle_click}
+        <Paper
+            sx={{ display: 'flex', alignItems: 'center' }}
+        >
+            <Typography
+                sx={{ ml: 1, flex: 1 }}
+                variant='body1'
             >
-                {icon}
+                {label}
+            </Typography>
+            <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+            <IconButton onClick={handle_click} disabled={update == null}>
+                {visible ? <VisibilityIcon /> : <VisibilityOffIcon />}
             </IconButton>
-            <ListItemText primary={axis.label} />
-        </ListItem>
+        </Paper>
     );
 }
 
 const AttributeList = (ppcState: Props, axes: { [id: string]: Axis }, setProps: (newProps) => void) => {
+    const interactionMode = ppcState.interactionMode ? ppcState.interactionMode : InteractionMode.Full;
+
     const items = [];
     for (const key in axes) {
-        const update = (axis: Axis) => {
-            const new_axes = window.structuredClone(axes);
-            new_axes[key] = axis;
-            ppcState.axes = new_axes;
+        const update = interactionMode == InteractionMode.Compatibility
+            || interactionMode == InteractionMode.Full
+            ? (axis: Axis) => {
+                const new_axes = window.structuredClone(axes);
+                new_axes[key] = axis;
+                ppcState.axes = new_axes;
 
-            if (ppcState.order) {
-                const order_clone = window.structuredClone(ppcState.order);
-                if (axis.hidden) {
-                    const index = order_clone.indexOf(key);
-                    if (index > -1) {
-                        order_clone.splice(index, 1);
+                if (ppcState.order) {
+                    const order_clone = window.structuredClone(ppcState.order);
+                    if (axis.hidden) {
+                        const index = order_clone.indexOf(key);
+                        if (index > -1) {
+                            order_clone.splice(index, 1);
+                        }
+                    } else {
+                        order_clone.push(key);
                     }
-                } else {
-                    order_clone.push(key);
+                    ppcState.order = order_clone;
                 }
-                ppcState.order = order_clone;
-            }
 
-            setProps({ ppcState });
-        };
+                setProps({ ppcState });
+            } : null;
         const axis = axes[key];
         items.push(AttributeListItem(key, axis, update));
     }
@@ -378,9 +504,20 @@ const AttributeList = (ppcState: Props, axes: { [id: string]: Axis }, setProps: 
                 <Typography variant='h5'>Attributes</Typography>
             </AccordionSummary>
             <AccordionDetails>
-                <List dense>
+                <Stack width={"100%"} spacing={1}>
+                    <Container>
+                        <Button
+                            variant="contained"
+                            startIcon={<InfoIcon />}
+                            sx={{ width: "95%" }}
+                        >
+                            Dataset
+                        </Button>
+                    </Container>
+                    <div />
+
                     {items}
-                </List>
+                </Stack>
             </AccordionDetails>
         </Accordion>
     );
@@ -677,116 +814,6 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =>
     return debug_item;
 }
 
-const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, toggleActive: () => void) => {
-    return (
-        <Paper
-            sx={{ display: 'flex', alignItems: 'center' }}
-        >
-            <IconButton onClick={toggleActive}>
-                {active ? <StopIcon /> : <PlayArrowIcon />}
-            </IconButton>
-            <Typography
-                sx={{ ml: 1, flex: 1 }}
-                variant='body1'
-            >
-                {name}
-            </Typography>
-            <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
-            <IconButton onClick={deleteLabel}>
-                <DeleteIcon />
-            </IconButton>
-        </Paper>
-    )
-}
-
-const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
-    const { labels, activeLabel } = ppc;
-    const { probabilityRangeStart, probabilityRangeEnd } = demo;
-
-    const items = Object.entries(labels).map(([k, v]) => {
-        const deleteLabel = () => {
-            const labels_clone = window.structuredClone(labels);
-            delete labels_clone[k];
-            ppc.labels = labels_clone;
-            if (activeLabel === k) {
-                const keys = Object.keys(labels_clone);
-                if (keys.length == 0) {
-                    ppc.activeLabel = null;
-                } else {
-                    ppc.activeLabel = keys[keys.length - 1];
-                    const new_active_label = labels_clone[ppc.activeLabel];
-                    if (new_active_label.selectionBounds) {
-                        demo.probabilityRangeStart = new_active_label.selectionBounds[0];
-                        demo.probabilityRangeEnd = new_active_label.selectionBounds[1];
-                    } else {
-                        demo.probabilityRangeStart = 0.0;
-                        demo.probabilityRangeEnd = 1.0;
-                    }
-                }
-            }
-            setProps({ ppcState: ppc, demo });
-        }
-        const toggleActive = () => {
-            ppc.activeLabel = k;
-            if (v.selectionBounds) {
-                demo.probabilityRangeStart = v.selectionBounds[0];
-                demo.probabilityRangeEnd = v.selectionBounds[1];
-            } else {
-                demo.probabilityRangeStart = 0.0;
-                demo.probabilityRangeEnd = 1.0;
-            }
-            setProps({ ppcState: ppc, demo });
-        }
-
-        return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
-    });
-
-    const handleProbabilityRangeChange = (e, range) => {
-        const labels_clone = window.structuredClone(labels);
-        labels_clone[activeLabel].selectionBounds = range as [number, number];
-        ppc.labels = labels_clone;
-        demo.probabilityRangeStart = range[0];
-        demo.probabilityRangeEnd = range[1];
-        setProps({ ppcState: ppc, demo })
-    };
-
-    return (
-        <Box width={"100%"}>
-            <Typography variant='h5'>Labels</Typography>
-            <Stack spacing={1}>
-                {items}
-
-                <Paper
-                    component="form"
-                    sx={{ display: 'flex', alignItems: 'center' }}
-                >
-                    <InputBase
-                        sx={{ ml: 1, flex: 1 }}
-                        placeholder="New Label Name"
-                    />
-                    <IconButton type="button" sx={{ p: '10px' }}>
-                        <AddIcon />
-                    </IconButton>
-                </Paper>
-
-                {activeLabel ?
-                    <FormControl>
-                        <FormLabel>Selection probability bounds</FormLabel>
-                        <Slider
-                            min={EPSILON}
-                            max={1.0}
-                            step={EPSILON}
-                            value={[probabilityRangeStart, probabilityRangeEnd]}
-                            onChange={handleProbabilityRangeChange}
-                            valueLabelDisplay="auto"
-                            size="small"
-                        />
-                    </FormControl> : null}
-            </Stack>
-        </Box>
-    )
-}
-
 const constructTasks = (userGroup: "PC" | "PPC") => {
     return [
         task_0(userGroup),
@@ -802,13 +829,13 @@ const task_0 = (userGroup: "PC" | "PPC"): DemoTask => {
     const buildInstructions = () => {
         return (
             <Stack spacing={1}>
-                <video autoPlay loop>
+                <video autoPlay loop muted>
                     <source src={moveAxesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
                     Attribute axes can be moved by holding the left mouse button on the label of an attribute.
                     Move the axis of the attribute <b>A1</b>, such that it lies in between the attribute axes
-                    <b>A2</b> and <b>A3</b>.
+                    &#32;<b>A2</b> and <b>A3</b>.
                     <br /><br />
                     Press the <b>Next</b> button on the bottom right once the task has been completed.
                 </DialogContentText>
@@ -871,8 +898,8 @@ const task_0 = (userGroup: "PC" | "PPC"): DemoTask => {
 
 const task_1 = (userGroup: "PC" | "PPC"): DemoTask => {
     const interactionMode = userGroup === "PC"
-        ? InteractionMode.RestrictedCompatibility
-        : InteractionMode.Restricted;
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
 
     const buildInstructions = () => {
         return (
@@ -910,6 +937,7 @@ const task_1 = (userGroup: "PC" | "PPC"): DemoTask => {
             order: ["a3", "a2", "a1"],
             labels: {
                 "Default": {},
+                "Default2": {},
             },
             activeLabel: "Default",
             colors: {

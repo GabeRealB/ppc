@@ -1163,6 +1163,16 @@ impl Axes {
     pub fn remove_axis(&mut self, axis: &str) {
         let axis = self.axes.remove(axis).expect("axis is missing");
         if !axis.is_hidden() {
+            self.next_axis_index -= 1;
+            self.num_visible_axes -= 1;
+            let mut mappings = self.coordinate_mappings.borrow_mut();
+            mappings.world_width = ((self.num_visible_axes + 1) as f32).max(1.0);
+            mappings.world_bounding_box = Aabb::new(
+                Position::new((-0.5, 0.0)),
+                Position::new((mappings.world_width, 1.0)),
+            );
+            drop(mappings);
+
             if let Some(left) = axis.left_neighbor() {
                 left.set_right_neighbor(axis.right_neighbor().as_ref());
             } else {
@@ -1174,13 +1184,15 @@ impl Axes {
             } else {
                 self.visible_axis_end = axis.left_neighbor();
             }
-            self.num_visible_axes -= 1;
-            self.next_axis_index -= 1;
 
             for ax in self.visible_axes() {
                 if ax.axis_index() > axis.axis_index() {
                     let new_idx = ax.axis_index().unwrap() - 1;
                     ax.axis_index.set(Some(new_idx));
+                }
+                if ax.world_offset() > axis.world_offset() {
+                    let new_world_offset = ax.world_offset() - 1.0;
+                    ax.set_world_offset(new_world_offset);
                 }
             }
         }
