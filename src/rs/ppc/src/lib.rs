@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, mem::MaybeUninit, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, mem::MaybeUninit, rc::Rc};
 
 use async_channel::{Receiver, Sender};
 use color_scale::ColorScaleDescriptor;
@@ -124,6 +124,8 @@ impl LabelColorGenerator {
 struct StagingData {
     resize: Vec<(u32, u32, f32)>,
     transactions: Vec<wasm_bridge::StateTransaction>,
+    updated_probabilities: BTreeSet<usize>,
+    last_labels: BTreeSet<String>,
 }
 
 #[wasm_bindgen]
@@ -785,10 +787,11 @@ impl Renderer {
             .create_command_encoder(webgpu::CommandEncoderDescriptor { label: None });
 
         // Update the probability curves and probabilities.
-        let changed_probabilities = if resample {
-            self.update_probabilities(&command_encoder)
-        } else {
-            Box::new([])
+        if resample {
+            let changed = self.update_probabilities(&command_encoder);
+            self.staging_data
+                .updated_probabilities
+                .extend(changed.into_vec().into_iter());
         };
 
         // Draw the main view into the framebuffer.
@@ -850,7 +853,7 @@ impl Renderer {
         //     web_sys::console::log_1(&format!("{probabilities_change:?}").into());
         // }
 
-        self.notify_changes();
+        self.notify_changes().await;
 
         completion
             .send(())
@@ -923,7 +926,7 @@ impl Renderer {
 
 // Callback events
 impl Renderer {
-    fn notify_changes(&mut self) {
+    async fn notify_changes(&mut self) {
         if self.active_action.is_some() {
             return;
         }
@@ -935,8 +938,14 @@ impl Renderer {
 
         let plot_diff = js_sys::Array::new();
 
-        if events.signaled_any(&[event::Event::AXIS_ORDER_CHANGE]) {
+        if events.signaled(event::Event::AXIS_ORDER_CHANGE) {
             plot_diff.push(&self.create_axis_order_diff().into());
+        }
+
+        if events.signaled(event::Event::SELECTIONS_CHANGE) {
+            plot_diff.push(&self.create_probabilities_diff().await.into());
+            self.staging_data.updated_probabilities.clear();
+            self.staging_data.last_labels = self.labels.iter().map(|l| l.id.clone()).collect();
         }
 
         if plot_diff.length() != 0 {
@@ -955,6 +964,41 @@ impl Renderer {
         let obj = js_sys::Object::new();
         js_sys::Reflect::set(&obj, &"type".into(), &"axis_order".into()).unwrap();
         js_sys::Reflect::set(&obj, &"value".into(), &order.into()).unwrap();
+        obj
+    }
+
+    async fn create_probabilities_diff(&self) -> js_sys::Object {
+        let prob_diff = js_sys::Object::new();
+        let indices_diff = js_sys::Object::new();
+        let removals = js_sys::Array::new();
+
+        for &changed_label in &self.staging_data.updated_probabilities {
+            let (prob, attr) = self
+                .extract_label_attribution_and_probability(changed_label)
+                .await;
+
+            let prob = js_sys::Float32Array::from(&*prob);
+            let attr = js_sys::BigUint64Array::from(&*attr);
+
+            let label = self.labels[changed_label].id.as_str();
+            js_sys::Reflect::set(&prob_diff, &label.into(), &prob.into()).unwrap();
+            js_sys::Reflect::set(&indices_diff, &label.into(), &attr.into()).unwrap();
+        }
+
+        for label in &self.staging_data.last_labels {
+            if !self.labels.iter().any(|l| &l.id == label) {
+                removals.push(&label.into());
+            }
+        }
+
+        let diff = js_sys::Object::new();
+        js_sys::Reflect::set(&diff, &"probabilities".into(), &prob_diff.into()).unwrap();
+        js_sys::Reflect::set(&diff, &"indices".into(), &indices_diff.into()).unwrap();
+        js_sys::Reflect::set(&diff, &"removals".into(), &removals.into()).unwrap();
+
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &"type".into(), &"probabilities".into()).unwrap();
+        js_sys::Reflect::set(&obj, &"value".into(), &diff.into()).unwrap();
         obj
     }
 }
@@ -1265,6 +1309,16 @@ impl Renderer {
         }
         drop(axes);
 
+        let set = std::mem::take(&mut self.staging_data.updated_probabilities);
+        self.staging_data.updated_probabilities = set
+            .into_iter()
+            .filter_map(|x| match x {
+                x if x < label_idx => Some(x),
+                x if x > label_idx => Some(x - 1),
+                _ => None,
+            })
+            .collect();
+
         if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
             if let Some(active_label_idx) = self.active_label_idx {
                 let label = &self.labels[active_label_idx].id;
@@ -1494,11 +1548,28 @@ impl Renderer {
         } = transaction;
 
         let mut data_update = false;
+
+        if !axis_removals.is_empty() {
+            self.handled_events.signal_many(&[
+                event::Event::AXIS_STATE_CHANGE,
+                event::Event::AXIS_POSITION_CHANGE,
+                event::Event::AXIS_ORDER_CHANGE,
+                event::Event::SELECTIONS_CHANGE,
+            ]);
+        }
         for axis in axis_removals {
             data_update = true;
             self.remove_axis(axis);
         }
 
+        if !axis_additions.is_empty() {
+            self.handled_events.signal_many(&[
+                event::Event::AXIS_STATE_CHANGE,
+                event::Event::AXIS_POSITION_CHANGE,
+                event::Event::AXIS_ORDER_CHANGE,
+                event::Event::SELECTIONS_CHANGE,
+            ]);
+        }
         for (_, axis) in axis_additions {
             data_update = true;
             self.add_axis(axis);
@@ -1506,6 +1577,7 @@ impl Renderer {
 
         if let Some(order) = order_change {
             data_update = true;
+            self.handled_events.signal(event::Event::AXIS_ORDER_CHANGE);
             self.set_axes_order(order);
         }
 
@@ -1543,10 +1615,16 @@ impl Renderer {
             self.set_color_bar_visibility(visibility);
         }
 
+        if !label_removals.is_empty() {
+            self.handled_events.signal(event::Event::SELECTIONS_CHANGE);
+        }
         for label in label_removals {
             self.remove_label(label);
         }
 
+        if !label_additions.is_empty() {
+            self.handled_events.signal(event::Event::SELECTIONS_CHANGE);
+        }
         for (_, label) in label_additions {
             let wasm_bridge::Label {
                 id,
@@ -1562,6 +1640,9 @@ impl Renderer {
             );
         }
 
+        if !label_updates.is_empty() {
+            self.handled_events.signal(event::Event::SELECTIONS_CHANGE);
+        }
         for (_, update) in label_updates {
             let wasm_bridge::Label {
                 id,
@@ -2441,7 +2522,7 @@ impl Renderer {
     async fn extract_label_attribution_and_probability(
         &self,
         label_idx: usize,
-    ) -> (Box<[f32]>, Box<[usize]>) {
+    ) -> (Box<[f32]>, Box<[u64]>) {
         {
             let axes = self.axes.borrow();
             if axes.num_data_points() == 0 {
@@ -2477,7 +2558,7 @@ impl Renderer {
             .iter()
             .enumerate()
             .filter(|(_, p)| selection_range.contains(p))
-            .map(|(i, _)| i)
+            .map(|(i, _)| i as u64)
             .collect::<Box<[_]>>();
 
         (probabilities, attribution)

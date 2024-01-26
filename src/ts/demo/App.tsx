@@ -55,7 +55,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import moveAxesInstr from './resources/move_axes_instr.mp4'
 
 import PPC from '../components/PPC';
-import { Axis, Props, InteractionMode} from '../types'
+import { Axis, Props, InteractionMode } from '../types'
 
 const EPSILON = 1.17549435082228750797e-38;
 
@@ -69,9 +69,11 @@ type DemoTask = {
     canContinue: (ppc: Props) => boolean,
 };
 
+type UserGroup = "PC" | "PPC";
+
 type DemoState = {
     userId: uuid,
-    userGroup: "PC" | "PPC",
+    userGroup: UserGroup,
 
     currentTask: number,
     tasks: DemoTask[],
@@ -102,7 +104,7 @@ class App extends Component<any, AppState> {
             userGroup = Math.random() < 0.5 ? "PC" : "PPC";
         }
 
-        const tasks = constructTasks(userGroup as "PC" | "PPC");
+        const tasks = constructTasks(userGroup as UserGroup);
         const ppc = window.structuredClone(tasks[0].initialState);
         ppc.setProps = this.setPPCProps;
 
@@ -110,7 +112,7 @@ class App extends Component<any, AppState> {
             ppcState: ppc,
             demo: {
                 userId: uuid(),
-                userGroup: userGroup as "PC" | "PPC",
+                userGroup: userGroup as UserGroup,
                 showInstructions: true,
                 currentTask: 0,
                 tasks: tasks,
@@ -130,9 +132,7 @@ class App extends Component<any, AppState> {
     setPPCProps(newProps) {
         const { ppcState } = this.state;
         for (const [k, v] of Object.entries(newProps)) {
-            if (k in ppcState) {
-                ppcState[k] = v;
-            }
+            ppcState[k] = v;
         }
 
         this.setProps({ ppcState });
@@ -815,14 +815,14 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =>
     return debug_item;
 }
 
-const constructTasks = (userGroup: "PC" | "PPC") => {
+const constructTasks = (userGroup: UserGroup) => {
     return [
-        task_0(userGroup),
         task_1(userGroup),
+        task_2(userGroup),
     ];
 }
 
-const task_0 = (userGroup: "PC" | "PPC"): DemoTask => {
+const task_1 = (userGroup: UserGroup): DemoTask => {
     const interactionMode = userGroup === "PC"
         ? InteractionMode.RestrictedCompatibility
         : InteractionMode.Restricted;
@@ -897,7 +897,7 @@ const task_0 = (userGroup: "PC" | "PPC"): DemoTask => {
     };
 }
 
-const task_1 = (userGroup: "PC" | "PPC"): DemoTask => {
+const task_2 = (userGroup: UserGroup): DemoTask => {
     const interactionMode = userGroup === "PC"
         ? InteractionMode.Compatibility
         : InteractionMode.Full;

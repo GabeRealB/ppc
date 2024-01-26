@@ -112,6 +112,20 @@ export type Props = {
      */
     interactionMode?: InteractionMode,
     /**
+     * Read-only.
+     * 
+     * Per label array of selection probabilities 
+     * of each point.
+     */
+    selection_probabilities?: { [id: string]: Float32Array },
+    /**
+     * Read-only.
+     * 
+     * Per label array of data indices that count as
+     * being selected.
+     */
+    selection_indices?: { [id: string]: BigUint64Array }
+    /**
      * Debug options.
      */
     debug?: DebugOptions,

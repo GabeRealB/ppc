@@ -43,10 +43,6 @@ enum MessageKind {
     SetDebugOptions,
 }
 
-type UpdateDataMsgPayload = {
-    axes?: { [id: string]: Axis },
-};
-
 type SetAxesMsgPayload = {
     axes: { [id: string]: Axis },
     previousAxes: { [id: string]: Axis },
@@ -408,9 +404,7 @@ const PPC = (props: Props) => {
                     }
                 }
 
-                if (data.activeLabel !== data.previousActiveLabel) {
-                    currentTransaction.switchActiveLabel(data.activeLabel);
-                }
+                currentTransaction.switchActiveLabel(data.activeLabel);
             };
             const setInteractionMode = (mode: SetInteractionModeMsgPayload) => {
                 if (rendererState.exited) {
@@ -599,6 +593,41 @@ const PPC = (props: Props) => {
     const handleAxisOrderChangeEvent = (diff, order) => {
         diff["order"] = order;
     }
+    const handleProbabilitiesChangeEvent = (diff, value) => {
+        const { probabilities, indices } = value;
+        const removedLabels = new Set(value.removals);
+
+        let selection_probabilities = {};
+        if (props.selection_probabilities) {
+            for (const [label, v] of Object.entries(props.selection_probabilities)) {
+                if (!(removedLabels.has(label) || label in probabilities)) {
+                    selection_probabilities[label] = v;
+                }
+            }
+            for (const [label, v] of Object.entries(probabilities)) {
+                selection_probabilities[label] = v;
+            }
+        } else {
+            selection_probabilities = probabilities;
+        }
+
+        let selection_indices = {};
+        if (props.selection_indices) {
+            for (const [label, v] of Object.entries(props.selection_indices)) {
+                if (!(removedLabels.has(label) || label in indices)) {
+                    selection_indices[label] = v;
+                }
+            }
+            for (const [label, v] of Object.entries(indices)) {
+                selection_indices[label] = v;
+            }
+        } else {
+            selection_indices = indices;
+        }
+
+        diff["selection_probabilities"] = selection_probabilities;
+        diff["selection_indices"] = selection_indices;
+    }
 
     // Events
     const handleMessage = (msg) => {
@@ -613,6 +642,9 @@ const PPC = (props: Props) => {
             switch (type) {
                 case "axis_order":
                     handleAxisOrderChangeEvent(diff, value);
+                    break;
+                case "probabilities":
+                    handleProbabilitiesChangeEvent(diff, value);
                     break;
             }
         }
@@ -664,7 +696,9 @@ PPC.defaultProps = {
     colorBar: "hidden",
     labels: {},
     activeLabel: null,
-    interactionMode: InteractionMode.Full
+    interactionMode: InteractionMode.Full,
+    selection_probabilities: {},
+    selection_indices: {},
 };
 
 export default PPC;
