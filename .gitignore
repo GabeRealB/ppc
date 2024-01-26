@@ -281,3 +281,7 @@ JuliaManifest.toml
 
 # Style sheets
 !/src/**/*.css
+
+ppc/*
+!ppc/__init__.py
+!ppc/_imports_.py
