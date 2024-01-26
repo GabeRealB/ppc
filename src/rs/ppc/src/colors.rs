@@ -473,6 +473,7 @@ fn matrix_multiply<const N: usize, const M: usize>(matrix: [[f32; N]; M], v: [f3
 }
 
 /// A color query.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ColorQuery<'a> {
     Named(Cow<'a, str>),
     Css(Cow<'a, str>),

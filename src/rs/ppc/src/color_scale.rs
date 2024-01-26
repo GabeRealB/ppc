@@ -8,6 +8,7 @@ use crate::colors::{
 use crate::lerp::Lerp;
 
 /// A descriptor for how to construct a color scale.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ColorScaleDescriptor<'a> {
     Named(Cow<'a, str>),
     Constant(ColorQuery<'a>),

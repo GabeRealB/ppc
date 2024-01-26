@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { DashComponentProps } from '../props';
+import _ from 'lodash';
 
 import easingLinearSelRes from '../resources/easing_linear_selected.png'
 import easingLinearUnRes from '../resources/easing_linear_unselected.png'
@@ -49,9 +50,12 @@ export type Axis = {
     hidden?: boolean
 };
 
+export type EasingType = "linear" | "in" | "out" | "inout";
+
 export type LabelInfo = {
     color?: Color,
-    selectionBounds?: [number, number]
+    selectionBounds?: [number, number],
+    easing?: EasingType,
 }
 
 export type DebugOptions = {
@@ -126,19 +130,29 @@ export type Props = {
 } & DashComponentProps;
 
 enum MessageKind {
+    StartTransaction,
+    EndTransaction,
     Shutdown,
-    UpdateData,
+    SetAxes,
+    SetAxesOrder,
     SetColors,
     SetColorBarVisibility,
     SetLabels,
-    SetEasing,
     SetInteractionMode,
     SetDebugOptions,
 }
 
 type UpdateDataMsgPayload = {
     axes?: { [id: string]: Axis },
-    order?: string[]
+};
+
+type SetAxesMsgPayload = {
+    axes: { [id: string]: Axis },
+    previousAxes: { [id: string]: Axis },
+};
+
+type SetAxesOrderMsgPayload = {
+    order: string[],
 };
 
 type SetColorsMsgPayload = {
@@ -156,10 +170,7 @@ type SetLabelsMsgPayload = {
     previousActiveLabel?: string,
 }
 
-type SetEasingMsgPayload = string;
-
 type SetInteractionModeMsgPayload = InteractionMode;
-
 type SetDebugOptionsPayload = DebugOptions;
 
 interface Message {
@@ -184,12 +195,13 @@ const PPC = (props: Props) => {
         async function eventLoop() {
             const {
                 Renderer,
-                UpdateDataPayload,
-                ColorScaleDescription,
-                ColorDescription,
-                Element,
+                AxisDef,
                 AxisTicksDef,
+                Element,
+                ColorDescription,
+                ColorScaleDescription,
                 DebugOptions,
+                StateTransactionBuilder,
             } = await (await import('../../../pkg')).default;
 
             const canvasGPU = canvasGPURef.current;
@@ -257,30 +269,60 @@ const PPC = (props: Props) => {
             });
 
             // Listen for custom events.
+            let currentTransaction = new StateTransactionBuilder();
             const shutdown = () => {
-                console.log("Shutdown")
                 if (!rendererState.exited && rendererState.queue && rendererState.renderer) {
                     rendererState.queue.exit();
                 }
                 rendererState.exited = true;
             };
-            const updateData = (data: UpdateDataMsgPayload) => {
-                const axes = data.axes;
-                const order = data.order;
+
+            const startTransaction = () => {
+                if (currentTransaction) {
+                    currentTransaction.free();
+                }
 
                 if (rendererState.exited) {
                     return;
                 }
+                currentTransaction = new StateTransactionBuilder();
+            }
+            const endTransaction = () => {
+                const transaction = currentTransaction.build();
+                currentTransaction = undefined;
+                rendererState.queue.commitTransaction(transaction);
+            }
+            const setAxes = (data: SetAxesMsgPayload) => {
+                if (rendererState.exited) {
+                    return;
+                }
 
-                const payload = new UpdateDataPayload();
+                const { axes, previousAxes } = data;
                 if (axes) {
-                    for (let key in axes) {
-                        const axis = axes[key];
+                    if (previousAxes) {
+                        for (const axis of Object.keys(previousAxes)) {
+                            if (!(axis in axes)) {
+                                currentTransaction.removeAxis(axis);
+                            }
+                        }
+                    }
+
+                    for (const [id, axis] of Object.entries(axes)) {
+                        if (previousAxes) {
+                            if (id in previousAxes) {
+                                const previousAxis = previousAxes[id];
+                                if (_.isEqual(axis, previousAxis)) {
+                                    continue;
+                                } else {
+                                    currentTransaction.removeAxis(id);
+                                }
+                            }
+                        }
 
                         let has_valid_ticks = axis.tickPositions !== undefined;
                         if (has_valid_ticks && axis.tickLabels !== undefined) {
                             if (axis.tickPositions.length !== axis.tickLabels.length) {
-                                console.error("Axis has defined tick labels, but the number of tick " +
+                                console.warn("Axis has defined tick labels, but the number of tick " +
                                     "labels does not match the specified tick positions.");
                                 has_valid_ticks = false;
                             }
@@ -302,17 +344,24 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        payload.newAxis(key, axis.label, data_points, range, visibleRange, ticks, axis.hidden);
+                        const ax = new AxisDef(id, axis.label, data_points, range, visibleRange, ticks, axis.hidden);
+                        currentTransaction.addAxis(ax);
+                    }
+                } else {
+                    if (previousAxes) {
+                        for (const axis of Object.keys(previousAxes)) {
+                            currentTransaction.removeAxis(axis);
+                        }
                     }
                 }
-
-                if (order) {
-                    for (let key of order) {
-                        payload.addOrder(key);
-                    }
+            }
+            const setAxesOrder = (data: SetAxesOrderMsgPayload) => {
+                if (rendererState.exited) {
+                    return;
                 }
 
-                rendererState.queue.updateData(payload);
+                const { order } = data;
+                currentTransaction.setAxisOrder(order);
             }
             const setColors = (data: SetColorsMsgPayload) => {
                 const colors = data.colors;
@@ -322,48 +371,48 @@ const PPC = (props: Props) => {
                 }
 
                 if (!colors) {
-                    rendererState.queue.setDefaultColor(Element.Background);
-                    rendererState.queue.setDefaultColor(Element.Brush);
-                    rendererState.queue.setDefaultColor(Element.Unselected);
-                    rendererState.queue.setDefaultColorScaleColor();
-                    rendererState.queue.setDefaultSelectedDataColorMode();
+                    currentTransaction.setDefaultColor(Element.Background);
+                    currentTransaction.setDefaultColor(Element.Brush);
+                    currentTransaction.setDefaultColor(Element.Unselected);
+                    currentTransaction.setDefaultColorScaleColor();
+                    currentTransaction.setDefaultSelectedDataColorMode();
                     return;
                 }
 
                 const setColor = (element: number, color?: any) => {
                     if (!color) {
-                        rendererState.queue.setDefaultColor(element);
+                        currentTransaction.setDefaultColor(element);
                         return;
                     }
 
                     if (color instanceof String) {
-                        rendererState.queue.setColorNamed(element, color.toString());
+                        currentTransaction.setColorNamed(element, color.toString());
                     } else if (typeof color === 'string') {
-                        rendererState.queue.setColorNamed(element, color);
+                        currentTransaction.setColorNamed(element, color);
                     } else {
                         const c = new ColorDescription(color.colorSpace, new Float32Array(color.values));
-                        rendererState.queue.setColorValue(element, c);
+                        currentTransaction.setColorValue(element, c);
                     }
                 }
 
                 const setSelected = (colors?: SelectedColor) => {
                     if (!colors) {
-                        rendererState.queue.setDefaultColorScaleColor();
-                        rendererState.queue.setDefaultSelectedDataColorMode();
+                        currentTransaction.setDefaultColorScaleColor();
+                        currentTransaction.setDefaultSelectedDataColorMode();
                         return;
                     }
 
                     if (!colors.scale) {
-                        rendererState.queue.setDefaultColorScaleColor();
+                        currentTransaction.setDefaultColorScaleColor();
                     } else {
                         if (colors.scale instanceof String) {
-                            rendererState.queue.setColorScaleNamed(colors.scale.toString());
+                            currentTransaction.setColorScaleNamed(colors.scale.toString());
                         } else if (typeof colors.scale === 'string') {
-                            rendererState.queue.setColorScaleNamed(colors.scale);
+                            currentTransaction.setColorScaleNamed(colors.scale);
                         } else if ('values' in colors.scale) {
                             const color: Color = colors.scale;
                             const c = new ColorDescription(color.colorSpace, new Float32Array(color.values));
-                            rendererState.queue.setColorScaleConstant(c);
+                            currentTransaction.setColorScaleConstant(c);
                         } else if ('gradient' in colors.scale) {
                             const scale: ColorScale = colors.scale;
                             const s = new ColorScaleDescription(scale.colorSpace);
@@ -371,21 +420,21 @@ const PPC = (props: Props) => {
                                 const c = new ColorDescription(color.colorSpace, new Float32Array(color.values));
                                 s.withSample(sample, c);
                             }
-                            rendererState.queue.setColorScaleGradient(s);
+                            currentTransaction.setColorScaleGradient(s);
                         }
                     }
 
                     if (colors.color === undefined || colors.color === null) {
-                        rendererState.queue.setDefaultSelectedDataColorMode();
+                        currentTransaction.setDefaultSelectedDataColorMode();
                     } else {
                         if (colors.color instanceof String) {
-                            rendererState.queue.setSelectedDataColorModeAttribute(colors.color.toString());
+                            currentTransaction.setSelectedDataColorModeAttribute(colors.color.toString());
                         } else if (typeof colors.color === 'string') {
-                            rendererState.queue.setSelectedDataColorModeAttribute(colors.color);
+                            currentTransaction.setSelectedDataColorModeAttribute(colors.color);
                         } else if (typeof colors.color === 'number') {
-                            rendererState.queue.setSelectedDataColorModeConstant(colors.color);
+                            currentTransaction.setSelectedDataColorModeConstant(colors.color);
                         } else if ('type' in colors.color && colors.color.type === 'probability') {
-                            rendererState.queue.setSelectedDataColorModeProbability();
+                            currentTransaction.setSelectedDataColorModeProbability();
                         } else {
                             throw new Error("Unknown color scale color provided");
                         }
@@ -404,9 +453,9 @@ const PPC = (props: Props) => {
 
                 let visibility = data.colorBar;
                 if (!visibility || visibility === "hidden") {
-                    rendererState.queue.setColorBarVisibility(false);
+                    currentTransaction.setColorBarVisibility(false);
                 } else if (visibility === "visible") {
-                    rendererState.queue.setColorBarVisibility(true);
+                    currentTransaction.setColorBarVisibility(true);
                 } else {
                     throw new Error("Unknown color bar visibility string")
                 }
@@ -422,7 +471,7 @@ const PPC = (props: Props) => {
                 // Remove old labels.
                 for (let id in previousLabels) {
                     if (id in labels === false) {
-                        rendererState.queue.removeLabel(id);
+                        currentTransaction.removeLabel(id);
                     }
                 }
 
@@ -434,44 +483,39 @@ const PPC = (props: Props) => {
 
                         if (label.color !== previous.color) {
                             const color = label.color;
-                            if (color) {
-                                const c = new ColorDescription(color.colorSpace, new Float32Array(color.values));
-                                rendererState.queue.setLabelColor(id, c);
-                            } else {
-                                rendererState.queue.setLabelColor(id, null);
-                            }
+                            const c = new ColorDescription(color.colorSpace, new Float32Array(color.values));
+                            currentTransaction.setLabelColor(id, c);
                         }
 
                         if (label.selectionBounds !== previous.selectionBounds) {
                             const hasSelectionBounds = label.selectionBounds !== undefined;
-                            const selectionBoundsStart = hasSelectionBounds ? label.selectionBounds[0] : -1.0;
-                            const selectionBoundsEnd = hasSelectionBounds ? label.selectionBounds[1] : -1.0;
-                            rendererState.queue.setLabelSelectionBounds(id, hasSelectionBounds, selectionBoundsStart, selectionBoundsEnd);
+                            const selectionBoundsStart = hasSelectionBounds ? label.selectionBounds[0] : 0.0;
+                            const selectionBoundsEnd = hasSelectionBounds ? label.selectionBounds[1] : 1.0;
+                            currentTransaction.setLabelSelectionBounds(id, selectionBoundsStart, selectionBoundsEnd);
+                        }
+
+                        if (label.easing !== previous.easing) {
+                            currentTransaction.setLabelEasing(id, label.easing);
                         }
                     } else {
                         const color = label.color ? new ColorDescription(label.color.colorSpace, new Float32Array(label.color.values)) : null;
                         const hasSelectionBounds = label.selectionBounds !== undefined;
                         const selectionBoundsStart = hasSelectionBounds ? label.selectionBounds[0] : -1.0;
                         const selectionBoundsEnd = hasSelectionBounds ? label.selectionBounds[1] : -1.0;
-                        rendererState.queue.addLabel(id, color, hasSelectionBounds, selectionBoundsStart, selectionBoundsEnd);
+                        const easing = label.easing;
+                        currentTransaction.addLabel(id, color, hasSelectionBounds, selectionBoundsStart, selectionBoundsEnd, easing);
                     }
                 }
 
                 if (data.activeLabel !== data.previousActiveLabel) {
-                    rendererState.queue.switchActiveLabel(data.activeLabel);
+                    currentTransaction.switchActiveLabel(data.activeLabel);
                 }
             };
-            const setEasing = (data: SetEasingMsgPayload) => {
+            const setInteractionMode = (mode: SetInteractionModeMsgPayload) => {
                 if (rendererState.exited) {
                     return;
                 }
-                rendererState.queue.setLabelEasing(data);
-            }
-            const setInteractionMode = (data: SetInteractionModeMsgPayload) => {
-                if (rendererState.exited) {
-                    return;
-                }
-                rendererState.queue.setInteractionMode(data);
+                currentTransaction.setInteractionMode(mode);
             }
             const setDebugOptions = (data?: SetDebugOptionsPayload) => {
                 if (rendererState.exited) {
@@ -485,17 +529,26 @@ const PPC = (props: Props) => {
                 options.showAxisLineBoundingBox = data.showAxisLineBoundingBox === true;
                 options.showSelectionsBoundingBox = data.showSelectionsBoundingBox === true;
                 options.showColorBarBoundingBox = data.showColorBarBoundingBox === true;
-                rendererState.queue.setDebugOptions(options);
+                currentTransaction.setDebugOptions(options);
             }
             const messageListener = (e) => {
                 const data: Message = e.data;
 
                 switch (data.kind) {
+                    case MessageKind.StartTransaction:
+                        startTransaction();
+                        break;
+                    case MessageKind.EndTransaction:
+                        endTransaction();
+                        break;
                     case MessageKind.Shutdown:
                         shutdown();
                         break;
-                    case MessageKind.UpdateData:
-                        updateData(data.payload);
+                    case MessageKind.SetAxes:
+                        setAxes(data.payload);
+                        break;
+                    case MessageKind.SetAxesOrder:
+                        setAxesOrder(data.payload);
                         break;
                     case MessageKind.SetColors:
                         setColors(data.payload);
@@ -505,9 +558,6 @@ const PPC = (props: Props) => {
                         break;
                     case MessageKind.SetLabels:
                         setLabels(data.payload);
-                        break;
-                    case MessageKind.SetEasing:
-                        setEasing(data.payload);
                         break;
                     case MessageKind.SetInteractionMode:
                         setInteractionMode(data.payload);
@@ -568,45 +618,33 @@ const PPC = (props: Props) => {
     /// Events
     /////////////////////////////////////////////////////
 
-    // Labels update
-    const previousLabels = useRef<{ [id: string]: LabelInfo }>(null);
-    const previousActiveLabel = useRef<string>(null);
+    // Transaction start
+    useEffect(() => {
+        sx.postMessage({ kind: MessageKind.StartTransaction, payload: undefined });
+    }, [props])
+
+    // Axes update
+    const previousAxes = useRef<{ [id: string]: Axis }>(undefined);
     useEffect(() => {
         sx.postMessage({
-            kind: MessageKind.SetLabels, payload: {
-                labels: props.labels,
-                activeLabel: props.activeLabel,
-                previousLabels: previousLabels.current,
-                previousActiveLabel: previousActiveLabel.current,
-            }
-        });
-
-        previousLabels.current = props.labels;
-        previousActiveLabel.current = props.activeLabel;
-    }, [props.labels, props.activeLabel]);
-
-    const [easing, setEasing] = useState<string>("linear");
-    const easingLinearRes = easing == "linear" ? easingLinearSelRes : easingLinearUnRes;
-    const easingInRes = easing == "in" ? easingInSelRes : easingInUnRes;
-    const easingOutRes = easing == "out" ? easingOutSelRes : easingOutUnRes;
-    const easingInOutRes = easing == "inout" ? easingInOutSelRes : easingInOutUnRes;
-    useEffect(() => {
-        sx.postMessage({
-            kind: MessageKind.SetEasing, payload: easing
-        });
-    }, [easing]);
-
-    // Data update
-    useEffect(() => {
-        sx.postMessage({
-            kind: MessageKind.UpdateData, payload: {
+            kind: MessageKind.SetAxes, payload: {
                 axes: props.axes,
-                order: props.order,
-            }
+                previousAxes: previousAxes.current,
+            } as SetAxesMsgPayload
         });
-    }, [props.axes, props.order]);
+        previousAxes.current = props.axes;
+    }, [props.axes]);
 
-    // Color update
+    // Order update
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.SetAxesOrder, payload: {
+                order: props.order,
+            } as SetAxesOrderMsgPayload
+        });
+    }, [props.order]);
+
+    // Colors update
     useEffect(() => {
         sx.postMessage({
             kind: MessageKind.SetColors, payload: {
@@ -624,6 +662,23 @@ const PPC = (props: Props) => {
         });
     }, [props.colorBar]);
 
+    // Labels update
+    const previousLabels = useRef<{ [id: string]: LabelInfo }>(null);
+    const previousActiveLabel = useRef<string>(null);
+    useEffect(() => {
+        sx.postMessage({
+            kind: MessageKind.SetLabels, payload: {
+                labels: props.labels,
+                activeLabel: props.activeLabel,
+                previousLabels: previousLabels.current,
+                previousActiveLabel: previousActiveLabel.current,
+            }
+        });
+
+        previousLabels.current = props.labels;
+        previousActiveLabel.current = props.activeLabel;
+    }, [props.labels, props.activeLabel]);
+
     // Interaction mode
     useEffect(() => {
         sx.postMessage({ kind: MessageKind.SetInteractionMode, payload: props.interactionMode });
@@ -634,12 +689,14 @@ const PPC = (props: Props) => {
         sx.postMessage({ kind: MessageKind.SetDebugOptions, payload: props.debug });
     }, [props.debug]);
 
+    // Transaction end
+    useEffect(() => {
+        sx.postMessage({ kind: MessageKind.EndTransaction, payload: undefined });
+    }, [props])
+
     // Callback handling
     const handleAxisOrderChangeEvent = (diff, order) => {
         diff["order"] = order;
-    }
-    const handleEasingChangeEvent = (diff, easing) => {
-        setEasing(easing);
     }
 
     // Events
@@ -656,9 +713,6 @@ const PPC = (props: Props) => {
                 case "axis_order":
                     handleAxisOrderChangeEvent(diff, value);
                     break;
-                case "easing":
-                    handleEasingChangeEvent(diff, value);
-                    break;
             }
         }
 
@@ -670,14 +724,28 @@ const PPC = (props: Props) => {
 
     // Plot
     const setEasingCallback = (e) => {
-        setEasing(e.target.value);
+        let labels = window.structuredClone(props.labels);
+        const label = labels[props.activeLabel];
+        label.easing = e.target.value as EasingType;
+        props.setProps({ labels });
     };
+
+    let easing: EasingType = undefined;
+    if (props.activeLabel) {
+        const { labels } = props;
+        const label = labels[props.activeLabel];
+        easing = label.easing ? label.easing : "linear";
+    }
+    const easingLinearRes = easing == "linear" ? easingLinearSelRes : easingLinearUnRes;
+    const easingInRes = easing == "in" ? easingInSelRes : easingInUnRes;
+    const easingOutRes = easing == "out" ? easingOutSelRes : easingOutUnRes;
+    const easingInOutRes = easing == "inout" ? easingInOutSelRes : easingInOutUnRes;
 
     return (
         <div id={id} className={styles.plot}>
             <canvas ref={canvasGPURef} className={styles.gpu}></canvas>
             <canvas ref={canvas2DRef} className={styles.non_gpu}></canvas>
-            {props.interactionMode == InteractionMode.Full ?
+            {props.interactionMode == InteractionMode.Full && props.activeLabel ?
                 <div className={styles.toolbar}>
                     <input type="image" src={easingLinearRes} className={styles.toolbar_element} value="linear" onClick={setEasingCallback}></input>
                     <input type="image" src={easingInRes} className={styles.toolbar_element} value="in" onClick={setEasingCallback}></input>

@@ -9,21 +9,7 @@ impl Event {
 
     // External events
     pub const RESIZE: Self = Self(1 << 0);
-    pub const DATA_UPDATE: Self = Self(1 << 1);
-    pub const BACKGROUND_COLOR_CHANGE: Self = Self(1 << 2);
-    pub const BRUSH_COLOR_CHANGE: Self = Self(1 << 3);
-    pub const UNSELECTED_COLOR_CHANGE: Self = Self(1 << 4);
-    pub const COLOR_SCALE_CHANGE: Self = Self(1 << 5);
-    pub const DATA_COLOR_MODE_CHANGE: Self = Self(1 << 6);
-    pub const COLOR_BAR_VISIBILITY_CHANGE: Self = Self(1 << 7);
-    pub const LABEL_ADDITION: Self = Self(1 << 8);
-    pub const LABEL_REMOVAL: Self = Self(1 << 9);
-    pub const ACTIVE_LABEL_CHANGE: Self = Self(1 << 10);
-    pub const LABEL_COLOR_CHANGE: Self = Self(1 << 11);
-    pub const LABEL_SELECTION_BOUNDS_CHANGE: Self = Self(1 << 12);
-    pub const LABEL_EASING_CHANGE: Self = Self(1 << 13);
-    pub const INTERACTION_MODE_CHANGE: Self = Self(1 << 14);
-    pub const DEBUG_OPTIONS_CHANGE: Self = Self(1 << 15);
+    pub const TRANSACTION_COMMIT: Self = Self(1 << 1);
 
     // Internal events
     pub const AXIS_STATE_CHANGE: Self = Self(1 << 20);

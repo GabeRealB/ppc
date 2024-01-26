@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, mem::MaybeUninit, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, mem::MaybeUninit, rc::Rc};
 
 use async_channel::{Receiver, Sender};
 use color_scale::ColorScaleDescriptor;
@@ -122,30 +122,8 @@ impl LabelColorGenerator {
 #[derive(Default)]
 #[allow(clippy::type_complexity)]
 struct StagingData {
-    update_data: Vec<(Option<Box<[wasm_bridge::AxisDef]>>, Option<Box<[String]>>)>,
-    background_color: Vec<ColorQuery<'static>>,
-    brush_color: Vec<ColorQuery<'static>>,
-    unselected_color: Vec<ColorQuery<'static>>,
-    color_scale: Vec<(
-        wasm_bridge::ColorSpace,
-        color_scale::ColorScaleDescriptor<'static>,
-    )>,
-    data_color_mode: Vec<wasm_bridge::DataColorMode>,
-    color_bar_visibility: Vec<bool>,
     resize: Vec<(u32, u32, f32)>,
-    label_additions: Vec<(
-        String,
-        Option<ColorQuery<'static>>,
-        Option<(f32, f32)>,
-        selection::EasingType,
-    )>,
-    label_removals: Vec<String>,
-    active_label: Vec<String>,
-    label_color_changes: Vec<(String, Option<ColorQuery<'static>>)>,
-    label_threshold_changes: Vec<(String, Option<(f32, f32)>)>,
-    interaction_mode_changes: Vec<wasm_bridge::InteractionMode>,
-    label_easing_changes: Vec<selection::EasingType>,
-    debug_options_changes: Vec<wasm_bridge::DebugOptions>,
+    transactions: Vec<wasm_bridge::StateTransaction>,
 }
 
 #[wasm_bindgen]
@@ -344,78 +322,9 @@ impl Renderer {
                         .push((width, height, device_pixel_ratio));
                     self.events.push(event::Event::RESIZE);
                 }
-                wasm_bridge::Event::UpdateData { axes, order } => {
-                    self.staging_data.update_data.push((axes, order));
-                    self.events.push(event::Event::DATA_UPDATE);
-                }
-                wasm_bridge::Event::SetBackgroundColor { color } => {
-                    self.staging_data.background_color.push(color);
-                    self.events.push(event::Event::BACKGROUND_COLOR_CHANGE);
-                }
-                wasm_bridge::Event::SetBrushColor { color } => {
-                    self.staging_data.brush_color.push(color);
-                    self.events.push(event::Event::BRUSH_COLOR_CHANGE);
-                }
-                wasm_bridge::Event::SetUnselectedColor { color } => {
-                    self.staging_data.unselected_color.push(color);
-                    self.events.push(event::Event::UNSELECTED_COLOR_CHANGE);
-                }
-                wasm_bridge::Event::SetColorScale { color_space, scale } => {
-                    self.staging_data.color_scale.push((color_space, scale));
-                    self.events.push(event::Event::COLOR_SCALE_CHANGE);
-                }
-                wasm_bridge::Event::SetDataColorMode { color_mode } => {
-                    self.staging_data.data_color_mode.push(color_mode);
-                    self.events.push(event::Event::DATA_COLOR_MODE_CHANGE);
-                }
-                wasm_bridge::Event::SetColorBarVisibility { visibility } => {
-                    self.staging_data.color_bar_visibility.push(visibility);
-                    self.events.push(event::Event::COLOR_BAR_VISIBILITY_CHANGE);
-                }
-                wasm_bridge::Event::AddLabel {
-                    id,
-                    color,
-                    selection_bounds,
-                    easing,
-                } => {
-                    self.staging_data
-                        .label_additions
-                        .push((id, color, selection_bounds, easing));
-                    self.events.push(event::Event::LABEL_ADDITION);
-                }
-                wasm_bridge::Event::RemoveLabel { id } => {
-                    self.staging_data.label_removals.push(id);
-                    self.events.push(event::Event::LABEL_REMOVAL);
-                }
-                wasm_bridge::Event::SwitchActiveLabel { id } => {
-                    self.staging_data.active_label.push(id);
-                    self.events.push(event::Event::ACTIVE_LABEL_CHANGE);
-                }
-                wasm_bridge::Event::SetLabelColor { id, color } => {
-                    self.staging_data.label_color_changes.push((id, color));
-                    self.events.push(event::Event::LABEL_COLOR_CHANGE);
-                }
-                wasm_bridge::Event::SetLabelSelectionBounds {
-                    id,
-                    selection_bounds,
-                } => {
-                    self.staging_data
-                        .label_threshold_changes
-                        .push((id, selection_bounds));
-                    self.events
-                        .push(event::Event::LABEL_SELECTION_BOUNDS_CHANGE);
-                }
-                wasm_bridge::Event::SetLabelEasing { easing } => {
-                    self.staging_data.label_easing_changes.push(easing);
-                    self.events.push(event::Event::LABEL_EASING_CHANGE);
-                }
-                wasm_bridge::Event::SetInteractionMode { mode } => {
-                    self.staging_data.interaction_mode_changes.push(mode);
-                    self.events.push(event::Event::INTERACTION_MODE_CHANGE);
-                }
-                wasm_bridge::Event::SetDebugOptions { options } => {
-                    self.staging_data.debug_options_changes.push(options);
-                    self.events.push(event::Event::DEBUG_OPTIONS_CHANGE);
+                wasm_bridge::Event::CommitTransaction { transaction } => {
+                    self.staging_data.transactions.push(transaction);
+                    self.events.push(event::Event::TRANSACTION_COMMIT);
                 }
                 wasm_bridge::Event::Draw { completion } => self.render(completion).await,
                 wasm_bridge::Event::PointerDown { event } => self.pointer_down(event),
@@ -971,81 +880,9 @@ impl Renderer {
                 self.resize_drawing_area(width, height, device_pixel_ratio);
             }
 
-            if events.signaled(event::Event::DATA_UPDATE) {
-                let (axes, order) = self.staging_data.update_data.pop().unwrap();
-                self.update_data(axes, order);
-            }
-
-            if events.signaled(event::Event::BACKGROUND_COLOR_CHANGE) {
-                let color = self.staging_data.background_color.pop().unwrap();
-                self.set_background_color(color);
-            }
-
-            if events.signaled(event::Event::BRUSH_COLOR_CHANGE) {
-                let color = self.staging_data.brush_color.pop().unwrap();
-                self.set_brush_color(color);
-            }
-
-            if events.signaled(event::Event::UNSELECTED_COLOR_CHANGE) {
-                let color = self.staging_data.unselected_color.pop().unwrap();
-                self.set_unselected_color(color);
-            }
-
-            if events.signaled(event::Event::COLOR_SCALE_CHANGE) {
-                let (color_space, scale) = self.staging_data.color_scale.pop().unwrap();
-                self.set_color_scale(color_space, scale);
-            }
-
-            if events.signaled(event::Event::DATA_COLOR_MODE_CHANGE) {
-                let coloring = self.staging_data.data_color_mode.pop().unwrap();
-                self.set_data_color_mode(coloring);
-            }
-
-            if events.signaled(event::Event::COLOR_BAR_VISIBILITY_CHANGE) {
-                let visible = self.staging_data.color_bar_visibility.pop().unwrap();
-                self.set_color_bar_visibility(visible);
-            }
-
-            if events.signaled(event::Event::LABEL_ADDITION) {
-                let (id, color, selection_threshold, easing_type) =
-                    self.staging_data.label_additions.pop().unwrap();
-                self.add_label(id, color, selection_threshold, easing_type);
-            }
-
-            if events.signaled(event::Event::LABEL_REMOVAL) {
-                let id = self.staging_data.label_removals.pop().unwrap();
-                self.remove_label(id);
-            }
-
-            if events.signaled(event::Event::ACTIVE_LABEL_CHANGE) {
-                let id = self.staging_data.active_label.pop().unwrap();
-                self.change_active_label(id);
-            }
-
-            if events.signaled(event::Event::LABEL_COLOR_CHANGE) {
-                let (id, color) = self.staging_data.label_color_changes.pop().unwrap();
-                self.change_label_color(id, color);
-            }
-
-            if events.signaled(event::Event::LABEL_SELECTION_BOUNDS_CHANGE) {
-                let (id, selection_bounds) =
-                    self.staging_data.label_threshold_changes.pop().unwrap();
-                self.change_label_selection_bounds(id, selection_bounds);
-            }
-
-            if events.signaled(event::Event::LABEL_EASING_CHANGE) {
-                let easing = self.staging_data.label_easing_changes.pop().unwrap();
-                self.change_label_easing(easing);
-            }
-
-            if events.signaled(event::Event::INTERACTION_MODE_CHANGE) {
-                let mode = self.staging_data.interaction_mode_changes.pop().unwrap();
-                self.change_interaction_mode(mode);
-            }
-
-            if events.signaled(event::Event::DEBUG_OPTIONS_CHANGE) {
-                let options = self.staging_data.debug_options_changes.pop().unwrap();
-                self.change_debug_options(options);
+            if events.signaled(event::Event::TRANSACTION_COMMIT) {
+                let transaction = self.staging_data.transactions.pop().unwrap();
+                self.handle_transaction(transaction);
             }
 
             // Internal events.
@@ -1075,10 +912,7 @@ impl Renderer {
             }
 
             resample |= events.signaled_any(&[
-                event::Event::DATA_UPDATE,
-                event::Event::LABEL_ADDITION,
-                event::Event::LABEL_REMOVAL,
-                event::Event::LABEL_EASING_CHANGE,
+                event::Event::TRANSACTION_COMMIT,
                 event::Event::SELECTIONS_CHANGE,
             ]);
         }
@@ -1105,17 +939,6 @@ impl Renderer {
             plot_diff.push(&self.create_axis_order_diff().into());
         }
 
-        if events.signaled_any(&[
-            event::Event::LABEL_ADDITION,
-            event::Event::LABEL_REMOVAL,
-            event::Event::ACTIVE_LABEL_CHANGE,
-            event::Event::LABEL_EASING_CHANGE,
-        ]) {
-            if let Some(diff) = self.create_easing_diff() {
-                plot_diff.push(&diff.into());
-            }
-        }
-
         if plot_diff.length() != 0 {
             let this = JsValue::null();
             self.callback.call1(&this, &plot_diff).unwrap();
@@ -1134,60 +957,32 @@ impl Renderer {
         js_sys::Reflect::set(&obj, &"value".into(), &order.into()).unwrap();
         obj
     }
-
-    fn create_easing_diff(&self) -> Option<js_sys::Object> {
-        if let Some(active_label_idx) = self.active_label_idx {
-            let easing = match self.labels[active_label_idx].easing {
-                selection::EasingType::Linear => "linear",
-                selection::EasingType::EaseIn => "in",
-                selection::EasingType::EaseOut => "out",
-                selection::EasingType::EaseInOut => "inout",
-            };
-
-            let obj = js_sys::Object::new();
-            js_sys::Reflect::set(&obj, &"type".into(), &"easing".into()).unwrap();
-            js_sys::Reflect::set(&obj, &"value".into(), &easing.into()).unwrap();
-            Some(obj)
-        } else {
-            None
-        }
-    }
 }
 
 // External events
 impl Renderer {
-    fn update_data(
-        &mut self,
-        axes: Option<Box<[wasm_bridge::AxisDef]>>,
-        order: Option<Box<[String]>>,
-    ) {
-        let axes_map = axes
-            .iter()
-            .flat_map(|x| x.iter())
-            .map(|a| (&*a.key, a))
-            .collect::<BTreeMap<_, _>>();
-
+    fn remove_axis(&mut self, axis: String) {
         let mut guard = self.axes.borrow_mut();
-        guard.retain_axes(axes_map);
+        guard.remove_axis(&axis);
+    }
 
-        for axis in axes.into_iter().flat_map(Vec::from) {
-            if guard.axis(&axis.key).is_some() {
-                continue;
-            }
+    fn add_axis(&mut self, axis: wasm_bridge::AxisDef) {
+        let mut guard = self.axes.borrow_mut();
+        guard.construct_axis(
+            &self.axes,
+            &axis.key,
+            &axis.label,
+            axis.points,
+            axis.range,
+            axis.visible_range,
+            axis.ticks,
+            axis.hidden,
+            self.labels.len(),
+        );
+    }
 
-            guard.construct_axis(
-                &self.axes,
-                &axis.key,
-                &axis.label,
-                axis.points,
-                axis.range,
-                axis.visible_range,
-                axis.ticks,
-                axis.hidden,
-                self.labels.len(),
-            );
-        }
-
+    fn update_data(&mut self) {
+        let guard = self.axes.borrow();
         for axis in guard.visible_axes() {
             for (label_idx, label_info) in self.labels.iter().enumerate() {
                 let curve_builder = axis.borrow_selection_curve_builder(label_idx);
@@ -1197,10 +992,6 @@ impl Renderer {
                 );
                 axis.borrow_selection_curve_mut(label_idx).set_curve(curve);
             }
-        }
-
-        if let Some(order) = order {
-            guard.set_axes_order(&order);
         }
 
         if let wasm_bridge::DataColorMode::Attribute(id) = &self.data_color_mode {
@@ -1224,6 +1015,17 @@ impl Renderer {
 
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
+    }
+
+    fn set_axes_order(&mut self, order: wasm_bridge::AxisOrder) {
+        if let wasm_bridge::AxisOrder::Custom { order } = order {
+            let mut guard = self.axes.borrow_mut();
+            guard.set_axes_order(&order);
+            drop(guard);
+
+            self.update_axes_buffer();
+            self.update_data_lines_buffer();
+        }
     }
 
     fn set_background_color(&mut self, color: ColorQuery<'_>) {
@@ -1496,7 +1298,7 @@ impl Renderer {
         self.update_color_scale_bounds_buffer();
     }
 
-    fn change_label_color(&mut self, id: String, color: Option<ColorQuery<'_>>) {
+    fn change_label_color(&mut self, id: &str, color: Option<ColorQuery<'_>>) {
         let label_idx = self
             .labels
             .iter()
@@ -1518,7 +1320,7 @@ impl Renderer {
         self.update_label_colors_buffer();
     }
 
-    fn change_label_selection_bounds(&mut self, id: String, selection_bounds: Option<(f32, f32)>) {
+    fn change_label_selection_bounds(&mut self, id: &str, selection_bounds: Option<(f32, f32)>) {
         let label_idx = self
             .labels
             .iter()
@@ -1538,8 +1340,13 @@ impl Renderer {
         }
     }
 
-    fn change_label_easing(&mut self, easing: selection::EasingType) {
-        let label_idx = self.active_label_idx.expect("no label is present");
+    fn change_label_easing(&mut self, id: &str, easing: selection::EasingType) {
+        let label_idx = self
+            .labels
+            .iter()
+            .position(|l| l.id == id)
+            .expect("no label with a matching id found");
+
         self.labels[label_idx].easing = easing;
 
         let axes = self.axes.borrow();
@@ -1569,6 +1376,223 @@ impl Renderer {
 
     fn change_debug_options(&mut self, options: wasm_bridge::DebugOptions) {
         self.debug = options;
+    }
+
+    fn validate_transaction(&self, transaction: &wasm_bridge::StateTransaction) -> bool {
+        let wasm_bridge::StateTransaction {
+            axis_removals,
+            axis_additions,
+            order_change,
+            label_removals,
+            label_additions,
+            label_updates,
+            active_label_change,
+            ..
+        } = transaction;
+
+        for axis in axis_removals {
+            let guard = self.axes.borrow();
+            if guard.axis(axis).is_none() {
+                web_sys::console::warn_1(&"Transaction removes a nonexistent axis.".into());
+                return false;
+            }
+        }
+        for (axis, axis_def) in axis_additions {
+            let guard = self.axes.borrow();
+            if guard.axis(axis).is_some() && !axis_removals.contains(axis) {
+                web_sys::console::warn_1(&"Transaction adds a duplicate axis.".into());
+                return false;
+            }
+
+            let wasm_bridge::AxisDef {
+                key,
+                label,
+                points,
+                range,
+                visible_range,
+                ticks,
+                hidden,
+            } = axis_def;
+        }
+        if let Some(wasm_bridge::AxisOrder::Custom { order }) = order_change {
+            let guard = self.axes.borrow();
+            let mut available_axes = guard
+                .visible_axes()
+                .map(|ax| ax.key())
+                .filter(|ax| !axis_removals.contains(&**ax))
+                .chain(
+                    axis_additions
+                        .iter()
+                        .filter(|(_, ax)| !ax.hidden)
+                        .map(|(ax, _)| ax.clone().into()),
+                );
+            if available_axes.any(|ax| !order.iter().any(|x| **x == *ax)) {
+                web_sys::console::warn_1(&"Transaction order does not contain all axes.".into());
+                return false;
+            }
+        }
+        for label in label_removals {
+            if !self.labels.iter().any(|l| l.id == *label) {
+                web_sys::console::warn_1(&"Transaction removes a nonexistent label.".into());
+                return false;
+            }
+        }
+        for label in label_additions.keys() {
+            if self.labels.iter().any(|l| l.id == *label) {
+                web_sys::console::warn_1(&"Transaction adds a duplicate label.".into());
+                return false;
+            }
+        }
+        for label in label_updates.keys() {
+            let mut available_labels = self
+                .labels
+                .iter()
+                .map(|l| &l.id)
+                .filter(|l| !label_removals.contains(*l))
+                .chain(label_additions.keys());
+            if !available_labels.any(|l| l == label) {
+                web_sys::console::warn_1(&"Transaction modifies a nonexistent label.".into());
+                return false;
+            }
+        }
+        if let Some(label) = active_label_change {
+            let mut available_labels = self
+                .labels
+                .iter()
+                .map(|l| &l.id)
+                .filter(|l| !label_removals.contains(*l))
+                .chain(label_additions.keys());
+            if !available_labels.any(|l| l == label) {
+                web_sys::console::warn_1(
+                    &"Transaction sets the active label to a nonexistent label.".into(),
+                );
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn handle_transaction(&mut self, transaction: wasm_bridge::StateTransaction) -> bool {
+        if !self.validate_transaction(&transaction) {
+            web_sys::console::warn_1(&"Could not validate the transaction, rolling back.".into());
+            return false;
+        }
+
+        let wasm_bridge::StateTransaction {
+            axis_removals,
+            axis_additions,
+            order_change,
+            colors_change,
+            color_bar_visibility_change,
+            label_removals,
+            label_additions,
+            label_updates,
+            active_label_change,
+            interaction_mode_change,
+            debug_options_change,
+        } = transaction;
+
+        let mut data_update = false;
+        for axis in axis_removals {
+            data_update = true;
+            self.remove_axis(axis);
+        }
+
+        for (_, axis) in axis_additions {
+            data_update = true;
+            self.add_axis(axis);
+        }
+
+        if let Some(order) = order_change {
+            data_update = true;
+            self.set_axes_order(order);
+        }
+
+        if data_update {
+            self.update_data();
+        }
+
+        if let Some(colors) = colors_change {
+            let wasm_bridge::Colors {
+                background,
+                brush,
+                unselected,
+                color_scale,
+                color_mode,
+            } = colors;
+
+            if let Some(background) = background {
+                self.set_background_color(background);
+            }
+            if let Some(brush) = brush {
+                self.set_brush_color(brush);
+            }
+            if let Some(unselected) = unselected {
+                self.set_unselected_color(unselected);
+            }
+            if let Some(color_scale) = color_scale {
+                self.set_color_scale(color_scale.color_space, color_scale.scale);
+            }
+            if let Some(color_mode) = color_mode {
+                self.set_data_color_mode(color_mode);
+            }
+        }
+
+        if let Some(visibility) = color_bar_visibility_change {
+            self.set_color_bar_visibility(visibility);
+        }
+
+        for label in label_removals {
+            self.remove_label(label);
+        }
+
+        for (_, label) in label_additions {
+            let wasm_bridge::Label {
+                id,
+                color,
+                selection_bounds,
+                easing,
+            } = label;
+            self.add_label(
+                id,
+                color,
+                selection_bounds,
+                easing.unwrap_or(selection::EasingType::Linear),
+            );
+        }
+
+        for (_, update) in label_updates {
+            let wasm_bridge::Label {
+                id,
+                color,
+                selection_bounds,
+                easing,
+            } = update;
+            if let Some(color) = color {
+                self.change_label_color(&id, Some(color));
+            }
+            if let Some(selection_bounds) = selection_bounds {
+                self.change_label_selection_bounds(&id, Some(selection_bounds));
+            }
+            if let Some(easing) = easing {
+                self.change_label_easing(&id, easing);
+            }
+        }
+
+        if let Some(active_label) = active_label_change {
+            self.change_active_label(active_label);
+        }
+
+        if let Some(mode) = interaction_mode_change {
+            self.change_interaction_mode(mode);
+        }
+
+        if let Some(options) = debug_options_change {
+            self.change_debug_options(options);
+        }
+
+        true
     }
 
     fn pointer_down(&mut self, event: web_sys::PointerEvent) {

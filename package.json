@@ -43,6 +43,7 @@
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.15.5",
     "@mui/material": "^5.15.5",
+    "lodash": "^4.17.21",
     "uuid": "^9.0.1"
   }
 }

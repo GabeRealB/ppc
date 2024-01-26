@@ -16,7 +16,6 @@ use crate::{
     },
     lerp::{InverseLerp, Lerp},
     selection::{SelectionCurve, SelectionCurveBuilder},
-    wasm_bridge,
 };
 
 const AXIS_LOCAL_Y_SCALE: f32 = 1.0;
@@ -1064,74 +1063,6 @@ impl Axes {
         self.num_visible_axes
     }
 
-    /// Removes all axes that are not specified.
-    pub fn retain_axes(&mut self, axes: BTreeMap<&str, &wasm_bridge::AxisDef>) {
-        // Remove modified axes.
-        self.axes.retain(|k, ax| {
-            let new_ax = axes.get(k as &str);
-            if new_ax.is_none() {
-                return false;
-            }
-            let new_ax = *new_ax.unwrap();
-
-            let label_changed = *ax.label != *new_ax.label;
-            let points_changed = ax.data != new_ax.points;
-            let visibility_changed = ax.is_hidden() != new_ax.hidden;
-
-            let changed = label_changed || points_changed || visibility_changed;
-            !changed
-        });
-
-        let visible_axes = self
-            .visible_axes()
-            .filter(|ax: &Rc<Axis>| self.axes.contains_key(&ax.key as &str))
-            .filter(|ax: &Rc<Axis>| {
-                let new_ax = axes.get(&ax.key() as &str);
-                new_ax.map(|ax| !ax.hidden).unwrap_or(false)
-            })
-            .collect::<Box<_>>();
-
-        self.next_axis_index = 0;
-        for axis in visible_axes.iter() {
-            axis.axis_index.set(Some(self.next_axis_index));
-            axis.set_world_offset(0.0);
-            self.next_axis_index += 1;
-        }
-
-        for window in visible_axes.windows(2) {
-            let left = &window[0];
-            let right = &window[1];
-            left.set_right_neighbor(Some(right));
-            right.set_left_neighbor(Some(left));
-
-            let left_axis_offset = left.world_offset();
-            let right_axis_offset = left_axis_offset.floor() + 1.0;
-            right.set_world_offset(right_axis_offset);
-        }
-
-        self.num_visible_axes = visible_axes.len();
-        if let Some(ax) = visible_axes.first() {
-            self.visible_axis_start = Some(ax.clone());
-            ax.set_left_neighbor(None);
-        } else {
-            self.visible_axis_start = None;
-        }
-
-        if let Some(ax) = visible_axes.last() {
-            self.visible_axis_end = Some(ax.clone());
-            ax.set_right_neighbor(None);
-        } else {
-            self.visible_axis_end = None;
-        }
-
-        let mut mappings = self.coordinate_mappings.borrow_mut();
-        mappings.world_width = ((self.num_visible_axes + 1) as f32).max(1.0);
-        mappings.world_bounding_box = Aabb::new(
-            Position::new((-0.5, 0.0)),
-            Position::new((mappings.world_width, 1.0)),
-        );
-    }
-
     /// Constructs and inserts a new instance of an [`Axis`].
     #[allow(clippy::too_many_arguments)]
     pub fn construct_axis(
@@ -1226,6 +1157,33 @@ impl Axes {
         }
 
         axis
+    }
+
+    /// Removes an axis from the plot.
+    pub fn remove_axis(&mut self, axis: &str) {
+        let axis = self.axes.remove(axis).expect("axis is missing");
+        if !axis.is_hidden() {
+            if let Some(left) = axis.left_neighbor() {
+                left.set_right_neighbor(axis.right_neighbor().as_ref());
+            } else {
+                self.visible_axis_start = axis.right_neighbor();
+            }
+
+            if let Some(right) = axis.right_neighbor() {
+                right.set_left_neighbor(axis.left_neighbor().as_ref());
+            } else {
+                self.visible_axis_end = axis.left_neighbor();
+            }
+            self.num_visible_axes -= 1;
+            self.next_axis_index -= 1;
+
+            for ax in self.visible_axes() {
+                if ax.axis_index() > axis.axis_index() {
+                    let new_idx = ax.axis_index().unwrap() - 1;
+                    ax.axis_index.set(Some(new_idx));
+                }
+            }
+        }
     }
 
     /// Returns the order of the axes.
