@@ -54,7 +54,8 @@ import InfoIcon from '@mui/icons-material/Info';
 
 import moveAxesInstr from './resources/move_axes_instr.mp4'
 
-import PPC, { Axis, Props, InteractionMode } from '../components/PPC';
+import PPC from '../components/PPC';
+import { Axis, Props, InteractionMode} from '../types'
 
 const EPSILON = 1.17549435082228750797e-38;
 
