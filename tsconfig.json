@@ -4,7 +4,14 @@
     "baseUrl": "src/ts",
     "inlineSources": true,
     "sourceMap": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "types": [
+      "@webgpu/types"
+    ],
+    "lib": [
+      "ES2020",
+      "DOM"
+    ]
   },
   "exclude": [
     "node_modules"
