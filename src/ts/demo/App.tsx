@@ -191,6 +191,7 @@ const InstructionsDialog = (demo: DemoState, setProps: (newProps) => void) => {
         <Dialog
             onClose={handleClose}
             open={showInstructions}
+            maxWidth={"xl"}
             aria-labelledby="instructions-dialog-title"
             aria-describedby="instructions-dialog-description"
         >
