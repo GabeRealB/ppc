@@ -1,10 +1,16 @@
-use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, mem::MaybeUninit, rc::Rc};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    mem::MaybeUninit,
+    rc::Rc,
+};
 
 use async_channel::{Receiver, Sender};
 use color_scale::ColorScaleDescriptor;
 use colors::{Color, ColorOpaque, ColorQuery, ColorTransparent, SRgb, SRgbLinear, Xyz};
 use coordinates::ScreenSpace;
-use lerp::Lerp;
+use lerp::{InverseLerp, Lerp};
 use wasm_bindgen::prelude::*;
 
 use crate::coordinates::{Aabb, Length, Position};
@@ -840,19 +846,6 @@ impl Renderer {
 
         self.render_bounding_boxes();
 
-        // let mut probabilities_change = Vec::new();
-        // for label_idx in changed_probabilities.iter().copied() {
-        //     let id = self.labels[label_idx].id.clone();
-        //     let (probabilities, attributions): (Box<[f32]>, Box<[usize]>) = self
-        //         .extract_label_attribution_and_probability(label_idx)
-        //         .await;
-        //     probabilities_change.push((id, probabilities, attributions));
-        // }
-
-        // if !probabilities_change.is_empty() {
-        //     web_sys::console::log_1(&format!("{probabilities_change:?}").into());
-        // }
-
         self.notify_changes().await;
 
         completion
@@ -943,6 +936,10 @@ impl Renderer {
         }
 
         if events.signaled(event::Event::SELECTIONS_CHANGE) {
+            plot_diff.push(&self.create_brushes_diff().into());
+        }
+
+        if events.signaled(event::Event::SELECTIONS_CHANGE) {
             plot_diff.push(&self.create_probabilities_diff().await.into());
             self.staging_data.updated_probabilities.clear();
             self.staging_data.last_labels = self.labels.iter().map(|l| l.id.clone()).collect();
@@ -964,6 +961,100 @@ impl Renderer {
         let obj = js_sys::Object::new();
         js_sys::Reflect::set(&obj, &"type".into(), &"axis_order".into()).unwrap();
         js_sys::Reflect::set(&obj, &"value".into(), &order.into()).unwrap();
+        obj
+    }
+
+    fn create_brushes_diff(&self) -> js_sys::Object {
+        let brushes = js_sys::Object::new();
+
+        let guard = self.axes.borrow();
+        for (label_idx, label) in self.labels.iter().enumerate() {
+            let label_brushes = js_sys::Object::new();
+            for ax in guard.axes() {
+                let brushes = js_sys::Array::new();
+
+                let (data_start, data_end) = ax.data_range();
+                let curve = ax.borrow_selection_curve_builder(label_idx);
+                for selection in curve.selections() {
+                    let control_points = js_sys::Array::new();
+
+                    let main_segment_idx = selection.primary_segment_idx();
+                    for segment_idx in 0..selection.num_segments() {
+                        match segment_idx {
+                            x if x < main_segment_idx => {
+                                let lower_bound = selection.lower_bound(x);
+                                let lower_bound = data_start.lerp(data_end, lower_bound);
+                                let lower_value = selection.lower_value(x);
+                                let control_point = js_sys::Array::from_iter([
+                                    &wasm_bindgen::JsValue::from(lower_bound),
+                                    &wasm_bindgen::JsValue::from(lower_value),
+                                ]);
+                                control_points.push(&control_point.into());
+                            }
+                            x if x > main_segment_idx => {
+                                let upper_bound = selection.upper_bound(x);
+                                let upper_bound = data_start.lerp(data_end, upper_bound);
+                                let upper_value = selection.upper_value(x);
+                                let control_point = js_sys::Array::from_iter([
+                                    &wasm_bindgen::JsValue::from(upper_bound),
+                                    &wasm_bindgen::JsValue::from(upper_value),
+                                ]);
+                                control_points.push(&control_point.into());
+                            }
+                            x => {
+                                let lower_bound = selection.lower_bound(x);
+                                let lower_bound = data_start.lerp(data_end, lower_bound);
+                                let lower_value = selection.lower_value(x);
+                                let control_point = js_sys::Array::from_iter([
+                                    &wasm_bindgen::JsValue::from(lower_bound),
+                                    &wasm_bindgen::JsValue::from(lower_value),
+                                ]);
+                                control_points.push(&control_point.into());
+
+                                let upper_bound = selection.upper_bound(x);
+                                let upper_bound = data_start.lerp(data_end, upper_bound);
+                                let upper_value = selection.upper_value(x);
+                                let control_point = js_sys::Array::from_iter([
+                                    &wasm_bindgen::JsValue::from(upper_bound),
+                                    &wasm_bindgen::JsValue::from(upper_value),
+                                ]);
+                                control_points.push(&control_point.into());
+                            }
+                        }
+                    }
+
+                    if control_points.length() != 0 {
+                        let brush = js_sys::Object::new();
+                        js_sys::Reflect::set(
+                            &brush,
+                            &"controlPoints".into(),
+                            &control_points.into(),
+                        )
+                        .unwrap();
+                        js_sys::Reflect::set(
+                            &brush,
+                            &"mainSegmentIdx".into(),
+                            &main_segment_idx.into(),
+                        )
+                        .unwrap();
+                        brushes.push(&brush.into());
+                    }
+                }
+
+                if brushes.length() != 0 {
+                    js_sys::Reflect::set(&label_brushes, &(*ax.key()).into(), &brushes.into())
+                        .unwrap();
+                }
+            }
+
+            if js_sys::Object::entries(&label_brushes).length() != 0 {
+                js_sys::Reflect::set(&brushes, &(*label.id).into(), &label_brushes.into()).unwrap();
+            }
+        }
+
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &"type".into(), &"brushes".into()).unwrap();
+        js_sys::Reflect::set(&obj, &"value".into(), &brushes.into()).unwrap();
         obj
     }
 
@@ -1070,6 +1161,87 @@ impl Renderer {
             self.update_axes_buffer();
             self.update_data_lines_buffer();
         }
+    }
+
+    fn set_brushes(
+        &mut self,
+        brushes: BTreeMap<String, BTreeMap<String, Vec<wasm_bridge::Brush>>>,
+    ) {
+        let guard = self.axes.borrow();
+
+        for ax in guard.axes() {
+            for i in 0..self.labels.len() {
+                let mut curve_builder = ax.borrow_selection_curve_builder_mut(i);
+                *curve_builder = selection::SelectionCurveBuilder::new();
+
+                let mut curve = ax.borrow_selection_curve_mut(i);
+                curve.set_curve(None);
+            }
+        }
+
+        for (label, brushes) in brushes {
+            let label_idx = self
+                .labels
+                .iter()
+                .position(|l| l.id == label)
+                .expect("label should exist");
+            for (ax, brushes) in brushes {
+                let ax = guard.axis(&ax).expect("axis should exist");
+                let (data_start, data_end) = ax.data_range();
+
+                let mut curve_builder = selection::SelectionCurveBuilder::new();
+                for brush in brushes {
+                    let wasm_bridge::Brush {
+                        control_points,
+                        main_segment_idx,
+                    } = brush;
+
+                    let segments = control_points
+                        .iter()
+                        .zip(&control_points[1..])
+                        .enumerate()
+                        .map(|(i, (c1, c2))| {
+                            let c1 = (c1.0.inv_lerp(data_start, data_end), c1.1);
+                            let c2 = (c2.0.inv_lerp(data_start, data_end), c2.1);
+                            match i {
+                                i if i < main_segment_idx => {
+                                    selection::SelectionSegment::EasingLeft {
+                                        end_pos: c1.0,
+                                        end_value: c1.1,
+                                    }
+                                }
+                                i if i > main_segment_idx => {
+                                    selection::SelectionSegment::EasingRight {
+                                        end_pos: c2.0,
+                                        end_value: c2.1,
+                                    }
+                                }
+                                _ => selection::SelectionSegment::Primary {
+                                    range: [c1.0, c2.0],
+                                    values: [c1.1, c2.1],
+                                },
+                            }
+                        })
+                        .collect();
+
+                    let selection = selection::Selection::from_segments(segments, main_segment_idx);
+                    curve_builder.add_selection(selection);
+                }
+
+                let normalized_range = ax.visible_data_range_normalized();
+                let easing_type = self.labels[label_idx].easing;
+                let spline = curve_builder.build(normalized_range.into(), easing_type);
+
+                let mut builder = ax.borrow_selection_curve_builder_mut(label_idx);
+                *builder = curve_builder;
+
+                let mut curve = ax.borrow_selection_curve_mut(label_idx);
+                curve.set_curve(spline);
+            }
+        }
+        drop(guard);
+
+        self.update_selection_lines_buffer();
     }
 
     fn set_background_color(&mut self, color: ColorQuery<'_>) {
@@ -1441,6 +1613,7 @@ impl Renderer {
             label_additions,
             label_updates,
             active_label_change,
+            brushes_change,
             ..
         } = transaction;
 
@@ -1524,6 +1697,66 @@ impl Renderer {
             }
         }
 
+        if let Some(brushes) = brushes_change {
+            let guard = self.axes.borrow();
+            for (label, label_brushes) in brushes {
+                let mut available_labels = self
+                    .labels
+                    .iter()
+                    .map(|l| &l.id)
+                    .filter(|l| !label_removals.contains(*l))
+                    .chain(label_additions.keys());
+                if !available_labels.any(|l| l == label) {
+                    web_sys::console::warn_1(
+                        &"Transaction specifies the brushes of a nonexistent label.".into(),
+                    );
+                    return false;
+                }
+
+                for (axis, brushes) in label_brushes {
+                    if !((guard.axis(axis).is_some() && !axis_removals.contains(axis))
+                        || axis_additions.contains_key(axis))
+                    {
+                        web_sys::console::warn_1(
+                            &"Transaction specifies the brushes of a nonexistent axis.".into(),
+                        );
+                        return false;
+                    }
+
+                    for brush in brushes {
+                        if brush.control_points.len() < 2 {
+                            web_sys::console::warn_1(
+                                &"A brush must contain at least two control points".into(),
+                            );
+                            return false;
+                        }
+
+                        if brush.main_segment_idx >= brush.control_points.len() - 1 {
+                            web_sys::console::warn_1(&"Main brush segment is out of bounds".into());
+                            return false;
+                        }
+
+                        let mut last_position =
+                            brush.control_points.first().unwrap_or(&(0.0, 0.0)).0 - 1.0;
+                        for point in &brush.control_points {
+                            if !point.0.is_finite() || !(0.0..=1.0).contains(&point.1) {
+                                web_sys::console::warn_1(&"Invalid brush control point".into());
+                                return false;
+                            }
+                            if last_position >= point.0 {
+                                web_sys::console::warn_1(
+                                    &"Brush control points must be ordered by increasing value"
+                                        .into(),
+                                );
+                                return false;
+                            }
+                            last_position = point.1;
+                        }
+                    }
+                }
+            }
+        }
+
         true
     }
 
@@ -1543,6 +1776,7 @@ impl Renderer {
             label_additions,
             label_updates,
             active_label_change,
+            brushes_change,
             interaction_mode_change,
             debug_options_change,
         } = transaction;
@@ -1663,6 +1897,11 @@ impl Renderer {
 
         if let Some(active_label) = active_label_change {
             self.change_active_label(active_label);
+        }
+
+        if let Some(brushes) = brushes_change {
+            self.set_brushes(brushes);
+            self.handled_events.signal(event::Event::SELECTIONS_CHANGE);
         }
 
         if let Some(mode) = interaction_mode_change {

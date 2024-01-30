@@ -24,6 +24,8 @@ import {
     Axis,
     EasingType,
     LabelInfo,
+    Brush,
+    Brushes,
     DebugOptions,
     Props,
     InteractionMode
@@ -39,6 +41,7 @@ enum MessageKind {
     SetColors,
     SetColorBarVisibility,
     SetLabels,
+    SetBrushes,
     SetInteractionMode,
     SetDebugOptions,
 }
@@ -66,6 +69,8 @@ type SetLabelsMsgPayload = {
     previousLabels?: { [id: string]: LabelInfo }
     previousActiveLabel?: string,
 }
+
+type SetBrushesMsgPayload = { [id: string]: Brushes }
 
 type SetInteractionModeMsgPayload = InteractionMode;
 type SetDebugOptionsPayload = DebugOptions;
@@ -406,6 +411,12 @@ const PPC = (props: Props) => {
 
                 currentTransaction.switchActiveLabel(data.activeLabel);
             };
+            const setBrushes = (data: SetBrushesMsgPayload) => {
+                if (rendererState.exited) {
+                    return;
+                }
+                currentTransaction.setBrushes(data);
+            }
             const setInteractionMode = (mode: SetInteractionModeMsgPayload) => {
                 if (rendererState.exited) {
                     return;
@@ -453,6 +464,9 @@ const PPC = (props: Props) => {
                         break;
                     case MessageKind.SetLabels:
                         setLabels(data.payload);
+                        break;
+                    case MessageKind.SetBrushes:
+                        setBrushes(data.payload);
                         break;
                     case MessageKind.SetInteractionMode:
                         setInteractionMode(data.payload);
@@ -574,6 +588,11 @@ const PPC = (props: Props) => {
         previousActiveLabel.current = props.activeLabel;
     }, [props.labels, props.activeLabel]);
 
+    // Brushes update
+    useEffect(() => {
+        sx.postMessage({ kind: MessageKind.SetBrushes, payload: props.brushes });
+    }, [props.brushes])
+
     // Interaction mode
     useEffect(() => {
         sx.postMessage({ kind: MessageKind.SetInteractionMode, payload: props.interactionMode });
@@ -600,6 +619,15 @@ const PPC = (props: Props) => {
         }
 
         diff["order"] = order;
+    }
+    const handleBrushesChangeEvent = (diff, brushes) => {
+        if (lastProps.current.brushes) {
+            if (_.isEqual(lastProps.current.brushes, brushes)) {
+                return;
+            }
+        }
+
+        diff["brushes"] = brushes;
     }
     const handleProbabilitiesChangeEvent = (diff, value) => {
         const { probabilities, indices } = value;
@@ -633,8 +661,17 @@ const PPC = (props: Props) => {
             selection_indices = indices;
         }
 
-        diff["selection_probabilities"] = selection_probabilities;
-        diff["selection_indices"] = selection_indices;
+        if (!props.selection_probabilities ||
+            (props.selection_probabilities
+                && !_.isEqual(props.selection_probabilities, selection_probabilities))) {
+            diff["selection_probabilities"] = selection_probabilities;
+        }
+
+        if (!props.selection_indices ||
+            (props.selection_indices
+                && !_.isEqual(props.selection_indices, selection_indices))) {
+            diff["selection_indices"] = selection_indices;
+        }
     }
 
     // Events
@@ -650,6 +687,9 @@ const PPC = (props: Props) => {
             switch (type) {
                 case "axis_order":
                     handleAxisOrderChangeEvent(diff, value);
+                    break;
+                case "brushes":
+                    handleBrushesChangeEvent(diff, value);
                     break;
                 case "probabilities":
                     handleProbabilitiesChangeEvent(diff, value);
@@ -704,6 +744,7 @@ PPC.defaultProps = {
     colorBar: "hidden",
     labels: {},
     activeLabel: null,
+    brushes: {},
     interactionMode: InteractionMode.Full,
     selection_probabilities: {},
     selection_indices: {},

@@ -242,6 +242,12 @@ pub struct LabelEasingUpdate {
     pub easing: selection::EasingType,
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct Brush {
+    pub control_points: Vec<(f32, f32)>,
+    pub main_segment_idx: usize,
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InteractionMode {
@@ -294,23 +300,60 @@ impl DebugOptions {
 
 #[derive(Debug)]
 enum StateTransactionOperation {
-    AddAxis { axis: AxisDef },
-    RemoveAxis { axis: String },
-    SetAxisOrder { order: AxisOrder },
-    SetBackgroundColor { color: colors::ColorQuery<'static> },
-    SetBrushColor { color: colors::ColorQuery<'static> },
-    SetUnselectedColor { color: colors::ColorQuery<'static> },
-    SetColorScale { color_scale: ColorScale },
-    SetDataColorMode { color_mode: DataColorMode },
-    SetColorBarVisibility { visibility: bool },
-    AddLabel { label: Label },
-    RemoveLabel { label: String },
-    SetLabelColor { update: LabelColorUpdate },
-    SetLabelSelectionBounds { update: LabelBoundsUpdate },
-    SetLabelEasing { update: LabelEasingUpdate },
-    SwitchActiveLabel { id: String },
-    SetInteractionMode { mode: InteractionMode },
-    SetDebugOptions { options: DebugOptions },
+    AddAxis {
+        axis: AxisDef,
+    },
+    RemoveAxis {
+        axis: String,
+    },
+    SetAxisOrder {
+        order: AxisOrder,
+    },
+    SetBackgroundColor {
+        color: colors::ColorQuery<'static>,
+    },
+    SetBrushColor {
+        color: colors::ColorQuery<'static>,
+    },
+    SetUnselectedColor {
+        color: colors::ColorQuery<'static>,
+    },
+    SetColorScale {
+        color_scale: ColorScale,
+    },
+    SetDataColorMode {
+        color_mode: DataColorMode,
+    },
+    SetColorBarVisibility {
+        visibility: bool,
+    },
+    AddLabel {
+        label: Label,
+    },
+    RemoveLabel {
+        label: String,
+    },
+    SetLabelColor {
+        update: LabelColorUpdate,
+    },
+    SetLabelSelectionBounds {
+        update: LabelBoundsUpdate,
+    },
+    SetLabelEasing {
+        update: LabelEasingUpdate,
+    },
+    SwitchActiveLabel {
+        id: String,
+    },
+    SetBrushes {
+        brushes: BTreeMap<String, BTreeMap<String, Vec<Brush>>>,
+    },
+    SetInteractionMode {
+        mode: InteractionMode,
+    },
+    SetDebugOptions {
+        options: DebugOptions,
+    },
 }
 
 #[wasm_bindgen]
@@ -656,6 +699,70 @@ impl StateTransactionBuilder {
             .push(StateTransactionOperation::SwitchActiveLabel { id });
     }
 
+    #[wasm_bindgen(js_name = setBrushes)]
+    pub fn set_brushes(&mut self, brushes: &js_sys::Object) {
+        let mut brush_map = BTreeMap::default();
+        if !brushes.is_falsy() {
+            let entries = js_sys::Object::entries(brushes);
+            for entry in entries {
+                let entry = entry.unchecked_into::<js_sys::Array>();
+                let label = entry.get(0).as_string().unwrap();
+                let label_brushes = entry.get(1).unchecked_into::<js_sys::Object>();
+
+                let mut label_map = BTreeMap::default();
+                let entries = js_sys::Object::entries(&label_brushes);
+                for entry in entries {
+                    let entry = entry.unchecked_into::<js_sys::Array>();
+                    let axis = entry.get(0).as_string().unwrap();
+                    let brushes = entry.get(1).unchecked_into::<js_sys::Array>();
+
+                    let mut brushes_vec = Vec::new();
+                    for brush in brushes {
+                        let control_points = js_sys::Reflect::get(&brush, &"controlPoints".into())
+                            .unwrap()
+                            .unchecked_into::<js_sys::Array>();
+                        let main_segment_idx =
+                            js_sys::Reflect::get(&brush, &"mainSegmentIdx".into())
+                                .unwrap()
+                                .unchecked_into::<js_sys::Number>();
+
+                        let control_points = control_points
+                            .into_iter()
+                            .map(|point| {
+                                let point = point.unchecked_into::<js_sys::Array>();
+                                let x = point.get(0).unchecked_into::<js_sys::Number>().value_of()
+                                    as f32;
+                                let y = point.get(1).unchecked_into::<js_sys::Number>().value_of()
+                                    as f32;
+                                (x, y)
+                            })
+                            .collect::<Vec<_>>();
+                        let main_segment_idx = main_segment_idx.value_of() as usize;
+
+                        if !control_points.is_empty() {
+                            let brush = Brush {
+                                control_points,
+                                main_segment_idx,
+                            };
+                            brushes_vec.push(brush);
+                        }
+                    }
+
+                    if !brushes_vec.is_empty() {
+                        label_map.insert(axis, brushes_vec);
+                    }
+                }
+
+                if !label_map.is_empty() {
+                    brush_map.insert(label, label_map);
+                }
+            }
+        }
+
+        self.operations
+            .push(StateTransactionOperation::SetBrushes { brushes: brush_map });
+    }
+
     #[wasm_bindgen(js_name = setInteractionMode)]
     pub fn set_interaction_mode(&mut self, mode: InteractionMode) {
         self.operations
@@ -678,6 +785,8 @@ impl StateTransactionBuilder {
         let mut label_additions: BTreeMap<String, Label> = Default::default();
         let mut label_updates: BTreeMap<String, Label> = Default::default();
         let mut active_label_change: Option<String> = Default::default();
+        let mut brushes_change: Option<BTreeMap<String, BTreeMap<String, Vec<Brush>>>> =
+            Default::default();
         let mut interaction_mode_change: Option<InteractionMode> = Default::default();
         let mut debug_options_change: Option<DebugOptions> = Default::default();
 
@@ -781,6 +890,9 @@ impl StateTransactionBuilder {
                 StateTransactionOperation::SwitchActiveLabel { id } => {
                     active_label_change = Some(id);
                 }
+                StateTransactionOperation::SetBrushes { brushes } => {
+                    brushes_change = Some(brushes);
+                }
                 StateTransactionOperation::SetInteractionMode { mode } => {
                     interaction_mode_change = Some(mode);
                 }
@@ -800,6 +912,7 @@ impl StateTransactionBuilder {
             label_additions,
             label_updates,
             active_label_change,
+            brushes_change,
             interaction_mode_change,
             debug_options_change,
         }
@@ -818,6 +931,7 @@ pub struct StateTransaction {
     pub(crate) label_additions: BTreeMap<String, Label>,
     pub(crate) label_updates: BTreeMap<String, Label>,
     pub(crate) active_label_change: Option<String>,
+    pub(crate) brushes_change: Option<BTreeMap<String, BTreeMap<String, Vec<Brush>>>>,
     pub(crate) interaction_mode_change: Option<InteractionMode>,
     pub(crate) debug_options_change: Option<DebugOptions>,
 }

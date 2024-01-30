@@ -55,6 +55,13 @@ export type DebugOptions = {
     showColorBarBoundingBox?: boolean,
 }
 
+export type Brush = {
+    controlPoints: [number, number][],
+    mainSegmentIdx: number,
+}
+
+export type Brushes = { [axis: string]: Brush[] }
+
 export enum InteractionMode {
     /**
      * No interaction enabled.
@@ -107,6 +114,10 @@ export type Props = {
      * Currently active label.
      */
     activeLabel?: string,
+    /**
+     * Per-label map of brushes in the plot.
+     */
+    brushes?: { [id: string]: Brushes }
     /**
      * Interaction mode of the plot.
      */

@@ -393,6 +393,13 @@ impl Selection {
         }
     }
 
+    pub fn from_segments(segments: Vec<SelectionSegment>, primary_segment: usize) -> Self {
+        Self {
+            primary_segment_idx: primary_segment,
+            segments,
+        }
+    }
+
     pub fn segment_containing(&self, value: f32) -> Option<usize> {
         (0..self.segments.len())
             .find(|&i| self.lower_bound(i) <= value && self.upper_bound(i) >= value)
@@ -415,6 +422,10 @@ impl Selection {
 
     pub fn num_segments(&self) -> usize {
         self.segments.len()
+    }
+
+    pub fn primary_segment_idx(&self) -> usize {
+        self.primary_segment_idx
     }
 
     pub fn lower_bound(&self, segment_idx: usize) -> f32 {
