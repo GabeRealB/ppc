@@ -590,7 +590,15 @@ const PPC = (props: Props) => {
     }, [props])
 
     // Callback handling
+    const lastProps = useRef<Props>(props);
+    lastProps.current = props;
     const handleAxisOrderChangeEvent = (diff, order) => {
+        if (lastProps.current.order) {
+            if (_.isEqual(lastProps.current.order, order)) {
+                return;
+            }
+        }
+
         diff["order"] = order;
     }
     const handleProbabilitiesChangeEvent = (diff, value) => {

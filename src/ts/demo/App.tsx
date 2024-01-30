@@ -79,10 +79,6 @@ type DemoState = {
     tasks: DemoTask[],
     showInstructions: boolean,
 
-    probabilityRangeStart: number,
-    probabilityRangeEnd: number,
-    constantColorModeValue: number,
-    attributeColorModeValue: string,
     showDebugInfo: boolean,
 };
 
@@ -116,10 +112,6 @@ class App extends Component<any, AppState> {
                 showInstructions: true,
                 currentTask: 0,
                 tasks: tasks,
-                probabilityRangeStart: EPSILON,
-                probabilityRangeEnd: 1.0,
-                constantColorModeValue: 0.5,
-                attributeColorModeValue: "v_1",
                 showDebugInfo: debugMode
             },
         };
@@ -344,8 +336,12 @@ const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, 
 
 const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
     const { labels, activeLabel } = ppc;
-    const { probabilityRangeStart, probabilityRangeEnd } = demo;
     const interactionMode = ppc.interactionMode ? ppc.interactionMode : InteractionMode.Full;
+
+    let selectionBounds = activeLabel ? labels[activeLabel].selectionBounds : [EPSILON, 1];
+    if (!selectionBounds) {
+        selectionBounds = [EPSILON, 1];
+    }
 
     const items = Object.entries(labels).map(([k, v]) => {
         const deleteLabel = interactionMode == InteractionMode.Compatibility
@@ -360,28 +356,13 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
                         ppc.activeLabel = null;
                     } else {
                         ppc.activeLabel = keys[keys.length - 1];
-                        const new_active_label = labels_clone[ppc.activeLabel];
-                        if (new_active_label.selectionBounds) {
-                            demo.probabilityRangeStart = new_active_label.selectionBounds[0];
-                            demo.probabilityRangeEnd = new_active_label.selectionBounds[1];
-                        } else {
-                            demo.probabilityRangeStart = 0.0;
-                            demo.probabilityRangeEnd = 1.0;
-                        }
                     }
                 }
-                setProps({ ppcState: ppc, demo });
+                setProps({ ppcState: ppc });
             } : null;
         const toggleActive = () => {
             ppc.activeLabel = k;
-            if (v.selectionBounds) {
-                demo.probabilityRangeStart = v.selectionBounds[0];
-                demo.probabilityRangeEnd = v.selectionBounds[1];
-            } else {
-                demo.probabilityRangeStart = 0.0;
-                demo.probabilityRangeEnd = 1.0;
-            }
-            setProps({ ppcState: ppc, demo });
+            setProps({ ppcState: ppc });
         }
 
         return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
@@ -391,9 +372,7 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
         const labels_clone = window.structuredClone(labels);
         labels_clone[activeLabel].selectionBounds = range as [number, number];
         ppc.labels = labels_clone;
-        demo.probabilityRangeStart = range[0];
-        demo.probabilityRangeEnd = range[1];
-        setProps({ ppcState: ppc, demo })
+        setProps({ ppcState: ppc })
     };
 
     return (
@@ -425,7 +404,7 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
                             min={EPSILON}
                             max={1.0}
                             step={EPSILON}
-                            value={[probabilityRangeStart, probabilityRangeEnd]}
+                            value={selectionBounds}
                             onChange={handleProbabilityRangeChange}
                             valueLabelDisplay="auto"
                             size="small"
@@ -525,8 +504,15 @@ const AttributeList = (ppcState: Props, axes: { [id: string]: Axis }, setProps: 
 }
 
 const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
-    const { userGroup, constantColorModeValue, attributeColorModeValue } = demo;
+    const { userGroup } = demo;
     const { colors, colorBar, axes } = ppc;
+
+    const constantColorModeValue = typeof (ppc.colors?.selected?.color) == "number"
+        ? ppc.colors?.selected?.color
+        : 0.5;
+    const attributeColorModeValue = typeof (ppc.colors?.selected?.color) == "string"
+        ? ppc.colors?.selected?.color
+        : Object.keys(ppc.axes)[0];
 
     let colorMode;
     switch (typeof (colors.selected.color)) {
@@ -569,7 +555,6 @@ const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void
         const colors_clone = window.structuredClone(colors);
         colors_clone.selected.color = value as number;
         ppc.colors = colors_clone;
-        demo.constantColorModeValue = value as number;
         setProps({ ppcState: ppc, demo })
     };
 
@@ -577,7 +562,6 @@ const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void
         const colors_clone = window.structuredClone(colors);
         colors_clone.selected.color = value;
         ppc.colors = colors_clone;
-        demo.attributeColorModeValue = value;
         setProps({ ppcState: ppc, demo })
     };
 
