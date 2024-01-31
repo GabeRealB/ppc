@@ -74,6 +74,9 @@ type DemoTask = {
     initialState: Props,
     finalState: Props,
     canContinue: (ppc: Props) => boolean,
+    disableLabels?: boolean,
+    disableAttributes?: boolean,
+    disableColors?: boolean,
 };
 
 type UserGroup = "PC" | "PPC";
@@ -501,7 +504,7 @@ function DemoPage3(app: App) {
                         <Divider flexItem />
 
                         <div>
-                            {AttributeList(ppcState, axes, app.setProps)}
+                            {AttributeList(ppcState, demo, axes, app.setProps)}
                             {ColorSettings(ppcState, demo, app.setProps)}
                             {ActionsInfo(ppcState)}
                             {DebugInfo(ppcState, demo, app.setProps)}
@@ -672,8 +675,13 @@ const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, 
 }
 
 const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
+    const { tasks, currentTask } = demo;
     const { labels, activeLabel } = ppc;
     const interactionMode = ppc.interactionMode ? ppc.interactionMode : InteractionMode.Full;
+
+    if (tasks[currentTask].disableLabels) {
+        return (undefined);
+    }
 
     let selectionBounds = activeLabel ? labels[activeLabel].selectionBounds : [EPSILON, 1];
     if (!selectionBounds) {
@@ -780,8 +788,13 @@ const AttributeListItem = (key: string, axis: Axis, update: (Axis) => void) => {
     );
 }
 
-const AttributeList = (ppcState: Props, axes: { [id: string]: Axis }, setProps: (newProps) => void) => {
+const AttributeList = (ppcState: Props, demo: DemoState, axes: { [id: string]: Axis }, setProps: (newProps) => void) => {
+    const { tasks, currentTask } = demo;
     const interactionMode = ppcState.interactionMode ? ppcState.interactionMode : InteractionMode.Full;
+
+    if (tasks[currentTask].disableAttributes) {
+        return (undefined);
+    }
 
     const items = [];
     for (const key in axes) {
@@ -841,8 +854,12 @@ const AttributeList = (ppcState: Props, axes: { [id: string]: Axis }, setProps: 
 }
 
 const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
-    const { userGroup } = demo;
+    const { userGroup, tasks, currentTask } = demo;
     const { colors, colorBar, axes } = ppc;
+
+    if (tasks[currentTask].disableColors) {
+        return (undefined);
+    }
 
     const constantColorModeValue = typeof (ppc.colors?.selected?.color) == "number"
         ? ppc.colors?.selected?.color
@@ -1214,7 +1231,10 @@ const task_1 = (userGroup: UserGroup): DemoTask => {
         canContinue: (ppc: Props) => (ppc.order[0] == "a2"
             && ppc.order[1] == "a1" && ppc.order[2] == "a3")
             || (ppc.order[0] == "a3" && ppc.order[1] == "a1"
-                && ppc.order[2] == "a2")
+                && ppc.order[2] == "a2"),
+        disableLabels: true,
+        disableAttributes: true,
+        disableColors: true,
     };
 }
 
