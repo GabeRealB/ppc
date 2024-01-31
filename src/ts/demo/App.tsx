@@ -84,7 +84,6 @@ type UserGroup = "PC" | "PPC";
 type DemoPage = "welcome"
     | "demo1"
     | "demo2"
-    | "demo3"
     | "finish";
 
 type LevelOfEducation = "Childhood"
@@ -104,10 +103,22 @@ type Proficiency = "NA"
     | "Advanced"
     | "Expert"
 
+type LogEvent = {
+    type: "start" | "event" | "end",
+    timestamp: DOMHighResTimeStamp,
+    data?: any
+};
+
+type TaskLog = {
+    events: LogEvent[],
+    result?: any
+}
+
 type Results = {
     education?: LevelOfEducation,
     analysisProficiency?: Proficiency,
     pcProficiency?: Proficiency,
+    taskLogs: TaskLog[],
 };
 
 type DemoState = {
@@ -135,6 +146,7 @@ class App extends Component<any, AppState> {
         super(props);
         this.setProps = this.setProps.bind(this);
         this.setPPCProps = this.setPPCProps.bind(this);
+        this.logPPCEvent = this.logPPCEvent.bind(this);
 
         const searchParams = new URLSearchParams(window.location.search);
         const debugMode = searchParams.has("debug");
@@ -147,6 +159,8 @@ class App extends Component<any, AppState> {
         const ppc = window.structuredClone(tasks[0].initialState);
         ppc.setProps = this.setPPCProps;
 
+        const taskLogs = tasks.map(() => ({ events: [] } as TaskLog))
+
         this.state = {
             ppcState: ppc,
             demo: {
@@ -157,7 +171,7 @@ class App extends Component<any, AppState> {
                 currentTask: 0,
                 tasks: tasks,
                 showDebugInfo: debugMode,
-                results: {}
+                results: { taskLogs }
             },
         };
     }
@@ -168,11 +182,38 @@ class App extends Component<any, AppState> {
 
     setPPCProps(newProps) {
         const { ppcState } = this.state;
+
+        this.logPPCEvent(newProps);
         for (const [k, v] of Object.entries(newProps)) {
             ppcState[k] = v;
         }
 
         this.setProps({ ppcState });
+    }
+
+    logPPCEvent(newProps) {
+        const { demo } = this.state;
+        const { results, currentTask } = demo;
+        const { taskLogs } = results;
+        const log = taskLogs[currentTask];
+
+        const data = window.structuredClone(newProps);
+        if ("selectionProbabilities" in data) {
+            delete data["selectionProbabilities"];
+        }
+        if ("selectionIndices" in data) {
+            delete data["selectionIndices"];
+        }
+        if (Object.keys(data).length == 0) {
+            return;
+        }
+
+        const event: LogEvent = {
+            type: "event",
+            timestamp: performance.now(),
+            data,
+        };
+        log.events.push(event);
     }
 
     render() {
@@ -184,10 +225,11 @@ class App extends Component<any, AppState> {
             case 'demo1':
                 page = createElement(DemoPage1, this);
                 break;
-            case 'demo3':
-                page = DemoPage3(this);
+            case 'demo2':
+                page = createElement(DemoPage2, this);
                 break;
             case 'finish':
+                page = createElement(FinishPage, this);
                 break;
         }
 
@@ -237,6 +279,10 @@ function WelcomePage(app: App) {
     const handleClick = () => {
         const { demo } = app.state;
         demo.currentPage = "demo1";
+        demo.results.taskLogs[0].events.push({
+            type: "start",
+            timestamp: performance.now(),
+        });
         app.setProps({ demo });
     }
 
@@ -356,7 +402,7 @@ function DemoPage1(app: App) {
 
     const handleClick = () => {
         const { demo } = app.state;
-        demo.currentPage = "demo3";
+        demo.currentPage = "demo2";
         app.setProps({ demo });
     }
 
@@ -472,7 +518,7 @@ function DemoPage1(app: App) {
     )
 }
 
-function DemoPage3(app: App) {
+function DemoPage2(app: App) {
     const {
         ppcState,
         demo,
@@ -498,16 +544,16 @@ function DemoPage3(app: App) {
                     >
                         {InstructionsDialog(demo, app.setProps)}
 
-                        {TaskView(ppcState, demo, app.setProps)}
+                        {TaskView(ppcState, demo, app.setProps, app.logPPCEvent)}
                         <Divider flexItem />
-                        {LabelsView(ppcState, demo, app.setProps)}
+                        {LabelsView(ppcState, demo, app.setProps, app.logPPCEvent)}
                         <Divider flexItem />
 
                         <div>
-                            {AttributeList(ppcState, demo, axes, app.setProps)}
-                            {ColorSettings(ppcState, demo, app.setProps)}
+                            {AttributeList(ppcState, demo, axes, app.setProps, app.logPPCEvent)}
+                            {ColorSettings(ppcState, demo, app.setProps, app.logPPCEvent)}
                             {ActionsInfo(ppcState)}
-                            {DebugInfo(ppcState, demo, app.setProps)}
+                            {DebugInfo(ppcState, demo, app.setProps, app.logPPCEvent)}
                         </div>
                     </Stack>
                 </Grid>
@@ -516,7 +562,25 @@ function DemoPage3(app: App) {
     )
 }
 
-const InstructionsDialog = (demo: DemoState, setProps: (newProps) => void) => {
+function FinishPage(app: App) {
+    const { demo } = app.state;
+    const { results } = demo;
+
+    return (
+        <Container>
+            <Typography variant="h4">
+                <b>Thank you for your participation in this study.</b>
+            </Typography>
+
+            <Divider />
+        </Container>
+    )
+}
+
+const InstructionsDialog = (
+    demo: DemoState,
+    setProps: (newProps) => void
+) => {
     const { showInstructions, currentTask, tasks } = demo;
     const task = tasks[currentTask];
     const { name } = task;
@@ -549,33 +613,72 @@ const InstructionsDialog = (demo: DemoState, setProps: (newProps) => void) => {
     )
 }
 
-const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
-    const { currentTask, tasks } = demo;
+const TaskView = (
+    ppc: Props,
+    demo: DemoState,
+    setProps: (newProps) => void,
+    logPPCEvent: (newProps) => void
+) => {
+    const { currentTask, tasks, results } = demo;
     const task = tasks[currentTask];
     const { name, shortDescription } = task;
 
     const handleNext = () => {
+        const { taskLogs } = results;
+        const timestamp = performance.now();
+
         const current = tasks[currentTask];
-        const next = tasks[currentTask + 1];
+        const currentLog = taskLogs[currentTask];
+        currentLog.events.push({
+            type: "end",
+            timestamp
+        });
 
         const setPpcProps = ppc.setProps;
         ppc.setProps = undefined;
         current.finalState = window.structuredClone(ppc);
 
-        let nextPpc = window.structuredClone(next.finalState);
-        if (!nextPpc) {
-            nextPpc = window.structuredClone(next.initialState);
-        }
-        nextPpc.setProps = setPpcProps;
+        if (tasks.length - 1 != currentTask) {
+            const next = tasks[currentTask + 1];
+            const nextLog = taskLogs[currentTask + 1];
 
-        demo.currentTask = currentTask + 1;
-        demo.showInstructions = !next.viewed;
-        setProps({ ppcState: nextPpc, demo });
+            nextLog.events.push({
+                type: "start",
+                timestamp
+            });
+
+            let nextPpc = window.structuredClone(next.finalState);
+            if (!nextPpc) {
+                nextPpc = window.structuredClone(next.initialState);
+            }
+            nextPpc.setProps = setPpcProps;
+
+            demo.currentTask = currentTask + 1;
+            demo.showInstructions = !next.viewed;
+            setProps({ ppcState: nextPpc, demo });
+        } else {
+            demo.currentPage = "finish";
+            setProps({ demo });
+        }
     };
 
     const handleBack = () => {
+        const { taskLogs } = results;
+        const timestamp = performance.now();
+
         const current = tasks[currentTask];
+        const currentLog = taskLogs[currentTask];
+        currentLog.events.push({
+            type: "end",
+            timestamp
+        });
+
         const prev = tasks[currentTask - 1];
+        const prevLog = taskLogs[currentTask - 1];
+        prevLog.events.push({
+            type: "start",
+            timestamp
+        });
 
         const setPpcProps = ppc.setProps;
         ppc.setProps = undefined;
@@ -593,6 +696,7 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
 
         const newPPC = window.structuredClone(current.initialState);
         newPPC.setProps = ppc.setProps;
+        logPPCEvent(current.initialState);
         setProps({ ppcState: newPPC });
     }
 
@@ -636,7 +740,7 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
                 position="bottom"
                 activeStep={currentTask}
                 nextButton={
-                    <Button size="small" onClick={handleNext} disabled={currentTask === tasks.length - 1 || !task.canContinue(ppc)}>
+                    <Button size="small" onClick={handleNext} disabled={!task.canContinue(ppc)}>
                         {currentTask !== tasks.length - 1 ? "Next" : "Finish"}
                         <KeyboardArrowRight />
                     </Button>
@@ -652,7 +756,12 @@ const TaskView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => 
     )
 }
 
-const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, toggleActive: () => void) => {
+const LabelsViewItem = (
+    active: boolean,
+    name: string,
+    deleteLabel: () => void,
+    toggleActive: () => void
+) => {
     return (
         <Paper
             sx={{ display: 'flex', alignItems: 'center' }}
@@ -674,7 +783,12 @@ const LabelsViewItem = (active: boolean, name: string, deleteLabel: () => void, 
     )
 }
 
-const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
+const LabelsView = (
+    ppc: Props,
+    demo: DemoState,
+    setProps: (newProps) => void,
+    logPPCEvent: (newProps) => void
+) => {
     const { tasks, currentTask } = demo;
     const { labels, activeLabel } = ppc;
     const interactionMode = ppc.interactionMode ? ppc.interactionMode : InteractionMode.Full;
@@ -692,21 +806,25 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
         const deleteLabel = interactionMode == InteractionMode.Compatibility
             || interactionMode == InteractionMode.Full
             ? () => {
-                const labels_clone = window.structuredClone(labels);
-                delete labels_clone[k];
-                ppc.labels = labels_clone;
+                const labelsClone = window.structuredClone(labels);
+                delete labelsClone[k];
+                ppc.labels = labelsClone;
                 if (activeLabel === k) {
-                    const keys = Object.keys(labels_clone);
+                    const keys = Object.keys(labelsClone);
                     if (keys.length == 0) {
                         ppc.activeLabel = null;
                     } else {
                         ppc.activeLabel = keys[keys.length - 1];
                     }
+                    logPPCEvent({ labels: labelsClone, activeLabel: ppc.activeLabel });
+                } else {
+                    logPPCEvent({ labels: labelsClone });
                 }
                 setProps({ ppcState: ppc });
             } : null;
         const toggleActive = () => {
             ppc.activeLabel = k;
+            logPPCEvent({ activeLabel: k });
             setProps({ ppcState: ppc });
         }
 
@@ -714,9 +832,10 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
     });
 
     const handleProbabilityRangeChange = (e, range) => {
-        const labels_clone = window.structuredClone(labels);
-        labels_clone[activeLabel].selectionBounds = range as [number, number];
-        ppc.labels = labels_clone;
+        const labelsClone = window.structuredClone(labels);
+        labelsClone[activeLabel].selectionBounds = range as [number, number];
+        ppc.labels = labelsClone;
+        logPPCEvent({ labels: labelsClone });
         setProps({ ppcState: ppc })
     };
 
@@ -760,7 +879,10 @@ const LabelsView = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =
     )
 }
 
-const AttributeListItem = (key: string, axis: Axis, update: (Axis) => void) => {
+const AttributeListItem = (
+    axis: Axis,
+    update: (Axis) => void
+) => {
     const { label, hidden } = axis;
     const visible = hidden !== true;
 
@@ -788,7 +910,13 @@ const AttributeListItem = (key: string, axis: Axis, update: (Axis) => void) => {
     );
 }
 
-const AttributeList = (ppcState: Props, demo: DemoState, axes: { [id: string]: Axis }, setProps: (newProps) => void) => {
+const AttributeList = (
+    ppcState: Props,
+    demo: DemoState,
+    axes: { [id: string]: Axis },
+    setProps: (newProps) => void,
+    logPPCEvent: (newProps) => void
+) => {
     const { tasks, currentTask } = demo;
     const interactionMode = ppcState.interactionMode ? ppcState.interactionMode : InteractionMode.Full;
 
@@ -801,27 +929,30 @@ const AttributeList = (ppcState: Props, demo: DemoState, axes: { [id: string]: A
         const update = interactionMode == InteractionMode.Compatibility
             || interactionMode == InteractionMode.Full
             ? (axis: Axis) => {
-                const new_axes = window.structuredClone(axes);
-                new_axes[key] = axis;
-                ppcState.axes = new_axes;
+                const newAxes = window.structuredClone(axes);
+                newAxes[key] = axis;
+                ppcState.axes = newAxes;
 
                 if (ppcState.order) {
-                    const order_clone = window.structuredClone(ppcState.order);
+                    const orderClone = window.structuredClone(ppcState.order);
                     if (axis.hidden) {
-                        const index = order_clone.indexOf(key);
+                        const index = orderClone.indexOf(key);
                         if (index > -1) {
-                            order_clone.splice(index, 1);
+                            orderClone.splice(index, 1);
                         }
                     } else {
-                        order_clone.push(key);
+                        orderClone.push(key);
                     }
-                    ppcState.order = order_clone;
+                    ppcState.order = orderClone;
+                    logPPCEvent({ axes: newAxes, order: orderClone });
+                } else {
+                    logPPCEvent({ axes: newAxes });
                 }
 
                 setProps({ ppcState });
             } : null;
         const axis = axes[key];
-        items.push(AttributeListItem(key, axis, update));
+        items.push(AttributeListItem(axis, update));
     }
 
     return (
@@ -853,7 +984,12 @@ const AttributeList = (ppcState: Props, demo: DemoState, axes: { [id: string]: A
     );
 }
 
-const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
+const ColorSettings = (
+    ppc: Props,
+    demo: DemoState,
+    setProps: (newProps) => void,
+    logPPCEvent: (newProps) => void
+) => {
     const { userGroup, tasks, currentTask } = demo;
     const { colors, colorBar, axes } = ppc;
 
@@ -885,44 +1021,49 @@ const ColorSettings = (ppc: Props, demo: DemoState, setProps: (newProps) => void
 
     const switchColorBarVisibility = (e, visibility) => {
         ppc.colorBar = visibility;
+        logPPCEvent({ colorBar: visibility });
         setProps({ ppcState: ppc })
     };
 
     const switchColorMode = (e, colorMode) => {
-        const colors_clone = window.structuredClone(colors);
+        const colorsClone = window.structuredClone(colors);
         switch (colorMode) {
             case "constant":
-                colors_clone.selected.color = constantColorModeValue;
+                colorsClone.selected.color = constantColorModeValue;
                 break;
             case "attribute":
-                colors_clone.selected.color = attributeColorModeValue;
+                colorsClone.selected.color = attributeColorModeValue;
                 break;
             case "probability":
-                colors_clone.selected.color = { type: "probability" };
+                colorsClone.selected.color = { type: "probability" };
                 break;
         }
-        ppc.colors = colors_clone;
+        ppc.colors = colorsClone;
+        logPPCEvent({ colors: colorsClone });
         setProps({ ppcState: ppc });
     };
 
     const setConstantColorValue = (e, value) => {
-        const colors_clone = window.structuredClone(colors);
-        colors_clone.selected.color = value as number;
-        ppc.colors = colors_clone;
+        const colorsClone = window.structuredClone(colors);
+        colorsClone.selected.color = value as number;
+        ppc.colors = colorsClone;
+        logPPCEvent({ colors: colorsClone });
         setProps({ ppcState: ppc, demo })
     };
 
     const setAttributeColorValue = (e, value) => {
-        const colors_clone = window.structuredClone(colors);
-        colors_clone.selected.color = value;
-        ppc.colors = colors_clone;
+        const colorsClone = window.structuredClone(colors);
+        colorsClone.selected.color = value;
+        ppc.colors = colorsClone;
+        logPPCEvent({ colors: colorsClone });
         setProps({ ppcState: ppc, demo })
     };
 
     const setColorMap = (e, colorMap) => {
-        const colors_clone = window.structuredClone(colors);
-        colors_clone.selected.scale = colorMap;
-        ppc.colors = colors_clone;
+        const colorsClone = window.structuredClone(colors);
+        colorsClone.selected.scale = colorMap;
+        ppc.colors = colorsClone;
+        logPPCEvent({ colors: colorsClone });
         setProps({ ppcState: ppc })
     };
 
@@ -1082,7 +1223,8 @@ const ActionsInfo = (ppc: Props) => {
     );
 }
 
-const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void) => {
+const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
+    logPPCEvent: (newProps) => void) => {
     const { userId, userGroup, currentTask, tasks } = demo;
 
     const debugShowAxisBB = ppc.debug.showAxisBoundingBox;
@@ -1134,6 +1276,7 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void) =>
                                     break;
                             }
                             ppc.debug = debug_clone;
+                            logPPCEvent({ debug: debug_clone });
                             setProps({ ppcState: ppc });
                         }}
                     >

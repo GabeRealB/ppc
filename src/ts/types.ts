@@ -128,14 +128,14 @@ export type Props = {
      * Per label array of selection probabilities 
      * of each point.
      */
-    selection_probabilities?: { [id: string]: Float32Array },
+    selectionProbabilities?: { [id: string]: Float32Array },
     /**
      * Read-only.
      * 
      * Per label array of data indices that count as
      * being selected.
      */
-    selection_indices?: { [id: string]: BigUint64Array }
+    selectionIndices?: { [id: string]: BigUint64Array }
     /**
      * Debug options.
      */

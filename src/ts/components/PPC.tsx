@@ -221,19 +221,19 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        let has_valid_ticks = axis.tickPositions !== undefined;
-                        if (has_valid_ticks && axis.tickLabels !== undefined) {
+                        let hasValidTicks = axis.tickPositions !== undefined;
+                        if (hasValidTicks && axis.tickLabels !== undefined) {
                             if (axis.tickPositions.length !== axis.tickLabels.length) {
                                 console.warn("Axis has defined tick labels, but the number of tick " +
                                     "labels does not match the specified tick positions.");
-                                has_valid_ticks = false;
+                                hasValidTicks = false;
                             }
                         }
 
-                        const data_points = new Float32Array(axis.dataPoints);
+                        const dataPoints = new Float32Array(axis.dataPoints);
                         const range = axis.range ? new Float32Array(axis.range) : undefined;
                         const visibleRange = axis.visibleRange ? new Float32Array(axis.visibleRange) : undefined;
-                        const ticks = has_valid_ticks ? new AxisTicksDef() : undefined;
+                        const ticks = hasValidTicks ? new AxisTicksDef() : undefined;
 
                         if (ticks) {
                             for (const position of axis.tickPositions) {
@@ -246,7 +246,7 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        const ax = new AxisDef(id, axis.label, data_points, range, visibleRange, ticks, axis.hidden);
+                        const ax = new AxisDef(id, axis.label, dataPoints, range, visibleRange, ticks, axis.hidden);
                         currentTransaction.addAxis(ax);
                     }
                 } else {
@@ -475,7 +475,7 @@ const PPC = (props: Props) => {
                         setDebugOptions(data.payload);
                         break;
                     default:
-                        console.log("unknown message", data);
+                        console.warn("unknown message", data);
                 }
             };
 
@@ -516,7 +516,6 @@ const PPC = (props: Props) => {
         eventLoop()
 
         return () => {
-            console.log("Cleanup");
             sx.postMessage({
                 kind: MessageKind.Shutdown
             });
@@ -633,44 +632,44 @@ const PPC = (props: Props) => {
         const { probabilities, indices } = value;
         const removedLabels = new Set(value.removals);
 
-        let selection_probabilities = {};
-        if (props.selection_probabilities) {
-            for (const [label, v] of Object.entries(props.selection_probabilities)) {
+        let selectionProbabilities = {};
+        if (props.selectionProbabilities) {
+            for (const [label, v] of Object.entries(props.selectionProbabilities)) {
                 if (!(removedLabels.has(label) || label in probabilities)) {
-                    selection_probabilities[label] = v;
+                    selectionProbabilities[label] = v;
                 }
             }
             for (const [label, v] of Object.entries(probabilities)) {
-                selection_probabilities[label] = v;
+                selectionProbabilities[label] = v;
             }
         } else {
-            selection_probabilities = probabilities;
+            selectionProbabilities = probabilities;
         }
 
-        let selection_indices = {};
-        if (props.selection_indices) {
-            for (const [label, v] of Object.entries(props.selection_indices)) {
+        let selectionIndices = {};
+        if (props.selectionIndices) {
+            for (const [label, v] of Object.entries(props.selectionIndices)) {
                 if (!(removedLabels.has(label) || label in indices)) {
-                    selection_indices[label] = v;
+                    selectionIndices[label] = v;
                 }
             }
             for (const [label, v] of Object.entries(indices)) {
-                selection_indices[label] = v;
+                selectionIndices[label] = v;
             }
         } else {
-            selection_indices = indices;
+            selectionIndices = indices;
         }
 
-        if (!props.selection_probabilities ||
-            (props.selection_probabilities
-                && !_.isEqual(props.selection_probabilities, selection_probabilities))) {
-            diff["selection_probabilities"] = selection_probabilities;
+        if (!props.selectionProbabilities ||
+            (props.selectionProbabilities
+                && !_.isEqual(props.selectionProbabilities, selectionProbabilities))) {
+            diff["selectionProbabilities"] = selectionProbabilities;
         }
 
-        if (!props.selection_indices ||
-            (props.selection_indices
-                && !_.isEqual(props.selection_indices, selection_indices))) {
-            diff["selection_indices"] = selection_indices;
+        if (!props.selectionIndices ||
+            (props.selectionIndices
+                && !_.isEqual(props.selectionIndices, selectionIndices))) {
+            diff["selectionIndices"] = selectionIndices;
         }
     }
 
@@ -746,8 +745,8 @@ PPC.defaultProps = {
     activeLabel: null,
     brushes: {},
     interactionMode: InteractionMode.Full,
-    selection_probabilities: {},
-    selection_indices: {},
+    selectionProbabilities: {},
+    selectionIndices: {},
 };
 
 export default PPC;
