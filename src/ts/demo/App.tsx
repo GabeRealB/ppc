@@ -1,5 +1,6 @@
 /* eslint no-magic-numbers: 0 */
-import React, { Component, createElement, useState } from 'react';
+import { S3Client, PutObjectCommand, PutObjectCommandInput } from '@aws-sdk/client-s3';
+import React, { Component, createElement, useEffect, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 
 import List from '@mui/material/List';
@@ -42,6 +43,7 @@ import Select from '@mui/material/Select';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Rating from '@mui/material/Rating';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import HelpIcon from '@mui/icons-material/Help';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -140,6 +142,8 @@ type AppState = {
     ppcState: Props,
     demo: DemoState,
 };
+
+const deadline = new Date(2024, 2, 31);
 
 class App extends Component<any, AppState> {
     constructor(props) {
@@ -291,6 +295,8 @@ function WelcomePage(app: App) {
     timing information, interactions and responses, for the sake of evaluation.
     `;
 
+    const deadlinePassed = Date.now() > deadline.getTime();
+
     return (
         <Container style={{ height: "95%", padding: "2rem" }}>
             <Typography variant='h2'><b>Welcome</b></Typography>
@@ -323,6 +329,20 @@ function WelcomePage(app: App) {
             <Box marginY={2}>
                 {statusElement}
             </Box>
+
+            {deadlinePassed ?
+                <Box marginY={2}>
+                    <Alert severity="warning">
+                        The study ran until {deadline.toLocaleDateString(undefined, {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                        })}.
+                        You can still take the test, but the results will not be
+                        used for the evaluation.
+                    </Alert>
+                </Box> : undefined}
 
             <Container>
                 <Box marginY={2}>
@@ -564,16 +584,71 @@ function DemoPage2(app: App) {
 
 function FinishPage(app: App) {
     const { demo } = app.state;
-    const { results } = demo;
+    const { results, userId, userGroup } = demo;
+
+    const [finished, setFinished] = useState<{ error: any } | boolean>(Date.now() > deadline.getTime());
+
+    useEffect(() => {
+        if (finished) {
+            return;
+        }
+
+        const fileName = `${uuid()}.json`;
+        const fileContents = JSON.stringify({ userId, userGroup, results });
+
+        const client = new S3Client({
+            region: "eu-central-1",
+            endpoint: "https://s3.hidrive.strato.com",
+            credentials: {
+                accessKeyId: "AHS4MOAD6Q7YF20RJLZX",
+                secretAccessKey: "IE0g/gBAFSix49pPMwZAcnWwe7OhtWWj9/ACeHQY",
+            }
+        });
+        const command = new PutObjectCommand({
+            Bucket: "userstudy",
+            Key: fileName,
+            Body: fileContents,
+        });
+
+        client.send(command).then(() => {
+            setFinished(true);
+        }).catch((e) => {
+            setFinished({ error: e });
+        })
+    }, []);
 
     return (
         <Container>
-            <Typography variant="h4">
-                <b>Thank you for your participation in this study.</b>
-            </Typography>
-
-            <Divider />
-        </Container>
+            {!finished ?
+                <Box sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    marginTop: '-50px',
+                    marginLeft: '-50px',
+                    width: '100px',
+                    height: '100px'
+                }}>
+                    <CircularProgress />
+                </Box> : undefined
+            }
+            {
+                finished && typeof (finished) === "boolean" ?
+                    <>
+                        <Typography variant="h4">
+                            <b>Thank you for your participation in this study.</b>
+                        </Typography>
+                        <Typography variant='body1' marginY={2}>
+                            You may now close this page.
+                        </Typography>
+                    </> : undefined
+            }
+            {
+                finished && typeof (finished) == "object" ?
+                    <Alert severity="error">
+                        Could not submit results. Error: {finished.error}.
+                    </Alert> : undefined}
+        </Container >
     )
 }
 
