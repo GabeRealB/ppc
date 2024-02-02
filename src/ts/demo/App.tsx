@@ -935,11 +935,14 @@ const LabelsView = (
         return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
     });
 
-    const handleProbabilityRangeChange = (e, range) => {
+    const handleProbabilityRangeChange = (e: Event, range: Array<number>) => {
         const labelsClone = window.structuredClone(labels);
         labelsClone[activeLabel].selectionBounds = range as [number, number];
         ppc.labels = labelsClone;
-        logPPCEvent({ labels: labelsClone });
+
+        if (e.type === "mouseup") {
+            logPPCEvent({ labels: labelsClone });
+        }
         setProps({ ppcState: ppc })
     };
 
@@ -974,6 +977,7 @@ const LabelsView = (
                             step={EPSILON}
                             value={selectionBounds}
                             onChange={handleProbabilityRangeChange}
+                            onChangeCommitted={handleProbabilityRangeChange}
                             valueLabelDisplay="auto"
                             size="small"
                         />
@@ -1147,11 +1151,14 @@ const ColorSettings = (
         setProps({ ppcState: ppc });
     };
 
-    const setConstantColorValue = (e, value) => {
+    const setConstantColorValue = (e: Event, value: number) => {
         const colorsClone = window.structuredClone(colors);
-        colorsClone.selected.color = value as number;
+        colorsClone.selected.color = value;
         ppc.colors = colorsClone;
-        logPPCEvent({ colors: colorsClone });
+
+        if (e.type === "mouseup") {
+            logPPCEvent({ colors: colorsClone });
+        }
         setProps({ ppcState: ppc, demo })
     };
 
@@ -1228,6 +1235,7 @@ const ColorSettings = (
                                 step={EPSILON}
                                 value={constantColorModeValue}
                                 onChange={setConstantColorValue}
+                                onChangeCommitted={setConstantColorValue}
                             />
                         </FormControl> : null
                 }
