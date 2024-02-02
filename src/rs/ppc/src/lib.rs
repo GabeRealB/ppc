@@ -1298,6 +1298,8 @@ impl Renderer {
                 if let Some(active_label_idx) = self.active_label_idx {
                     let label = &self.labels[active_label_idx].id;
                     self.color_bar.set_to_label_probability(label);
+                } else {
+                    self.color_bar.set_to_label_probability("");
                 }
             }
         }
@@ -1496,7 +1498,7 @@ impl Renderer {
                 let label = &self.labels[active_label_idx].id;
                 self.color_bar.set_to_label_probability(label);
             } else {
-                self.color_bar.set_to_empty();
+                self.color_bar.set_to_label_probability("");
             }
         }
 
@@ -1506,17 +1508,24 @@ impl Renderer {
         self.update_color_scale_bounds_buffer();
     }
 
-    fn change_active_label(&mut self, id: String) {
-        let label_idx = self
-            .labels
-            .iter()
-            .position(|l| l.id == id)
-            .expect("no label with a matching id found");
-        self.active_label_idx = Some(label_idx);
+    fn change_active_label(&mut self, id: Option<String>) {
+        if let Some(id) = id {
+            let label_idx = self
+                .labels
+                .iter()
+                .position(|l| l.id == id)
+                .expect("no label with a matching id found");
+            self.active_label_idx = Some(label_idx);
 
-        if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
-            let label = &self.labels[self.active_label_idx.unwrap()].id;
-            self.color_bar.set_to_label_probability(label);
+            if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
+                let label = &self.labels[self.active_label_idx.unwrap()].id;
+                self.color_bar.set_to_label_probability(label);
+            }
+        } else {
+            self.active_label_idx = None;
+            if let wasm_bridge::DataColorMode::Probability = &self.data_color_mode {
+                self.color_bar.set_to_label_probability("");
+            }
         }
 
         self.update_selections_config_buffer();
@@ -1682,7 +1691,7 @@ impl Renderer {
                 return false;
             }
         }
-        if let Some(label) = active_label_change {
+        if let Some(Some(label)) = active_label_change {
             let mut available_labels = self
                 .labels
                 .iter()

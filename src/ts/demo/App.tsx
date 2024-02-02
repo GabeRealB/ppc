@@ -935,6 +935,24 @@ const LabelsView = (
         return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
     });
 
+    const [labelName, setLabelName] = useState<string>("");
+    const canAddLabel = labelName !== "" && !Object.keys(labels).includes(labelName);
+
+    const handleLabelNameChanged = (e) => {
+        setLabelName(e.target.value);
+    };
+
+    const createNewLabel = (e) => {
+        const labelsClone = window.structuredClone(labels);
+        const newActiveLabel = labelName;
+        labelsClone[labelName] = {};
+        ppc.labels = labelsClone;
+        ppc.activeLabel = newActiveLabel;
+        logPPCEvent({ labels: labelsClone, activeLabel: newActiveLabel });
+        setProps({ ppcState: ppc });
+        setLabelName("");
+    };
+
     const handleProbabilityRangeChange = (e: Event, range: Array<number>) => {
         const labelsClone = window.structuredClone(labels);
         labelsClone[activeLabel].selectionBounds = range as [number, number];
@@ -961,9 +979,16 @@ const LabelsView = (
                     >
                         <InputBase
                             sx={{ ml: 1, flex: 1 }}
-                            placeholder="New Label Name"
+                            placeholder="New label name"
+                            value={labelName}
+                            onChange={handleLabelNameChanged}
                         />
-                        <IconButton type="button" sx={{ p: '10px' }}>
+                        <IconButton
+                            type="button"
+                            sx={{ p: '10px' }}
+                            onClick={createNewLabel}
+                            disabled={!canAddLabel}
+                        >
                             <AddIcon />
                         </IconButton>
                     </Paper> : undefined}
@@ -1534,7 +1559,6 @@ const task_2 = (userGroup: UserGroup): DemoTask => {
             order: ["a3", "a2", "a1"],
             labels: {
                 "Default": {},
-                "Default2": {},
             },
             activeLabel: "Default",
             colors: {

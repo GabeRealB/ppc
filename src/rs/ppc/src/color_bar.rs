@@ -112,9 +112,13 @@ impl ColorBar {
     }
 
     pub fn set_to_label_probability(&mut self, label: &str) {
-        self.label = format!("Probability {label}").into();
+        self.label = if label.is_empty() {
+            label.into()
+        } else {
+            format!("Probability {label}").into()
+        };
         self.color_mode = ColorBarColorMode::Probability;
-        self.ticks = default_ticks();
+        self.ticks = probability_ticks();
         self.max_ticks_width = self
             .ticks
             .iter()
@@ -294,5 +298,21 @@ fn default_ticks() -> Vec<(f32, Rc<str>)> {
         (0.8, "0.8".into()),
         (0.9, "0.9".into()),
         (1.0, "1.0".into()),
+    ]
+}
+
+fn probability_ticks() -> Vec<(f32, Rc<str>)> {
+    vec![
+        (0.0, "0%".into()),
+        (0.1, "10%".into()),
+        (0.2, "20%".into()),
+        (0.3, "30%".into()),
+        (0.4, "40%".into()),
+        (0.5, "50%".into()),
+        (0.6, "60%".into()),
+        (0.7, "70%".into()),
+        (0.8, "80%".into()),
+        (0.9, "90%".into()),
+        (1.0, "100%".into()),
     ]
 }

@@ -343,7 +343,7 @@ enum StateTransactionOperation {
         update: LabelEasingUpdate,
     },
     SwitchActiveLabel {
-        id: String,
+        id: Option<String>,
     },
     SetBrushes {
         brushes: BTreeMap<String, BTreeMap<String, Vec<Brush>>>,
@@ -694,7 +694,7 @@ impl StateTransactionBuilder {
     }
 
     #[wasm_bindgen(js_name = switchActiveLabel)]
-    pub fn switch_active_label(&mut self, id: String) {
+    pub fn switch_active_label(&mut self, id: Option<String>) {
         self.operations
             .push(StateTransactionOperation::SwitchActiveLabel { id });
     }
@@ -784,7 +784,7 @@ impl StateTransactionBuilder {
         let mut label_removals: BTreeSet<String> = Default::default();
         let mut label_additions: BTreeMap<String, Label> = Default::default();
         let mut label_updates: BTreeMap<String, Label> = Default::default();
-        let mut active_label_change: Option<String> = Default::default();
+        let mut active_label_change: Option<Option<String>> = Default::default();
         let mut brushes_change: Option<BTreeMap<String, BTreeMap<String, Vec<Brush>>>> =
             Default::default();
         let mut interaction_mode_change: Option<InteractionMode> = Default::default();
@@ -930,7 +930,7 @@ pub struct StateTransaction {
     pub(crate) label_removals: BTreeSet<String>,
     pub(crate) label_additions: BTreeMap<String, Label>,
     pub(crate) label_updates: BTreeMap<String, Label>,
-    pub(crate) active_label_change: Option<String>,
+    pub(crate) active_label_change: Option<Option<String>>,
     pub(crate) brushes_change: Option<BTreeMap<String, BTreeMap<String, Vec<Brush>>>>,
     pub(crate) interaction_mode_change: Option<InteractionMode>,
     pub(crate) debug_options_change: Option<DebugOptions>,
