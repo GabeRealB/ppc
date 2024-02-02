@@ -1,7 +1,8 @@
 /* eslint no-magic-numbers: 0 */
-import { S3Client, PutObjectCommand, PutObjectCommandInput } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import React, { Component, createElement, useEffect, useState } from 'react';
 import { v4 as uuid } from 'uuid';
+import pako from 'pako';
 
 import List from '@mui/material/List';
 import Stack from '@mui/material/Stack';
@@ -67,6 +68,7 @@ import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode } from '../types'
 
 const EPSILON = 1.17549435082228750797e-38;
+const VERSION = 1;
 
 type DemoTask = {
     name: string,
@@ -134,6 +136,10 @@ type DemoState = {
     showInstructions: boolean,
 
     showDebugInfo: boolean,
+    dryRun: boolean,
+
+    deadline: Date,
+    deadlinePassed: boolean,
 
     results: Results,
 };
@@ -142,8 +148,6 @@ type AppState = {
     ppcState: Props,
     demo: DemoState,
 };
-
-const deadline = new Date(2024, 2, 31);
 
 class App extends Component<any, AppState> {
     constructor(props) {
@@ -154,10 +158,14 @@ class App extends Component<any, AppState> {
 
         const searchParams = new URLSearchParams(window.location.search);
         const debugMode = searchParams.has("debug");
+        const dryRun = searchParams.has("dryRun");
         let userGroup = searchParams.get("userGroup");
         if (userGroup !== "PC" && userGroup !== "PPC") {
             userGroup = Math.random() < 0.5 ? "PC" : "PPC";
         }
+
+        const deadline = new Date(2024, 2, 31);
+        const deadlinePassed = Date.now() > deadline.getTime();
 
         const tasks = constructTasks(userGroup as UserGroup);
         const ppc = window.structuredClone(tasks[0].initialState);
@@ -175,6 +183,9 @@ class App extends Component<any, AppState> {
                 currentTask: 0,
                 tasks: tasks,
                 showDebugInfo: debugMode,
+                dryRun: dryRun,
+                deadline,
+                deadlinePassed,
                 results: { taskLogs }
             },
         };
@@ -295,7 +306,7 @@ function WelcomePage(app: App) {
     timing information, interactions and responses, for the sake of evaluation.
     `;
 
-    const deadlinePassed = Date.now() > deadline.getTime();
+    const { deadline, deadlinePassed, dryRun } = app.state.demo;
 
     return (
         <Container style={{ height: "95%", padding: "2rem" }}>
@@ -330,7 +341,7 @@ function WelcomePage(app: App) {
                 {statusElement}
             </Box>
 
-            {deadlinePassed ?
+            {deadlinePassed && !dryRun ?
                 <Box marginY={2}>
                     <Alert severity="warning">
                         The study ran until {deadline.toLocaleDateString(undefined, {
@@ -341,6 +352,14 @@ function WelcomePage(app: App) {
                         })}.
                         You can still take the test, but the results will not be
                         used for the evaluation.
+                    </Alert>
+                </Box> : undefined}
+
+            {dryRun ?
+                <Box marginY={2}>
+                    <Alert severity="info">
+                        Dry run mode is active, the results will not be used for
+                        the evaluation.
                     </Alert>
                 </Box> : undefined}
 
@@ -584,17 +603,27 @@ function DemoPage2(app: App) {
 
 function FinishPage(app: App) {
     const { demo } = app.state;
-    const { results, userId, userGroup } = demo;
+    const { results, userId, userGroup, deadlinePassed, dryRun } = demo;
 
-    const [finished, setFinished] = useState<{ error: any } | boolean>(Date.now() > deadline.getTime());
+    const [finished, setFinished] = useState<{ error: any } | boolean>(deadlinePassed);
 
     useEffect(() => {
         if (finished) {
             return;
         }
 
-        const fileName = `${uuid()}.json`;
-        const fileContents = JSON.stringify({ userId, userGroup, results });
+        const fileName = `${uuid()}.bin`;
+        const fileContents = { userId, userGroup, results, VERSION };
+        const fileContentsJSON = JSON.stringify(fileContents);
+        const fileContentsCompressed = pako.deflate(fileContentsJSON);
+
+        if (dryRun) {
+            console.info("Dry run results", fileName, fileContents, fileContentsCompressed);
+            console.info("Raw length", fileContentsJSON.length);
+            console.info("Compressed length", fileContentsCompressed.length);
+            setFinished(true);
+            return;
+        }
 
         const client = new S3Client({
             region: "eu-central-1",
@@ -607,7 +636,7 @@ function FinishPage(app: App) {
         const command = new PutObjectCommand({
             Bucket: "userstudy",
             Key: fileName,
-            Body: fileContents,
+            Body: fileContentsCompressed,
         });
 
         client.send(command).then(() => {
