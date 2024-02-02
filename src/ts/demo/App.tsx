@@ -1,6 +1,6 @@
 /* eslint no-magic-numbers: 0 */
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import React, { Component, createElement, useEffect, useState } from 'react';
+import React, { Component, createElement, useEffect, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import pako from 'pako';
 
@@ -383,8 +383,8 @@ function DemoPage1(app: App) {
     const { results } = app.state.demo;
 
     const [education, setEducation] = useState<LevelOfEducation>(undefined);
-    const [analysisProficiency, setAnalysisProficiency] = useState<number>(undefined);
-    const [pcProficiency, setPcProficiency] = useState<number>(undefined);
+    const [analysisProficiency, setAnalysisProficiency] = useState<number>(0);
+    const [pcProficiency, setPcProficiency] = useState<number>(0);
 
     const handleEducationChange = (e) => {
         results.education = e.target.value as LevelOfEducation;
@@ -392,6 +392,7 @@ function DemoPage1(app: App) {
     }
 
     const handleAnalysisProficiencyChange = (e, proficiency) => {
+        proficiency = proficiency ? proficiency : 0;
         setAnalysisProficiency(proficiency);
         switch (proficiency) {
             case 1:
@@ -416,6 +417,7 @@ function DemoPage1(app: App) {
     }
 
     const handlePcProficiencyChange = (e, proficiency) => {
+        proficiency = proficiency ? proficiency : 0;
         setPcProficiency(proficiency);
         switch (proficiency) {
             case 1:
@@ -455,8 +457,8 @@ function DemoPage1(app: App) {
     };
 
     const canContinue = education !== undefined
-        && analysisProficiency !== undefined
-        && pcProficiency !== undefined;
+        && analysisProficiency !== 0
+        && pcProficiency !== 0;
 
     return (
         <Container>
@@ -517,8 +519,6 @@ function DemoPage1(app: App) {
                 <Box sx={{ ml: 2 }}>{proficiencyLabels[analysisProficiency]}</Box>
             </Box>
 
-
-
             <Typography variant="subtitle1" marginY={2}>
                 How would you describe your proficiency with parallel coordinates?
             </Typography>
@@ -532,7 +532,7 @@ function DemoPage1(app: App) {
             >
                 <Rating
                     name="pc-proficiency"
-                    value={analysisProficiency}
+                    value={pcProficiency}
                     max={6}
                     size="large"
                     onChange={handlePcProficiencyChange}
