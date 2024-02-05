@@ -1746,8 +1746,8 @@ impl Renderer {
                         }
 
                         let mut last_position =
-                            brush.control_points.first().unwrap_or(&(0.0, 0.0)).0 - 1.0;
-                        for point in &brush.control_points {
+                            brush.control_points.first().unwrap_or(&(0.0, 0.0)).0;
+                        for point in &brush.control_points[1..] {
                             if !point.0.is_finite() || !(0.0..=1.0).contains(&point.1) {
                                 web_sys::console::warn_1(&"Invalid brush control point".into());
                                 return false;

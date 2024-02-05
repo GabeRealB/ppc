@@ -429,12 +429,14 @@ const PPC = (props: Props) => {
                 }
 
                 const options = new DebugOptions();
-                options.showAxisBoundingBox = data.showAxisBoundingBox === true;
-                options.showLabelBoundingBox = data.showLabelBoundingBox === true;
-                options.showCurvesBoundingBox = data.showCurvesBoundingBox === true;
-                options.showAxisLineBoundingBox = data.showAxisLineBoundingBox === true;
-                options.showSelectionsBoundingBox = data.showSelectionsBoundingBox === true;
-                options.showColorBarBoundingBox = data.showColorBarBoundingBox === true;
+                if (data) {
+                    options.showAxisBoundingBox = data.showAxisBoundingBox === true;
+                    options.showLabelBoundingBox = data.showLabelBoundingBox === true;
+                    options.showCurvesBoundingBox = data.showCurvesBoundingBox === true;
+                    options.showAxisLineBoundingBox = data.showAxisLineBoundingBox === true;
+                    options.showSelectionsBoundingBox = data.showSelectionsBoundingBox === true;
+                    options.showColorBarBoundingBox = data.showColorBarBoundingBox === true;
+                }
                 currentTransaction.setDebugOptions(options);
             }
             const messageListener = (e) => {

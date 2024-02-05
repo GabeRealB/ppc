@@ -1,6 +1,6 @@
 /* eslint no-magic-numbers: 0 */
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import React, { Component, createElement, useEffect, useRef, useState } from 'react';
+import React, { Component, createElement, useEffect, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import pako from 'pako';
 
@@ -63,9 +63,20 @@ import InfoIcon from '@mui/icons-material/Info';
 import StarIcon from '@mui/icons-material/Star';
 
 import moveAxesInstr from './resources/move_axes_instr.mp4'
+import brushingInstr from './resources/brushing_instr.mp4'
+import extendAxisInstr from './resources/extend_axis_instr.mp4'
+import brushingExtInstr from './resources/brushing_ext_instr.mp4'
+import brushFadeoutInstr from './resources/brush_fadeout_instr.mp4'
+import interpolationChangeInstr from './resources/interpolation_change_instr.mp4'
+import labelsNewInstr from './resources/labels_new_instr.mp4'
+import labelsCertaintyInstr from './resources/labels_certainty_instr.mp4'
+import labelsCompareInstr from './resources/labels_compare_instr.mp4'
+import colorsInstr from './resources/colors_instr.mp4'
+import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
+import attributesInstr from './resources/attributes_instr.mp4'
 
 import PPC from '../components/PPC';
-import { Axis, Props, InteractionMode } from '../types'
+import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 1;
@@ -73,7 +84,7 @@ const VERSION = 1;
 type DemoTask = {
     name: string,
     shortDescription: string,
-    instructions: () => React.JSX.Element,
+    instructions: (() => React.JSX.Element)[],
     viewed: boolean,
     initialState: Props,
     finalState: Props,
@@ -581,7 +592,7 @@ function DemoPage2(app: App) {
                         alignItems="flex-start"
                         paddingX={"2rem"}
                     >
-                        {InstructionsDialog(demo, app.setProps)}
+                        <InstructionsDialog demo={demo} setProps={app.setProps} />
 
                         {TaskView(ppcState, demo, app.setProps, app.logPPCEvent)}
                         <Divider flexItem />
@@ -681,38 +692,81 @@ function FinishPage(app: App) {
     )
 }
 
-const InstructionsDialog = (
-    demo: DemoState,
+const InstructionsDialog = (props: {
+    demo: DemoState;
     setProps: (newProps) => void
-) => {
+}) => {
+    const { demo, setProps } = props;
     const { showInstructions, currentTask, tasks } = demo;
     const task = tasks[currentTask];
     const { name } = task;
 
+    const [pageIdx, setPageIdx] = useState<number>(0);
+
+    const handleNext = () => {
+        if (pageIdx == task.instructions.length - 1) {
+            handleClose();
+        } else {
+            setPageIdx(pageIdx + 1);
+        }
+    }
+
+    const handlePrevious = () => {
+        setPageIdx(pageIdx - 1);
+    }
+
     const handleClose = () => {
         demo.showInstructions = false;
+        setPageIdx(0);
         setProps({ demo });
     };
+
+    useEffect(() => {
+        const video = document.getElementById("instructions_video") as HTMLMediaElement;
+        if (video) {
+            video.load();
+        }
+    });
 
     return (
         <Dialog
             onClose={handleClose}
             open={showInstructions}
             maxWidth={"xl"}
+            scroll="paper"
             aria-labelledby="instructions-dialog-title"
             aria-describedby="instructions-dialog-description"
         >
             <DialogTitle id="instructions-dialog-title">
                 {name}
             </DialogTitle>
-            <DialogContent id="instructions-dialog-description">
-                {task.instructions()}
+            <DialogContent id="instructions-dialog-description" dividers>
+                {task.instructions[pageIdx]()}
             </DialogContent>
-            <DialogActions>
+
+            {task.instructions.length === 1 ? <DialogActions>
                 <Button onClick={handleClose} autoFocus>
                     Close
                 </Button>
-            </DialogActions>
+            </DialogActions> : undefined}
+            {task.instructions.length !== 1 ? <MobileStepper
+                variant="dots"
+                steps={task.instructions.length}
+                position="static"
+                activeStep={pageIdx}
+                nextButton={
+                    <Button size="small" onClick={handleNext}>
+                        {pageIdx !== task.instructions.length - 1 ? "Next" : "Close"}
+                        <KeyboardArrowRight />
+                    </Button>
+                }
+                backButton={
+                    <Button size="small" onClick={handlePrevious} disabled={pageIdx === 0}>
+                        <KeyboardArrowLeft />
+                        Previous
+                    </Button>
+                }
+            /> : undefined}
         </Dialog>
     )
 }
@@ -1364,12 +1418,12 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
     logPPCEvent: (newProps) => void) => {
     const { userId, userGroup, currentTask, tasks } = demo;
 
-    const debugShowAxisBB = ppc.debug.showAxisBoundingBox;
-    const debugShowLabelBB = ppc.debug.showLabelBoundingBox;
-    const debugShowCurvesBB = ppc.debug.showCurvesBoundingBox;
-    const debugShowAxisLineBB = ppc.debug.showAxisLineBoundingBox;
-    const debugShowSelectionsBB = ppc.debug.showSelectionsBoundingBox;
-    const debugShowColorBarBB = ppc.debug.showColorBarBoundingBox;
+    const debugShowAxisBB = ppc.debug ? ppc.debug.showAxisBoundingBox : false;
+    const debugShowLabelBB = ppc.debug ? ppc.debug.showLabelBoundingBox : false;
+    const debugShowCurvesBB = ppc.debug ? ppc.debug.showCurvesBoundingBox : false;
+    const debugShowAxisLineBB = ppc.debug ? ppc.debug.showAxisLineBoundingBox : false;
+    const debugShowSelectionsBB = ppc.debug ? ppc.debug.showSelectionsBoundingBox : false;
+    const debugShowColorBarBB = ppc.debug ? ppc.debug.showColorBarBoundingBox : false;
 
     let debug_item = null;
     if (demo.showDebugInfo) {
@@ -1391,7 +1445,16 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
                     <FormGroup
                         onChange={e => {
                             const element = e.target as HTMLInputElement;
-                            const debug_clone = window.structuredClone(ppc.debug);
+                            const debug_clone = ppc.debug
+                                ? window.structuredClone(ppc.debug)
+                                : {
+                                    showAxisBoundingBox: false,
+                                    showLabelBoundingBox: false,
+                                    showCurvesBoundingBox: false,
+                                    showAxisLineBoundingBox: false,
+                                    showSelectionsBoundingBox: false,
+                                    showColorBarBoundingBox: false,
+                                };
                             switch (element.value) {
                                 case "axis":
                                     debug_clone.showAxisBoundingBox = !debug_clone.showAxisBoundingBox;
@@ -1434,21 +1497,46 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
 }
 
 const constructTasks = (userGroup: UserGroup) => {
-    return [
-        task_1(userGroup),
-        task_2(userGroup),
+    const tasks = [
+        tutorial1(),
+        tutorial2(),
     ];
+
+    if (userGroup === "PPC") {
+        tasks.push(tutorial2A());
+        tasks.push(tutorial2B());
+    }
+
+    tasks.push(tutorial3(userGroup))
+    tasks.push(tutorial4(userGroup))
+    tasks.push(tutorial5(userGroup))
+
+    tasks.push(tutorialFreeRoam(userGroup));
+
+    return tasks;
 }
 
-const task_1 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
-        ? InteractionMode.RestrictedCompatibility
-        : InteractionMode.Restricted;
-
-    const buildInstructions = () => {
+const tutorial1 = (): DemoTask => {
+    const buildInstructions = [() => {
         return (
             <Stack spacing={1}>
-                <video autoPlay loop muted>
+                <DialogContentText>
+                    In a parallel coordinates plot, a data point is represented as a curve, passing through
+                    all attribute axes. For example, in a three-dimensional dataset with the attributes &#32;
+                    <b>A1</b>, <b>A2</b> and <b>A3</b>, the point (5, 10, 3) would be represented as a
+                    curve, passing through the value 5 on the axis <b>A1</b>, 10 on the axis <b>A2</b>,
+                    and 3 on the axis <b>A3</b>. This enables the visualization of datasets with many
+                    attributes.
+                    <br />
+                    <br />
+                    One additional property of a parallel coordinates plot is, that one can estimate
+                    correlations between attributes. For example, one could observe that while the value
+                    of an attribute increases, it decreases for another attribute. However, this type of
+                    analysis is only possible, when the two attributes that we want to compare are direct
+                    neighbors. Therefore, the order of the attribute axes is significant, and it is
+                    possible to reorder them at will.
+                </DialogContentText>
+                <video autoPlay loop muted id="instructions_video">
                     <source src={moveAxesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -1459,7 +1547,7 @@ const task_1 = (userGroup: UserGroup): DemoTask => {
                     Press the <b>Next</b> button on the bottom right once the task has been completed.
                 </DialogContentText>
             </Stack>);
-    }
+    }];
 
     return {
         name: "Reorder attribute axes.",
@@ -1470,8 +1558,8 @@ const task_1 = (userGroup: UserGroup): DemoTask => {
             axes: {
                 "a1": {
                     label: "A1",
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
                 "a2": {
                     label: "A2",
@@ -1480,8 +1568,8 @@ const task_1 = (userGroup: UserGroup): DemoTask => {
                 },
                 "a3": {
                     label: "A3",
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
             },
             order: ["a1", "a2", "a3"],
@@ -1496,15 +1584,7 @@ const task_1 = (userGroup: UserGroup): DemoTask => {
                 }
             },
             colorBar: "hidden",
-            interactionMode: interactionMode,
-            debug: {
-                showAxisBoundingBox: false,
-                showLabelBoundingBox: false,
-                showCurvesBoundingBox: false,
-                showAxisLineBoundingBox: false,
-                showSelectionsBoundingBox: false,
-                showColorBarBoundingBox: false,
-            },
+            interactionMode: InteractionMode.RestrictedCompatibility,
             setProps: undefined,
         },
         finalState: null,
@@ -1518,42 +1598,732 @@ const task_1 = (userGroup: UserGroup): DemoTask => {
     };
 }
 
-const task_2 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = () => {
+const tutorial2 = (): DemoTask => {
+    const buildInstructions = [() => {
         return (
-            <>
-                <Skeleton variant='rectangular' animation={false} height={480} />
+            <Stack spacing={1}>
                 <DialogContentText>
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                    Another basic interaction in a parallel coordinates plot is the brushing of interesting
+                    data points. By brushing on an attribute axis it is possible to filter the data to show
+                    which curves pass through the brushed range of values. The curves that are filtered out
+                    will be shown in a light gray color. Multiple brushes on the same axis will filter
+                    curves that pass through at least one of them.
                 </DialogContentText>
-            </>);
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={brushingInstr} type='video/mp4'></source>
+                </video>
+                <DialogContentText>
+                    New selections can be brushed by holding the left mouse button over an unbrushed portion
+                    of an attribute axis and dragging the mouse. Once added, the brush can be removed by
+                    clicking the left mouse button, while hovering the brush. Otherwise, it is possible to
+                    move the brush by holding the left mouse button and dragging the pointer.
+                    <br />
+                    <br />
+                    Select the ranges <b>10 to 20</b> and <b>80 to 90</b> of the attribute <b>A2</b>, without
+                    including any curve passing though the range <b>40 to 60</b> of the same attribute.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    }];
+
+    const checkSelectedRanges = (selections?: { [id: string]: Brushes }) => {
+        if (!selections || "Default" in selections === false) {
+            return false;
+        }
+
+        const brushes = selections["Default"];
+        if ("a1" in brushes || "a3" in brushes || "a2" in brushes === false) {
+            return false;
+        }
+        const a2 = brushes["a2"];
+
+        const mustContain: [number, boolean][] = [
+            [10, false],
+            [15, false],
+            [20, false],
+            [80, false],
+            [85, false],
+            [90, false],
+        ];
+        const mustNotContain: [number, boolean][] = [
+            [40, false],
+            [45, false],
+            [50, false],
+            [55, false],
+            [60, false],
+        ];
+        for (const brush of a2) {
+            const min = brush.controlPoints[0][0];
+            const max = brush.controlPoints[brush.controlPoints.length - 1][0];
+            for (const x of mustContain) {
+                if (min <= x[0] && x[0] <= max) {
+                    x[1] = true;
+                }
+            }
+            for (const x of mustNotContain) {
+                if (min <= x[0] && x[0] <= max) {
+                    x[1] = true;
+                }
+            }
+        }
+
+        const allMust = mustContain
+            .map(([v, contained]) => contained)
+            .reduce((curr, x) => curr && x, true);
+        const anyMustNot = mustNotContain
+            .map(([v, contained]) => contained)
+            .reduce((curr, x) => curr || x, false);
+
+        return allMust && !anyMustNot;
     }
 
     return {
-        name: "Task 2",
-        shortDescription: "Todo",
+        name: "Create a new selection.",
+        shortDescription: "Select only the ranges [10, 20] and [80, 90] of A2.",
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
                 "a1": {
                     label: "A1",
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
                 "a2": {
                     label: "A2",
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
                 "a3": {
                     label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            interactionMode: InteractionMode.Compatibility,
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => checkSelectedRanges(ppc.brushes),
+        disableLabels: true,
+        disableAttributes: true,
+        disableColors: true,
+    };
+}
+
+const tutorial2A = (): DemoTask => {
+    const buildInstructions = [() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    You can expand the axis by clicking the left mouse button, while hovering the label
+                    of an attribute. In the expanded state, you can see and modify the degee of certainty
+                    with which a data point is part of the selection. The certainty is then shown by a
+                    curve, where the values range from <b>0%</b> certainty on the <b>rightmost</b> to
+                    <b>100%</b> certainty on the leftmost of the curve. When collapsed, the certainty
+                    of a brush is shown through the color of the brush, with <b>neon green</b> indicating
+                    a certainty of <b>100%</b> and <b>black</b> indicating a certainty of <b>0%</b>.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={extendAxisInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    },
+    () => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    Each new brush is added with a certainty of <b>100%</b>. The certainty can then be
+                    modified, by moving the <b>control points</b> on the curve with the <b>left mouse
+                        button</b>. When multiple brushes overlap, the curve will be formed by computing
+                    the maxium of all overlapping segments. The individual brushes are not combined
+                    in the expanded mode.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={brushingExtInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    },
+    () => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    You can insert a new control point to a brush, by holding the <b>Shift</b> key, before
+                    dragging a control point on the axis. Alternatively, you can add the control point on
+                    both ends of the brushed region by holding either of the <b>Ctrl</b>, <b>Alt</b>,
+                    or <b>Option</b> keys, before dragging the first or last control points of the brush.
+                    A control point can be removed by clicking it on the axis.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={brushFadeoutInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    },
+    () => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    Create one brush on the attribute <b>A2</b>, consisting of 4 control points.
+                    The brush must start at around the value <b>30</b> and must include all curves
+                    up to the value <b>70</b>. The certainty on the first and last control point
+                    must be <b>0%</b>, while the range <b>40</b> to <b>60</b> must have a
+                    certainty of <b>100%</b>.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    }];
+
+    const checkSelectedRanges = (selections?: { [id: string]: Brushes }) => {
+        if (!selections || "Default" in selections === false) {
+            return false;
+        }
+
+        const brushes = selections["Default"];
+        if ("a1" in brushes || "a3" in brushes || "a2" in brushes === false) {
+            return false;
+        }
+        const a2 = brushes["a2"];
+        if (a2.length != 1) {
+            return false;
+        }
+
+        const brush = a2[0];
+        if (brush.controlPoints.length != 4) {
+            return false;
+        }
+
+        const [c1, c2, c3, c4] = brush.controlPoints;
+        if (c1[1] != 0 || c2[1] != 1 || c3[1] != 1 || c4[1] != 0) {
+            return false;
+        }
+
+        if (c1[0] < 25 || c1[0] > 30) {
+            return false;
+        }
+        if (c2[0] < 35 || c2[0] > 45) {
+            return false;
+        }
+        if (c3[0] < 55 || c3[0] > 65) {
+            return false;
+        }
+        if (c4[0] < 70 || c4[0] > 75) {
+            return false;
+        }
+
+        return true;
+    }
+
+    return {
+        name: "Uncertain brushing.",
+        shortDescription: "Brush A2 in the range [30, 70], where the range [40, 60] has a certainty of 100%.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            interactionMode: InteractionMode.Full,
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => checkSelectedRanges(ppc.brushes),
+        disableLabels: true,
+        disableAttributes: true,
+        disableColors: true,
+    };
+}
+
+const tutorial2B = (): DemoTask => {
+    const buildInstructions = [() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    You can control how the curve behaves in between the control points by selecting
+                    a different interpolation mode on the top right toolbar. Different interpolation
+                    modes may allow you to better approximate the shape of a desired curve. The
+                    interpolation modes are (from left to right): <b>Linear</b>, <b>In</b>, <b>Out</b>,
+                    and <b>In-Out</b>. By default, the linear interpolation mode is selected. The
+                    interpolation mode of the primary segment of each brush is always linear, and can
+                    not be changed.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={interpolationChangeInstr} type='video/mp4'></source>
+                </video>
+                <DialogContentText>
+                    Set the interpolation mode to <b>In-Out</b>.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    }];
+
+    const checkInterpolationMode = (labels: { [id: string]: LabelInfo }) => {
+        const label = labels["Default"];
+        return label.easing === "inout";
+    };
+
+    return {
+        name: "Different curves.",
+        shortDescription: "Switch the interpolation mode to In-Out.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            brushes: {
+                "Default": {
+                    "a2": [
+                        { controlPoints: [[30, 0], [40, 1], [60, 1], [70, 0]], mainSegmentIdx: 1 }
+                    ]
+                }
+            },
+            interactionMode: InteractionMode.Full,
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => checkInterpolationMode(ppc.labels),
+        disableLabels: true,
+        disableAttributes: true,
+        disableColors: true,
+    };
+}
+
+const tutorial3 = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    Sometimes it may be required to assign multiple labels to the filtered data points.
+                    This can be achieved by creating a new label, and brushing the curves that should
+                    be assigned to the new label. The brushes are only valid for the currently active
+                    label. The active label can be changed by pressing the play button next to the
+                    label name.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={labelsNewInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    }];
+
+    if (userGroup === "PPC") {
+        buildInstructions.push(() => {
+            return (
+                <Stack spacing={1}>
+                    <DialogContentText>
+                        Whether a data point counts as selected is decided by the computed certainty and
+                        the requested certainty range. By default, the parallel coordinates plot selects
+                        any data point, regardless of the certainty. You can configure the certainty
+                        required to count as selected, with the slider unter the <b>Labels</b> section.
+                        Different labels can have different certainty bounds.
+                    </DialogContentText>
+                    <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                        <source src={labelsCertaintyInstr} type='video/mp4'></source>
+                    </video>
+                </Stack>);
+        });
+        buildInstructions.push(() => {
+            return (
+                <Stack spacing={1}>
+                    <DialogContentText>
+                        When the attribute axis is expanded, you can see the curves of the other labels,
+                        along with the curve of the currently active label.
+                    </DialogContentText>
+                    <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                        <source src={labelsCompareInstr} type='video/mp4'></source>
+                    </video>
+                </Stack>);
+        });
+    }
+
+    buildInstructions.push(() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    Create a new label called <b>My Label</b>.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    });
+
+    const checkLabels = (labels: { [id: string]: LabelInfo }) => {
+        return "My Label" in labels;
+    };
+
+    return {
+        name: "Multiple Labels.",
+        shortDescription: "Create a new label called. \"My Label\".",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            brushes: {
+                "Default": {
+                    "a2": [
+                        { controlPoints: [[40, 1], [60, 1]], mainSegmentIdx: 0 }
+                    ],
+                    "a3": [
+                        { controlPoints: [[-50000, 1], [0, 1]], mainSegmentIdx: 0 }
+                    ]
+                }
+            },
+            interactionMode,
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => checkLabels(ppc.labels),
+        disableAttributes: true,
+        disableColors: true,
+    };
+}
+
+const tutorial4 = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    The parallel coordinates plot can encode some information in the form of the colors
+                    of the data point curves. Depending on the task, it may be worthwhile to look into
+                    the color settings under the <b>Colors</b> section, on the right. There you can
+                    configure the color bar visibility, the information that is encoded as the color,
+                    and the color scale that should be used to color the information.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={colorsInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    }];
+
+    if (userGroup === "PPC") {
+        buildInstructions.push(() => {
+            return (
+                <Stack spacing={1}>
+                    <DialogContentText>
+                        In addition to the other color modes, you can select to color the curves based on
+                        their computed certainty of selection.
+                    </DialogContentText>
+                    <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                        <source src={colorsCertaintyInstr} type='video/mp4'></source>
+                    </video>
+                </Stack>);
+        });
+    }
+
+    buildInstructions.push(() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    Enable the color bar under the <b>Colors</b> section.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    });
+
+    return {
+        name: "Color settings.",
+        shortDescription: "Enable the color bar.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            interactionMode,
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => ppc.colorBar === "visible",
+        disableAttributes: true,
+    };
+}
+
+const tutorial5 = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    A dataset may contain more attributes than can be visualized simultaneously.
+                    In that case, it may be required to filter which attributes can contribute
+                    to the selection of the curves. The <b>Attributes</b> section contains info
+                    about all the attributes present in the dataset. There you can select whether
+                    to show or hide an attribute from the plot.
+                </DialogContentText>
+                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <source src={attributesInstr} type='video/mp4'></source>
+                </video>
+                <DialogContentText>
+                    Enable the attribute <b>A5</b> under the <b>Attributes</b> section.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once the task has been completed.
+                </DialogContentText>
+            </Stack>);
+    }];
+
+    const checkVisible = (axes: { [id: string]: Axis }) => {
+        const a5 = axes["a5"];
+        return !a5.hidden;
+    };
+
+    return {
+        name: "More attributes.",
+        shortDescription: "Enable the attribute A5.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+                "a4": {
+                    label: "A4",
+                    range: [0, 50],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 50),
+                    hidden: true,
+                },
+                "a5": {
+                    label: "A5",
+                    range: [-10000, 0],
+                    dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
+                    hidden: true,
+                },
+                "a6": {
+                    label: "A6",
                     range: [0, 10],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
+                    dataPoints: [...Array(100)].map((v, x) => x / 10),
+                    hidden: true,
+                },
+            },
+            order: ["a1", "a2", "a3"],
+            labels: {
+                "Default": {},
+            },
+            activeLabel: "Default",
+            colors: {
+                selected: {
+                    scale: "plasma",
+                    color: 0.5,
+                }
+            },
+            colorBar: "hidden",
+            interactionMode,
+            setProps: undefined,
+        },
+        finalState: null,
+        canContinue: (ppc: Props) => checkVisible(ppc.axes),
+    };
+}
+
+const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    You have reached the end of the tutorial section. Before you continue to the next task,
+                    you can try out interacting with the visualization freely.
+                    Remember to look at the <b>Actions</b> tab to see the actions available to you.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right once you feel ready to continue with
+                    the next task.
+                </DialogContentText>
+            </>);
+    }];
+
+    return {
+        name: "Make yourself familiar with the visualization.",
+        shortDescription: "Continue when you feel ready.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState: {
+            axes: {
+                "a1": {
+                    label: "A1",
+                    range: [0, 10000],
+                    dataPoints: [...Array(100)].map((v, x) => x * x),
+                },
+                "a2": {
+                    label: "A2",
+                    range: [0, 100],
+                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
+                },
+                "a3": {
+                    label: "A3",
+                    range: [-125000, 125000],
+                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
+                },
+                "a4": {
+                    label: "A4",
+                    range: [0, 50],
+                    dataPoints: [...Array(100)].map(() => Math.random() * 50),
+                    hidden: true,
+                },
+                "a5": {
+                    label: "A5",
+                    range: [-10000, 0],
+                    dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
+                    hidden: true,
+                },
+                "a6": {
+                    label: "A6",
+                    range: [0, 10],
+                    dataPoints: [...Array(100)].map((v, x) => x / 10),
+                    hidden: true,
                 },
             },
             order: ["a3", "a2", "a1"],
@@ -1580,8 +2350,6 @@ const task_2 = (userGroup: UserGroup): DemoTask => {
             setProps: undefined,
         },
         finalState: null,
-        canContinue: (ppc: Props) => ppc.order[0] == "a2"
-            && ppc.order[1] == "a1"
-            && ppc.order[2] == "a3"
+        canContinue: (ppc: Props) => true
     };
 }
