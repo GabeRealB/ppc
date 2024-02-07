@@ -2391,7 +2391,8 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
                     occupation, et cetera, with the aim of predicting whether
                     someone has an annual income greater than $50,000. For this
                     task, you will provided with the age, sex, education and
-                    hours worked per week of the people contained in the dataset.
+                    hours worked per week of 5000 random people contained in
+                    the dataset.
                     <br />
                     <br />
                     During a preliminary analysis of the dataset, we plotted the
@@ -2445,7 +2446,7 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
 
     const visible = ['age', 'sex', 'education', 'hours-per-week'];
     const included = ['income'];
-    const initialState = adultDataset(visible, included);
+    const initialState = adultDataset(visible, included, 5000);
     initialState.interactionMode = interactionMode;
     initialState.labels = { '>=50K': {} };
     initialState.activeLabel = '>=50K';
@@ -2513,7 +2514,7 @@ const taskAdult2 = (userGroup: UserGroup): DemoTask => {
     }];
 
     const visible = ['native-country', 'sex', 'education'];
-    const initialState = adultDataset(visible, []);
+    const initialState = adultDataset(visible, [], 5000);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2588,7 +2589,7 @@ const taskAdult3 = (userGroup: UserGroup): DemoTask => {
     }];
 
     const visible = ['native-country', 'sex', 'age'];
-    const initialState = adultDataset(visible, []);
+    const initialState = adultDataset(visible, [], 5000);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
