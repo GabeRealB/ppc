@@ -248,7 +248,6 @@ impl MoveAxisAction {
             match self.axis.state() {
                 crate::axis::AxisState::Collapsed => self.axis.expand(),
                 crate::axis::AxisState::Expanded => self.axis.collapse(),
-                crate::axis::AxisState::Hidden => {}
             }
 
             Event::AXIS_STATE_CHANGE | Event::AXIS_POSITION_CHANGE

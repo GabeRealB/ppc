@@ -147,12 +147,6 @@ impl AxisArgs {
 
         self
     }
-
-    /// Marks the axis as hidden.
-    pub fn hidden(mut self) -> Self {
-        self.state = AxisState::Hidden;
-        self
-    }
 }
 
 /// A PPC axis.
@@ -345,7 +339,7 @@ impl Axis {
 
     /// Checks whether the axis is in a hidden state.
     pub fn is_hidden(&self) -> bool {
-        matches!(self.state.get(), AxisState::Hidden)
+        self.axis_index.get().is_none()
     }
 
     /// Collapses the axis.
@@ -859,7 +853,6 @@ impl Debug for Axis {
 pub enum AxisState {
     Collapsed,
     Expanded,
-    Hidden,
 }
 
 pub type RemLengthFunc<T> = dyn Fn(f32) -> Length<T>;
@@ -1074,7 +1067,6 @@ impl Axes {
         range: Option<(f32, f32)>,
         visible_range: Option<(f32, f32)>,
         ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
-        hidden: bool,
         num_labels: usize,
     ) -> Rc<Axis> {
         if !std::ptr::eq(self, this.as_ptr()) {
@@ -1104,19 +1096,10 @@ impl Axes {
             args = args.with_ticks(ticks);
         }
 
-        let axis_index = if hidden {
-            args = args.hidden();
-            None
-        } else {
-            let x = Some(self.next_axis_index);
-            self.next_axis_index += 1;
-            x
-        };
-
         let axis = Rc::new(Axis::new(
             key,
             args,
-            axis_index,
+            None,
             0.0,
             num_labels,
             this,
@@ -1196,6 +1179,10 @@ impl Axes {
                 }
             }
         }
+
+        if self.axes.is_empty() {
+            self.num_data_points = None;
+        }
     }
 
     /// Returns the order of the axes.
@@ -1205,35 +1192,60 @@ impl Axes {
     }
 
     pub fn set_axes_order(&mut self, order: &[impl AsRef<str>]) {
+        if order.iter().any(|x| !self.axes.contains_key(x.as_ref())) {
+            panic!("the provided order references an unknown axis")
+        }
+
+        for ax in self.visible_axes() {
+            ax.set_world_offset(0.0);
+            ax.axis_index.set(None);
+
+            if let Some(left) = ax.left_neighbor() {
+                left.set_right_neighbor(None);
+            }
+            ax.set_left_neighbor(None);
+        }
+        self.visible_axis_start = None;
+        self.visible_axis_end = None;
+
+        self.next_axis_index = order.len();
+        self.num_visible_axes = order.len();
+
+        let axes = order
+            .iter()
+            .map(|ax| self.axes[ax.as_ref()].clone())
+            .collect::<Vec<_>>();
+        for i in 0..axes.len() {
+            let ax = &axes[i];
+            ax.set_world_offset(i as f32);
+            ax.axis_index.set(Some(i));
+
+            if i != 0 {
+                ax.set_left_neighbor(Some(&axes[i - 1]))
+            }
+            if i != axes.len() - 1 {
+                ax.set_right_neighbor(Some(&axes[i + 1]))
+            }
+        }
+
+        if let Some(first) = axes.first() {
+            self.visible_axis_start = Some(first.clone());
+        }
+        if let Some(last) = axes.last() {
+            self.visible_axis_end = Some(last.clone());
+        }
+
+        let mut mappings = self.coordinate_mappings.borrow_mut();
+        mappings.world_width = ((self.num_visible_axes + 1) as f32).max(1.0);
+        mappings.world_bounding_box = Aabb::new(
+            Position::new((-0.5, 0.0)),
+            Position::new((mappings.world_width, 1.0)),
+        );
+
         if order.len() != self.num_visible_axes
             || order.iter().any(|x| !self.axes.contains_key(x.as_ref()))
         {
             panic!("the provided order must contain all axes");
-        }
-
-        for (i, key) in order.iter().enumerate() {
-            let key = key.as_ref();
-            let axis = self.axes[key].clone();
-
-            // Set the position.
-            axis.set_world_offset(i as f32);
-
-            // Set left neighbor.
-            if i == 0 {
-                self.visible_axis_start = Some(axis.clone());
-                axis.set_left_neighbor(None);
-            } else {
-                let previous = &self.axes[order[i - 1].as_ref()];
-                axis.set_left_neighbor(Some(previous));
-            }
-
-            if i < order.len() - 1 {
-                let next = &self.axes[order[i + 1].as_ref()];
-                axis.set_right_neighbor(Some(next));
-            } else {
-                axis.set_right_neighbor(None);
-                self.visible_axis_end = Some(axis.clone());
-            }
         }
     }
 

@@ -34,8 +34,7 @@ export type Axis = {
     range?: [number, number],
     visibleRange?: [number, number],
     tickPositions?: number[],
-    tickLabels?: string[],
-    hidden?: boolean
+    tickLabels?: string[]
 };
 
 export type EasingType = "linear" | "in" | "out" | "inout";

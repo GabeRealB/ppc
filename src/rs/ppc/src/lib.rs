@@ -113,7 +113,7 @@ impl LabelColorGenerator {
             _ => unreachable!(),
         };
 
-        self.idx = (self.idx + 1) % 12;
+        self.idx = (self.idx + 1) % 8;
         let color = ColorQuery::Css(css_string.into()).resolve();
         (color, Self::dim(color))
     }
@@ -1111,7 +1111,6 @@ impl Renderer {
             axis.range,
             axis.visible_range,
             axis.ticks,
-            axis.hidden,
             self.labels.len(),
         );
     }
@@ -1436,7 +1435,6 @@ impl Renderer {
             color_dimmed,
         };
 
-        self.active_label_idx = Some(self.labels.len());
         self.labels.push(label);
         self.buffers.data_mut().push_label(&self.device);
         self.buffers.curves_mut().push_label(&self.device);
@@ -1647,23 +1645,23 @@ impl Renderer {
                 range,
                 visible_range,
                 ticks,
-                hidden,
             } = axis_def;
         }
         if let Some(wasm_bridge::AxisOrder::Custom { order }) = order_change {
+            if BTreeSet::from_iter(order.iter()).len() != order.len() {
+                web_sys::console::warn_1(&"Transaction axis order contains duplicates.".into());
+                return false;
+            }
+
             let guard = self.axes.borrow();
-            let mut available_axes = guard
-                .visible_axes()
-                .map(|ax| ax.key())
-                .filter(|ax| !axis_removals.contains(&**ax))
-                .chain(
-                    axis_additions
-                        .iter()
-                        .filter(|(_, ax)| !ax.hidden)
-                        .map(|(ax, _)| ax.clone().into()),
+            let contains_axis = |key: &str| {
+                (guard.axis(key).is_some() && !axis_removals.contains(key))
+                    || axis_additions.contains_key(key)
+            };
+            if order.iter().any(|ax| !contains_axis(ax)) {
+                web_sys::console::warn_1(
+                    &"Transaction axis order contains nonexistent axes.".into(),
                 );
-            if available_axes.any(|ax| !order.iter().any(|x| **x == *ax)) {
-                web_sys::console::warn_1(&"Transaction order does not contain all axes.".into());
                 return false;
             }
         }
@@ -1824,10 +1822,6 @@ impl Renderer {
             self.set_axes_order(order);
         }
 
-        if data_update {
-            self.update_data();
-        }
-
         if let Some(colors) = colors_change {
             let wasm_bridge::Colors {
                 background,
@@ -1852,6 +1846,10 @@ impl Renderer {
             if let Some(color_mode) = color_mode {
                 self.set_data_color_mode(color_mode);
             }
+        }
+
+        if data_update {
+            self.update_data();
         }
 
         if let Some(visibility) = color_bar_visibility_change {

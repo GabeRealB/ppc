@@ -22,7 +22,6 @@ pub struct AxisDef {
     pub(crate) range: Option<(f32, f32)>,
     pub(crate) visible_range: Option<(f32, f32)>,
     pub(crate) ticks: Option<Vec<(f32, Option<Rc<str>>)>>,
-    pub(crate) hidden: bool,
 }
 
 #[wasm_bindgen]
@@ -35,7 +34,6 @@ impl AxisDef {
         range: Option<Box<[f32]>>,
         visible_range: Option<Box<[f32]>>,
         ticks: Option<AxisTicksDef>,
-        hidden: Option<bool>,
     ) -> Self {
         let ticks = if let Some(ticks) = ticks {
             assert!(
@@ -62,7 +60,6 @@ impl AxisDef {
             range: range.map(|v| (v[0], v[1])),
             visible_range: visible_range.map(|v| (v[0], v[1])),
             ticks,
-            hidden: hidden.unwrap_or(false),
         }
     }
 }
@@ -240,6 +237,12 @@ pub struct LabelBoundsUpdate {
 pub struct LabelEasingUpdate {
     pub id: String,
     pub easing: selection::EasingType,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct LabelVisibleAxesUpdate {
+    pub id: String,
+    pub visible_axes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

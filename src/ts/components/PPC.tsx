@@ -246,7 +246,7 @@ const PPC = (props: Props) => {
                             }
                         }
 
-                        const ax = new AxisDef(id, axis.label, dataPoints, range, visibleRange, ticks, axis.hidden);
+                        const ax = new AxisDef(id, axis.label, dataPoints, range, visibleRange, ticks);
                         currentTransaction.addAxis(ax);
                     }
                 } else {
@@ -405,7 +405,8 @@ const PPC = (props: Props) => {
                         const selectionBoundsStart = hasSelectionBounds ? label.selectionBounds[0] : -1.0;
                         const selectionBoundsEnd = hasSelectionBounds ? label.selectionBounds[1] : -1.0;
                         const easing = label.easing;
-                        currentTransaction.addLabel(id, color, hasSelectionBounds, selectionBoundsStart, selectionBoundsEnd, easing);
+                        currentTransaction.addLabel(id, color, hasSelectionBounds, selectionBoundsStart,
+                            selectionBoundsEnd, easing);
                     }
                 }
 

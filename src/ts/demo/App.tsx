@@ -35,7 +35,6 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import Skeleton from '@mui/material/Skeleton';
 import Paper from '@mui/material/Paper';
 import Grid from '@mui/material/Unstable_Grid2';
 import Alert from '@mui/material/Alert';
@@ -75,8 +74,16 @@ import colorsInstr from './resources/colors_instr.mp4'
 import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
 import attributesInstr from './resources/attributes_instr.mp4'
 
+import adultAgeHistogram from './resources/adult-age.png'
+import adultEducationHistogram from './resources/adult-education.png'
+import adultHoursPerWeekHistogram from './resources/adult-hours-per-week.png'
+import adultSexHistogram from './resources/adult-sex.png'
+import adultEducationDistribution from './resources/adult-education-distribution.png'
+
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
+
+import { adultDataset } from './datasets';
 
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 1;
@@ -85,10 +92,12 @@ type DemoTask = {
     name: string,
     shortDescription: string,
     instructions: (() => React.JSX.Element)[],
+    taskResultInput?: (props: { task: DemoTask, forceUpdate: () => void }) => React.JSX.Element,
+    taskResult?: any,
     viewed: boolean,
     initialState: Props,
     finalState: Props,
-    canContinue: (ppc: Props) => boolean,
+    canContinue: (ppc: Props, task?: DemoTask) => boolean,
     disableLabels?: boolean,
     disableAttributes?: boolean,
     disableColors?: boolean,
@@ -166,6 +175,7 @@ class App extends Component<any, AppState> {
         this.setProps = this.setProps.bind(this);
         this.setPPCProps = this.setPPCProps.bind(this);
         this.logPPCEvent = this.logPPCEvent.bind(this);
+        this.forceReRender = this.forceReRender.bind(this);
 
         const searchParams = new URLSearchParams(window.location.search);
         const debugMode = searchParams.has("debug");
@@ -240,6 +250,10 @@ class App extends Component<any, AppState> {
             data,
         };
         log.events.push(event);
+    }
+
+    forceReRender() {
+        this.forceUpdate();
     }
 
     render() {
@@ -594,7 +608,7 @@ function DemoPage2(app: App) {
                     >
                         <InstructionsDialog demo={demo} setProps={app.setProps} />
 
-                        {TaskView(ppcState, demo, app.setProps, app.logPPCEvent)}
+                        {TaskView(ppcState, demo, app.setProps, app.logPPCEvent, app.forceReRender)}
                         <Divider flexItem />
                         {LabelsView(ppcState, demo, app.setProps, app.logPPCEvent)}
                         <Divider flexItem />
@@ -775,7 +789,8 @@ const TaskView = (
     ppc: Props,
     demo: DemoState,
     setProps: (newProps) => void,
-    logPPCEvent: (newProps) => void
+    logPPCEvent: (newProps) => void,
+    forceUpdate: () => void,
 ) => {
     const { currentTask, tasks, results } = demo;
     const task = tasks[currentTask];
@@ -791,6 +806,10 @@ const TaskView = (
             type: "end",
             timestamp
         });
+
+        if (current.taskResult) {
+            currentLog.result = window.structuredClone(current.taskResult);
+        }
 
         const setPpcProps = ppc.setProps;
         ppc.setProps = undefined;
@@ -851,6 +870,7 @@ const TaskView = (
 
     const handleReset = () => {
         const current = tasks[currentTask];
+        current.taskResult = undefined;
 
         const newPPC = window.structuredClone(current.initialState);
         newPPC.setProps = ppc.setProps;
@@ -892,13 +912,16 @@ const TaskView = (
                     Reset
                 </Button>
             </Container>
+            {task.taskResultInput
+                ? createElement(task.taskResultInput, { task, forceUpdate })
+                : undefined}
             <MobileStepper
                 variant="progress"
                 steps={tasks.length}
                 position="bottom"
                 activeStep={currentTask}
                 nextButton={
-                    <Button size="small" onClick={handleNext} disabled={!task.canContinue(ppc)}>
+                    <Button size="small" onClick={handleNext} disabled={!task.canContinue(ppc, task)}>
                         {currentTask !== tasks.length - 1 ? "Next" : "Finish"}
                         <KeyboardArrowRight />
                     </Button>
@@ -1067,18 +1090,11 @@ const LabelsView = (
 }
 
 const AttributeListItem = (
+    visible: boolean,
     axis: Axis,
-    update: (Axis) => void
+    handleClick: () => void
 ) => {
-    const { label, hidden } = axis;
-    const visible = hidden !== true;
-
-    const handle_click = () => {
-        const new_axis = window.structuredClone(axis);
-        new_axis.hidden = visible;
-        update(new_axis);
-    }
-
+    const { label } = axis;
     return (
         <Paper
             sx={{ display: 'flex', alignItems: 'center' }}
@@ -1090,7 +1106,7 @@ const AttributeListItem = (
                 {label}
             </Typography>
             <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
-            <IconButton onClick={handle_click} disabled={update == null}>
+            <IconButton onClick={handleClick} disabled={handleClick == null}>
                 {visible ? <VisibilityIcon /> : <VisibilityOffIcon />}
             </IconButton>
         </Paper>
@@ -1104,6 +1120,7 @@ const AttributeList = (
     setProps: (newProps) => void,
     logPPCEvent: (newProps) => void
 ) => {
+    const { order } = ppcState;
     const { tasks, currentTask } = demo;
     const interactionMode = ppcState.interactionMode ? ppcState.interactionMode : InteractionMode.Full;
 
@@ -1113,33 +1130,25 @@ const AttributeList = (
 
     const items = [];
     for (const key in axes) {
+        const orderIndex = order ? order.indexOf(key) : -1;
+        const visible = orderIndex !== -1;
+
         const update = interactionMode == InteractionMode.Compatibility
             || interactionMode == InteractionMode.Full
-            ? (axis: Axis) => {
-                const newAxes = window.structuredClone(axes);
-                newAxes[key] = axis;
-                ppcState.axes = newAxes;
-
-                if (ppcState.order) {
-                    const orderClone = window.structuredClone(ppcState.order);
-                    if (axis.hidden) {
-                        const index = orderClone.indexOf(key);
-                        if (index > -1) {
-                            orderClone.splice(index, 1);
-                        }
-                    } else {
-                        orderClone.push(key);
-                    }
-                    ppcState.order = orderClone;
-                    logPPCEvent({ axes: newAxes, order: orderClone });
+            ? () => {
+                const newOrder = order ? window.structuredClone(order) : [];
+                if (visible) {
+                    newOrder.splice(orderIndex, 1);
                 } else {
-                    logPPCEvent({ axes: newAxes });
+                    newOrder.push(key);
                 }
+                ppcState.order = newOrder;
 
+                logPPCEvent({ order: newOrder });
                 setProps({ ppcState });
             } : null;
         const axis = axes[key];
-        items.push(AttributeListItem(axis, update));
+        items.push(AttributeListItem(visible, axis, update));
     }
 
     return (
@@ -1192,19 +1201,23 @@ const ColorSettings = (
         : Object.keys(ppc.axes)[0];
 
     let colorMode;
-    switch (typeof (colors.selected.color)) {
-        case 'number':
-            colorMode = "constant";
-            break;
-        case 'string':
-            colorMode = "attribute";
-        default:
-            if (typeof (colors.selected.color) == 'object'
-                && colors.selected.color.type === "probability") {
-                colorMode = "probability";
-            }
+    if (colors) {
+        switch (typeof (colors.selected.color)) {
+            case 'number':
+                colorMode = "constant";
+                break;
+            case 'string':
+                colorMode = "attribute";
+            default:
+                if (typeof (colors.selected.color) == 'object'
+                    && colors.selected.color.type === "probability") {
+                    colorMode = "probability";
+                }
+        }
+    } else {
+        colorMode = 'costant';
     }
-    const colorMapValue = colors.selected.scale as string;
+    const colorMapValue = colors ? colors.selected.scale as string : null;
 
     const switchColorBarVisibility = (e, visibility) => {
         ppc.colorBar = visibility;
@@ -1213,7 +1226,9 @@ const ColorSettings = (
     };
 
     const switchColorMode = (e, colorMode) => {
-        const colorsClone = window.structuredClone(colors);
+        const colorsClone = colors ?
+            window.structuredClone(colors)
+            : { selected: { color: 0.5, scale: 'plasma' } };
         switch (colorMode) {
             case "constant":
                 colorsClone.selected.color = constantColorModeValue;
@@ -1231,7 +1246,9 @@ const ColorSettings = (
     };
 
     const setConstantColorValue = (e: Event, value: number) => {
-        const colorsClone = window.structuredClone(colors);
+        const colorsClone = colors ?
+            window.structuredClone(colors)
+            : { selected: { color: 0.5, scale: 'plasma' } };
         colorsClone.selected.color = value;
         ppc.colors = colorsClone;
 
@@ -1242,7 +1259,9 @@ const ColorSettings = (
     };
 
     const setAttributeColorValue = (e, value) => {
-        const colorsClone = window.structuredClone(colors);
+        const colorsClone = colors ?
+            window.structuredClone(colors)
+            : { selected: { color: 0.5, scale: 'plasma' } };
         colorsClone.selected.color = value;
         ppc.colors = colorsClone;
         logPPCEvent({ colors: colorsClone });
@@ -1250,7 +1269,9 @@ const ColorSettings = (
     };
 
     const setColorMap = (e, colorMap) => {
-        const colorsClone = window.structuredClone(colors);
+        const colorsClone = colors ?
+            window.structuredClone(colors)
+            : { selected: { color: 0.5, scale: 'plasma' } };
         colorsClone.selected.scale = colorMap;
         ppc.colors = colorsClone;
         logPPCEvent({ colors: colorsClone });
@@ -1360,31 +1381,31 @@ const ActionsInfo = (ppc: Props) => {
     const actions = [
         {
             icon: <PanToolIcon />, desc: "Move attribute axis", sec: "Left mouse button on axis label",
-            modes_check: (m: InteractionMode) => m != InteractionMode.Disabled
+            modesCheck: (m: InteractionMode) => m != InteractionMode.Disabled
         },
         {
             icon: <AddIcon />, desc: "Create selection", sec: "Left mouse button on empty axis line",
-            modes_check: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
         },
         {
             icon: <DragHandleIcon />, desc: "Move selection", sec: "Left mouse button on selection",
-            modes_check: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
         },
         {
             icon: <DeleteIcon />, desc: "Delete selection", sec: "Left click on selection",
-            modes_check: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
         },
         {
             icon: <OpenInFullIcon />, desc: "Expand/Collapse axis", sec: "Left click on axis label",
-            modes_check: (m: InteractionMode) => m == InteractionMode.Restricted || m == InteractionMode.Full
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Restricted || m == InteractionMode.Full
         },
         {
             icon: <OpenWithIcon />, desc: "Move control point", sec: "Left mouse button on selection control point",
-            modes_check: (m: InteractionMode) => m == InteractionMode.Full
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Full
         },
         {
             icon: <DeleteIcon />, desc: "Delete control point", sec: "Left click on selection control point",
-            modes_check: (m: InteractionMode) => m == InteractionMode.Full
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Full
         },
     ];
 
@@ -1399,7 +1420,7 @@ const ActionsInfo = (ppc: Props) => {
             </AccordionSummary>
             <AccordionDetails>
                 <List dense>
-                    {actions.map((a) => a.modes_check(interactionMode) ? <ListItem>
+                    {actions.map((a) => a.modesCheck(interactionMode) ? <ListItem>
                         <ListItemAvatar>
                             {a.icon}
                         </ListItemAvatar>
@@ -1425,9 +1446,9 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
     const debugShowSelectionsBB = ppc.debug ? ppc.debug.showSelectionsBoundingBox : false;
     const debugShowColorBarBB = ppc.debug ? ppc.debug.showColorBarBoundingBox : false;
 
-    let debug_item = null;
+    let debugItem = null;
     if (demo.showDebugInfo) {
-        debug_item = (
+        debugItem = (
             <Accordion sx={{ width: "100%" }}>
                 <AccordionSummary
                     id="debug-info-header"
@@ -1445,7 +1466,7 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
                     <FormGroup
                         onChange={e => {
                             const element = e.target as HTMLInputElement;
-                            const debug_clone = ppc.debug
+                            const debugClone = ppc.debug
                                 ? window.structuredClone(ppc.debug)
                                 : {
                                     showAxisBoundingBox: false,
@@ -1457,26 +1478,26 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
                                 };
                             switch (element.value) {
                                 case "axis":
-                                    debug_clone.showAxisBoundingBox = !debug_clone.showAxisBoundingBox;
+                                    debugClone.showAxisBoundingBox = !debugClone.showAxisBoundingBox;
                                     break;
                                 case "label":
-                                    debug_clone.showLabelBoundingBox = !debug_clone.showLabelBoundingBox;
+                                    debugClone.showLabelBoundingBox = !debugClone.showLabelBoundingBox;
                                     break;
                                 case "curves":
-                                    debug_clone.showCurvesBoundingBox = !debug_clone.showCurvesBoundingBox;
+                                    debugClone.showCurvesBoundingBox = !debugClone.showCurvesBoundingBox;
                                     break;
                                 case "axis_lines":
-                                    debug_clone.showAxisLineBoundingBox = !debug_clone.showAxisLineBoundingBox;
+                                    debugClone.showAxisLineBoundingBox = !debugClone.showAxisLineBoundingBox;
                                     break;
                                 case "selections":
-                                    debug_clone.showSelectionsBoundingBox = !debug_clone.showSelectionsBoundingBox;
+                                    debugClone.showSelectionsBoundingBox = !debugClone.showSelectionsBoundingBox;
                                     break;
                                 case "colorbar":
-                                    debug_clone.showColorBarBoundingBox = !debug_clone.showColorBarBoundingBox;
+                                    debugClone.showColorBarBoundingBox = !debugClone.showColorBarBoundingBox;
                                     break;
                             }
-                            ppc.debug = debug_clone;
-                            logPPCEvent({ debug: debug_clone });
+                            ppc.debug = debugClone;
+                            logPPCEvent({ debug: debugClone });
                             setProps({ ppcState: ppc });
                         }}
                     >
@@ -1493,7 +1514,7 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
         )
     }
 
-    return debug_item;
+    return debugItem;
 }
 
 const constructTasks = (userGroup: UserGroup) => {
@@ -1512,6 +1533,10 @@ const constructTasks = (userGroup: UserGroup) => {
     tasks.push(tutorial5(userGroup))
 
     tasks.push(tutorialFreeRoam(userGroup));
+
+    tasks.push(taskAdult1(userGroup));
+    tasks.push(taskAdult2(userGroup));
+    tasks.push(taskAdult3(userGroup));
 
     return tasks;
 }
@@ -2199,9 +2224,8 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
             </Stack>);
     }];
 
-    const checkVisible = (axes: { [id: string]: Axis }) => {
-        const a5 = axes["a5"];
-        return !a5.hidden;
+    const checkVisible = (axesOrder: string[]) => {
+        return axesOrder && axesOrder.indexOf('a5') !== -1;
     };
 
     return {
@@ -2230,19 +2254,16 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
                     label: "A4",
                     range: [0, 50],
                     dataPoints: [...Array(100)].map(() => Math.random() * 50),
-                    hidden: true,
                 },
                 "a5": {
                     label: "A5",
                     range: [-10000, 0],
                     dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
-                    hidden: true,
                 },
                 "a6": {
                     label: "A6",
                     range: [0, 10],
                     dataPoints: [...Array(100)].map((v, x) => x / 10),
-                    hidden: true,
                 },
             },
             order: ["a1", "a2", "a3"],
@@ -2261,7 +2282,7 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
             setProps: undefined,
         },
         finalState: null,
-        canContinue: (ppc: Props) => checkVisible(ppc.axes),
+        canContinue: (ppc: Props) => checkVisible(ppc.order),
     };
 }
 
@@ -2311,19 +2332,16 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
                     label: "A4",
                     range: [0, 50],
                     dataPoints: [...Array(100)].map(() => Math.random() * 50),
-                    hidden: true,
                 },
                 "a5": {
                     label: "A5",
                     range: [-10000, 0],
                     dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
-                    hidden: true,
                 },
                 "a6": {
                     label: "A6",
                     range: [0, 10],
                     dataPoints: [...Array(100)].map((v, x) => x / 10),
-                    hidden: true,
                 },
             },
             order: ["a3", "a2", "a1"],
@@ -2351,5 +2369,276 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
         },
         finalState: null,
         canContinue: (ppc: Props) => true
+    };
+}
+
+const taskAdult1 = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For the next couple of tasks, we will look at a subset of
+                    the US Adult Census dataset, which is derived from the
+                    1994 US Census database.
+                    <br />
+                    <br />
+                    The dataset tracks various attributes of multiple people,
+                    including their age, education, race, marital status,
+                    occupation, et cetera, with the aim of predicting whether
+                    someone has an annual income greater than $50,000. For this
+                    task, you will provided with the age, sex, education and
+                    hours worked per week of the people contained in the dataset.
+                    <br />
+                    <br />
+                    During a preliminary analysis of the dataset, we plotted the
+                    distribution of the people with an income greater/lower than
+                    $50,000, for each of the four attributes mentioned prior.
+                    You can see the resulting histograms on the next pages.
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <img src={adultAgeHistogram} style={{ width: "100%", height: "100%" }} />
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <img src={adultSexHistogram} style={{ width: "100%", height: "100%" }} />
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <img src={adultEducationHistogram} style={{ width: "100%", height: "100%" }} />
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <img src={adultHoursPerWeekHistogram} style={{ width: "100%", height: "100%" }} />
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    Given the provided information, select the entries with an
+                    income greater than $50,000. You may not apply any brush directly
+                    to the included <i>Income</i> attribute, but you may use it otherwise.
+                    For the selection, you must try to maximize the number of people
+                    who truly have an income greater than $50,000, while minimizing
+                    the number of people who are wrongly attributed that label.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['age', 'sex', 'education', 'hours-per-week'];
+    const included = ['income'];
+    const initialState = adultDataset(visible, included);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { '>=50K': {} };
+    initialState.activeLabel = '>=50K';
+    initialState.colors = {
+        selected: { scale: 'plasma', color: 0.5 }
+    }
+
+    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
+        if (!brushes) {
+            return false;
+        }
+
+        let hasBrushed = false;
+        for (const [_, labelBrushes] of Object.entries(brushes)) {
+            if ('income' in labelBrushes) {
+                return false;
+            }
+            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
+        }
+
+        return hasBrushed;
+    }
+
+    return {
+        name: "Filter by income.",
+        shortDescription: "Select the persons with an income greater than 50K.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
+    };
+}
+
+const taskAdult2 = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    Next, you are tasked with determining the native country males,
+                    which is represented the fewest in the US Adult Census dataset.
+                    <br />
+                    <br />
+                    To that effect, you are provided with a distribution, describing
+                    the education level of the people recorded in the census.
+                </DialogContentText>
+                <img src={adultEducationDistribution} style={{ width: "100%", height: "100%" }} />
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    To complete the task, you must input your answer on the top right.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you completed
+                    the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['native-country', 'sex', 'education'];
+    const initialState = adultDataset(visible, []);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'plasma', color: 0.5 }
+    }
+
+    const taskInput = (props: { task: DemoTask, forceUpdate: () => void }) => {
+        const { task, forceUpdate } = props;
+
+        const handleChange = (e) => {
+            const nativeCountry = e.target.value as string;
+            task.taskResult = nativeCountry;
+            forceUpdate();
+        }
+
+        const countries = initialState.axes['native-country'].tickLabels;
+        const countryItems = countries.map((v) => <MenuItem value={v}>{v}</MenuItem>)
+
+        return (
+            <>
+                <Typography variant='h6' marginTop={2}>Result</Typography>
+                <FormControl>
+                    <InputLabel id="native-country-label">Native country</InputLabel>
+                    <Select
+                        labelId="native-country-label"
+                        id="native-country-select"
+                        value={task.taskResult}
+                        label="Native country"
+                        onChange={handleChange}
+                    >
+                        {countryItems}
+                    </Select>
+                </FormControl>
+            </>
+        )
+    }
+
+    const checkCompleted = (task: DemoTask) => {
+        return task.taskResult !== undefined;
+    }
+
+    return {
+        name: "Least represented country.",
+        shortDescription: "Determine the native country least represented by the male demographic.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResultInput: taskInput,
+        canContinue: (_: Props, task: DemoTask) => checkCompleted(task)
+    };
+}
+
+const taskAdult3 = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === "PC"
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    From which country do the oldest female people originate from?
+                    Determine the answer, and input it in the top right.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you completed
+                    the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['native-country', 'sex', 'age'];
+    const initialState = adultDataset(visible, []);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'plasma', color: 0.5 }
+    }
+
+    const taskInput = (props: { task: DemoTask, forceUpdate: () => void }) => {
+        const { task, forceUpdate } = props;
+
+        const handleChange = (e) => {
+            const nativeCountry = e.target.value as string;
+            task.taskResult = nativeCountry;
+            forceUpdate();
+        }
+
+        const countries = initialState.axes['native-country'].tickLabels;
+        const countryItems = countries.map((v) => <MenuItem value={v}>{v}</MenuItem>)
+
+        return (
+            <>
+                <Typography variant='h6' marginTop={2}>Result</Typography>
+                <FormControl>
+                    <InputLabel id="native-country-label">Native country</InputLabel>
+                    <Select
+                        labelId="native-country-label"
+                        id="native-country-select"
+                        value={task.taskResult}
+                        label="Native country"
+                        onChange={handleChange}
+                    >
+                        {countryItems}
+                    </Select>
+                </FormControl>
+            </>
+        )
+    }
+
+    const checkCompleted = (task: DemoTask) => {
+        return task.taskResult !== undefined;
+    }
+
+    return {
+        name: "Oldest native country.",
+        shortDescription: "Determine the native country, where the oldest members of the female demographic originate from.",
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResultInput: taskInput,
+        canContinue: (_: Props, task: DemoTask) => checkCompleted(task)
     };
 }
