@@ -142,6 +142,7 @@ impl Renderer {
         callback: js_sys::Function,
         canvas_gpu: web_sys::HtmlCanvasElement,
         canvas_2d: web_sys::HtmlCanvasElement,
+        power_profile: wasm_bridge::PowerProfile,
     ) -> Self {
         console_error_panic_hook::set_once();
 
@@ -152,7 +153,22 @@ impl Renderer {
         }
         let gpu = navigator.gpu();
 
-        let adapter = match wasm_bindgen_futures::JsFuture::from(gpu.request_adapter()).await {
+        let mut adapter_options = web_sys::GpuRequestAdapterOptions::new();
+        match power_profile {
+            wasm_bridge::PowerProfile::Auto => {}
+            wasm_bridge::PowerProfile::Low => {
+                adapter_options.power_preference(web_sys::GpuPowerPreference::LowPower);
+            }
+            wasm_bridge::PowerProfile::High => {
+                adapter_options.power_preference(web_sys::GpuPowerPreference::HighPerformance);
+            }
+        }
+
+        let adapter = match wasm_bindgen_futures::JsFuture::from(
+            gpu.request_adapter_with_options(&adapter_options),
+        )
+        .await
+        {
             Ok(adapter) => {
                 if adapter.is_falsy() {
                     panic!("Could not request gpu adapter.");

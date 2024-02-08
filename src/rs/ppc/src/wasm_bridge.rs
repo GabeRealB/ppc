@@ -13,6 +13,14 @@ use crate::{
     selection,
 };
 
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PowerProfile {
+    Auto,
+    Low,
+    High,
+}
+
 #[derive(Debug)]
 #[wasm_bindgen]
 pub struct AxisDef {

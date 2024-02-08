@@ -1,5 +1,7 @@
 import { DashComponentProps } from "./props";
 
+export type PowerProfile = 'auto' | 'low' | 'high'
+
 export type ColorSpace = "srgb" | "xyz" | "cie_lab" | "cie lch";
 
 export type Color = {
@@ -139,4 +141,12 @@ export type Props = {
      * Debug options.
      */
     debug?: DebugOptions,
+    /**
+     * Power profile of the gpu device.
+     * 
+     * Setting it to 'high' may lead to better performance
+     * on mobile devices, at the cost of a higher battery
+     * consumption.
+     */
+    powerProfile?: PowerProfile,
 } & DashComponentProps;

@@ -84,7 +84,7 @@ interface Message {
  * Component description
  */
 const PPC = (props: Props) => {
-    const { id } = props;
+    const { id, powerProfile } = props;
     const canvasGPURef = useRef<HTMLCanvasElement>(null);
     const canvas2DRef = useRef<HTMLCanvasElement>(null);
 
@@ -97,6 +97,7 @@ const PPC = (props: Props) => {
         async function eventLoop() {
             const {
                 Renderer,
+                PowerProfile,
                 AxisDef,
                 AxisTicksDef,
                 Element,
@@ -117,7 +118,20 @@ const PPC = (props: Props) => {
                 rx.postMessage({ events });
             };
 
-            const renderer = await new Renderer(callback, canvasGPU, canvas2D);
+            let profile = PowerProfile.Auto;
+            switch (powerProfile) {
+                case 'low':
+                    profile = PowerProfile.Low;
+                    break;
+                case 'high':
+                    profile = PowerProfile.High;
+                    break;
+                case 'auto':
+                default:
+                    profile = PowerProfile.Auto;
+            }
+
+            const renderer = await new Renderer(callback, canvasGPU, canvas2D, profile);
             const queue = renderer.constructEventQueue();
 
             let rendererState = {

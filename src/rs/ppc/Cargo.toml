@@ -30,6 +30,8 @@ features = [
     "Navigator",
     "Gpu",
     "GpuAdapter",
+    "GpuRequestAdapterOptions",
+    "GpuPowerPreference",
     "GpuDevice",
     "GpuCanvasContext",
     "GpuTextureFormat",

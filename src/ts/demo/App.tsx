@@ -1610,6 +1610,7 @@ const tutorial1 = (): DemoTask => {
             },
             colorBar: "hidden",
             interactionMode: InteractionMode.RestrictedCompatibility,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -1740,6 +1741,7 @@ const tutorial2 = (): DemoTask => {
             },
             colorBar: "hidden",
             interactionMode: InteractionMode.Compatibility,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -1890,6 +1892,7 @@ const tutorial2A = (): DemoTask => {
             },
             colorBar: "hidden",
             interactionMode: InteractionMode.Full,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -1973,6 +1976,7 @@ const tutorial2B = (): DemoTask => {
                 }
             },
             interactionMode: InteractionMode.Full,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -2096,6 +2100,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                 }
             },
             interactionMode,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -2189,6 +2194,7 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
             },
             colorBar: "hidden",
             interactionMode,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -2279,6 +2285,7 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
             },
             colorBar: "hidden",
             interactionMode,
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -2365,6 +2372,7 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
                 showSelectionsBoundingBox: false,
                 showColorBarBoundingBox: false,
             },
+            powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
@@ -2452,7 +2460,8 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
     initialState.activeLabel = '>=50K';
     initialState.colors = {
         selected: { scale: 'plasma', color: 0.5 }
-    }
+    };
+    initialState.powerProfile = 'high';
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
@@ -2520,7 +2529,8 @@ const taskAdult2 = (userGroup: UserGroup): DemoTask => {
     initialState.activeLabel = 'Default';
     initialState.colors = {
         selected: { scale: 'plasma', color: 0.5 }
-    }
+    };
+    initialState.powerProfile = 'high';
 
     const taskInput = (props: { task: DemoTask, forceUpdate: () => void }) => {
         const { task, forceUpdate } = props;
@@ -2595,7 +2605,8 @@ const taskAdult3 = (userGroup: UserGroup): DemoTask => {
     initialState.activeLabel = 'Default';
     initialState.colors = {
         selected: { scale: 'plasma', color: 0.5 }
-    }
+    };
+    initialState.powerProfile = 'high';
 
     const taskInput = (props: { task: DemoTask, forceUpdate: () => void }) => {
         const { task, forceUpdate } = props;
