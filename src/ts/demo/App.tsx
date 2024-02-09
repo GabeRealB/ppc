@@ -1162,17 +1162,6 @@ const AttributeList = (
             </AccordionSummary>
             <AccordionDetails>
                 <Stack width={"100%"} spacing={1}>
-                    <Container>
-                        <Button
-                            variant="contained"
-                            startIcon={<InfoIcon />}
-                            sx={{ width: "95%" }}
-                        >
-                            Dataset
-                        </Button>
-                    </Container>
-                    <div />
-
                     {items}
                 </Stack>
             </AccordionDetails>
