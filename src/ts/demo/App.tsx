@@ -43,6 +43,7 @@ import Select from '@mui/material/Select';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Rating from '@mui/material/Rating';
+import Input from '@mui/material/Input';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import HelpIcon from '@mui/icons-material/Help';
@@ -1041,6 +1042,13 @@ const LabelsView = (
         setProps({ ppcState: ppc })
     };
 
+    const handleEnter = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && canAddLabel) {
+            createNewLabel(e);
+            e.preventDefault();
+        }
+    }
+
     return (
         <Box width={"100%"}>
             <Typography variant='h5'>Labels</Typography>
@@ -1059,6 +1067,7 @@ const LabelsView = (
                             placeholder="New label name"
                             value={labelName}
                             onChange={handleLabelNameChanged}
+                            onKeyDown={handleEnter}
                         />
                         <IconButton
                             type="button"
