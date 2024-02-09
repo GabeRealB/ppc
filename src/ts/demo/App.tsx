@@ -74,12 +74,6 @@ import colorsInstr from './resources/colors_instr.mp4'
 import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
 import attributesInstr from './resources/attributes_instr.mp4'
 
-import adultAgeHistogram from './resources/adult-age.png'
-import adultEducationHistogram from './resources/adult-education.png'
-import adultHoursPerWeekHistogram from './resources/adult-hours-per-week.png'
-import adultSexHistogram from './resources/adult-sex.png'
-import adultEducationDistribution from './resources/adult-education-distribution.png'
-
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
@@ -104,6 +98,8 @@ type DemoTask = {
 };
 
 type UserGroup = "PC" | "PPC";
+
+type TaskMode = 'Full' | 'Tutorial' | 'Eval'
 
 type DemoPage = "welcome"
     | "demo1"
@@ -180,6 +176,10 @@ class App extends Component<any, AppState> {
         const searchParams = new URLSearchParams(window.location.search);
         const debugMode = searchParams.has("debug");
         const dryRun = searchParams.has("dryRun");
+        let taskMode = searchParams.get("taskMode");
+        if (!['Full', 'Tutorial', 'Eval'].includes(taskMode)) {
+            taskMode = 'Full' as TaskMode;
+        }
         let userGroup = searchParams.get("userGroup");
         if (userGroup !== "PC" && userGroup !== "PPC") {
             userGroup = Math.random() < 0.5 ? "PC" : "PPC";
@@ -188,7 +188,7 @@ class App extends Component<any, AppState> {
         const deadline = new Date(2024, 2, 31);
         const deadlinePassed = Date.now() > deadline.getTime();
 
-        const tasks = constructTasks(userGroup as UserGroup);
+        const tasks = constructTasks(userGroup as UserGroup, taskMode as TaskMode);
         const ppc = window.structuredClone(tasks[0].initialState);
         ppc.setProps = this.setPPCProps;
 
@@ -1517,26 +1517,28 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
     return debugItem;
 }
 
-const constructTasks = (userGroup: UserGroup) => {
-    const tasks = [
-        tutorial1(),
-        tutorial2(),
-    ];
+const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
+    const tasks = [];
 
-    if (userGroup === "PPC") {
-        tasks.push(tutorial2A());
-        tasks.push(tutorial2B());
+    if (taskMode === 'Full' || taskMode === 'Tutorial') {
+        tasks.push(tutorial1());
+        tasks.push(tutorial2());
+
+        if (userGroup === "PPC") {
+            tasks.push(tutorial2A());
+            tasks.push(tutorial2B());
+        }
+
+        tasks.push(tutorial3(userGroup))
+        tasks.push(tutorial4(userGroup))
+        tasks.push(tutorial5(userGroup))
+
+        tasks.push(tutorialFreeRoam(userGroup));
     }
 
-    tasks.push(tutorial3(userGroup))
-    tasks.push(tutorial4(userGroup))
-    tasks.push(tutorial5(userGroup))
-
-    tasks.push(tutorialFreeRoam(userGroup));
-
-    tasks.push(taskAdult1(userGroup));
-    tasks.push(taskAdult2(userGroup));
-    tasks.push(taskAdult3(userGroup));
+    if (taskMode === 'Full' || taskMode === 'Eval') {
+        tasks.push(taskAdult(userGroup));
+    }
 
     return tasks;
 }
@@ -2380,7 +2382,7 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
     };
 }
 
-const taskAdult1 = (userGroup: UserGroup): DemoTask => {
+const taskAdult = (userGroup: UserGroup): DemoTask => {
     const interactionMode = userGroup === "PC"
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
@@ -2389,9 +2391,9 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
         return (
             <>
                 <DialogContentText>
-                    For the next couple of tasks, we will look at a subset of
-                    the US Adult Census dataset, which is derived from the
-                    1994 US Census database.
+                    For the next task, we will look at a subset of the US
+                    Adult Census dataset, which is derived from the 1994
+                    US Census database.
                     <br />
                     <br />
                     The dataset tracks various attributes of multiple people,
@@ -2401,37 +2403,7 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
                     task, you will provided with the age, sex, education and
                     hours worked per week of 5000 random people contained in
                     the dataset.
-                    <br />
-                    <br />
-                    During a preliminary analysis of the dataset, we plotted the
-                    distribution of the people with an income greater/lower than
-                    $50,000, for each of the four attributes mentioned prior.
-                    You can see the resulting histograms on the next pages.
                 </DialogContentText>
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <img src={adultAgeHistogram} style={{ width: "100%", height: "100%" }} />
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <img src={adultSexHistogram} style={{ width: "100%", height: "100%" }} />
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <img src={adultEducationHistogram} style={{ width: "100%", height: "100%" }} />
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <img src={adultHoursPerWeekHistogram} style={{ width: "100%", height: "100%" }} />
             </>);
     },
     () => {
@@ -2441,9 +2413,11 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
                     Given the provided information, select the entries with an
                     income greater than $50,000. You may not apply any brush directly
                     to the included <i>Income</i> attribute, but you may use it otherwise.
-                    For the selection, you must try to maximize the number of people
-                    who truly have an income greater than $50,000, while minimizing
-                    the number of people who are wrongly attributed that label.
+                    You may estimate the distribution of an attribute by changing the color
+                    mode to encode the value of said attribute. For the selection, you must
+                    try to maximize the number of people who truly have an income greater
+                    than $50,000, while minimizing the number of people who are wrongly
+                    attributed that label.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2487,170 +2461,5 @@ const taskAdult1 = (userGroup: UserGroup): DemoTask => {
         initialState,
         finalState: null,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
-    };
-}
-
-const taskAdult2 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                    Next, you are tasked with determining the native country males,
-                    which is represented the fewest in the US Adult Census dataset.
-                    <br />
-                    <br />
-                    To that effect, you are provided with a distribution, describing
-                    the education level of the people recorded in the census.
-                </DialogContentText>
-                <img src={adultEducationDistribution} style={{ width: "100%", height: "100%" }} />
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <DialogContentText>
-                    To complete the task, you must input your answer on the top right.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right, once you completed
-                    the task.
-                </DialogContentText>
-            </>);
-    }];
-
-    const visible = ['native-country', 'sex', 'education'];
-    const initialState = adultDataset(visible, [], 5000);
-    initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Default': {} };
-    initialState.activeLabel = 'Default';
-    initialState.colors = {
-        selected: { scale: 'plasma', color: 0.5 }
-    };
-    initialState.powerProfile = 'high';
-
-    const taskInput = (props: { task: DemoTask, forceUpdate: () => void }) => {
-        const { task, forceUpdate } = props;
-
-        const handleChange = (e) => {
-            const nativeCountry = e.target.value as string;
-            task.taskResult = nativeCountry;
-            forceUpdate();
-        }
-
-        const countries = initialState.axes['native-country'].tickLabels;
-        const countryItems = countries.map((v) => <MenuItem value={v}>{v}</MenuItem>)
-
-        return (
-            <>
-                <Typography variant='h6' marginTop={2}>Result</Typography>
-                <FormControl>
-                    <InputLabel id="native-country-label">Native country</InputLabel>
-                    <Select
-                        labelId="native-country-label"
-                        id="native-country-select"
-                        value={task.taskResult}
-                        label="Native country"
-                        onChange={handleChange}
-                    >
-                        {countryItems}
-                    </Select>
-                </FormControl>
-            </>
-        )
-    }
-
-    const checkCompleted = (task: DemoTask) => {
-        return task.taskResult !== undefined;
-    }
-
-    return {
-        name: "Least represented country.",
-        shortDescription: "Determine the native country least represented by the male demographic.",
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        taskResultInput: taskInput,
-        canContinue: (_: Props, task: DemoTask) => checkCompleted(task)
-    };
-}
-
-const taskAdult3 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                    From which country do the oldest female people originate from?
-                    Determine the answer, and input it in the top right.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right, once you completed
-                    the task.
-                </DialogContentText>
-            </>);
-    }];
-
-    const visible = ['native-country', 'sex', 'age'];
-    const initialState = adultDataset(visible, [], 5000);
-    initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Default': {} };
-    initialState.activeLabel = 'Default';
-    initialState.colors = {
-        selected: { scale: 'plasma', color: 0.5 }
-    };
-    initialState.powerProfile = 'high';
-
-    const taskInput = (props: { task: DemoTask, forceUpdate: () => void }) => {
-        const { task, forceUpdate } = props;
-
-        const handleChange = (e) => {
-            const nativeCountry = e.target.value as string;
-            task.taskResult = nativeCountry;
-            forceUpdate();
-        }
-
-        const countries = initialState.axes['native-country'].tickLabels;
-        const countryItems = countries.map((v) => <MenuItem value={v}>{v}</MenuItem>)
-
-        return (
-            <>
-                <Typography variant='h6' marginTop={2}>Result</Typography>
-                <FormControl>
-                    <InputLabel id="native-country-label">Native country</InputLabel>
-                    <Select
-                        labelId="native-country-label"
-                        id="native-country-select"
-                        value={task.taskResult}
-                        label="Native country"
-                        onChange={handleChange}
-                    >
-                        {countryItems}
-                    </Select>
-                </FormControl>
-            </>
-        )
-    }
-
-    const checkCompleted = (task: DemoTask) => {
-        return task.taskResult !== undefined;
-    }
-
-    return {
-        name: "Oldest native country.",
-        shortDescription: "Determine the native country, where the oldest members of the female demographic originate from.",
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        taskResultInput: taskInput,
-        canContinue: (_: Props, task: DemoTask) => checkCompleted(task)
     };
 }
