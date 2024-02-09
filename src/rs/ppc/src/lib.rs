@@ -574,7 +574,7 @@ impl Renderer {
 
         for ax in guard.visible_axes() {
             let world_mapper = ax.space_transformer();
-            let (ticks_start, ticks_end) = ax.ticks_range();
+            let (ticks_start, ticks_end) = ax.ticks_range(false);
             for (t, tick) in ax.ticks() {
                 let position = ticks_start.lerp(ticks_end, *t);
                 let position = position.transform(&world_mapper);
@@ -582,6 +582,18 @@ impl Renderer {
                 let (x, y) = position.extract();
 
                 self.context_2d.fill_text(tick, x as f64, y as f64).unwrap();
+            }
+
+            if ax.is_expanded() {
+                let (ticks_start_exp, ticks_end_exp) = ax.ticks_range(true);
+                for (t, tick) in ax.ticks() {
+                    let position = ticks_start_exp.lerp(ticks_end_exp, *t);
+                    let position = position.transform(&world_mapper);
+                    let position = position.transform(&screen_mapper);
+                    let (x, y) = position.extract();
+
+                    self.context_2d.fill_text(tick, x as f64, y as f64).unwrap();
+                }
             }
         }
 

@@ -681,10 +681,10 @@ impl Axis {
         Position::new((end.x, end.y + label_margin.0 + max_label_height.0))
     }
 
-    pub fn ticks_range(&self) -> (Position<LocalSpace>, Position<LocalSpace>) {
+    pub fn ticks_range(&self, expanded: bool) -> (Position<LocalSpace>, Position<LocalSpace>) {
         let (start, end) = self.axis_line_range();
 
-        let (start, end) = if self.is_expanded() {
+        let (start, end) = if expanded {
             let extends = self.curves_bounding_box();
             let (_, start_y) = start.extract();
             let (_, end_y) = end.extract();
