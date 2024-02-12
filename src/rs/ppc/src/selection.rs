@@ -90,10 +90,6 @@ impl SelectionCurveBuilder {
         self.rebuild_selection_infos();
     }
 
-    pub fn get_selection(&self, index: usize) -> &Selection {
-        &self.selections[index]
-    }
-
     pub fn add_selection(&mut self, selection: Selection) {
         self.selections.push(selection);
         self.rebuild_selection_infos();
@@ -114,20 +110,17 @@ impl SelectionCurveBuilder {
         &self.selections
     }
 
-    pub fn get_selection_control_points(&self) -> Box<[(usize, f32)]> {
+    pub fn get_selection_control_points(&self) -> Box<[(usize, Vec<f32>)]> {
         let mut control_points = Vec::new();
         for (info, selection) in self.selection_infos.iter().zip(&self.selections) {
             let rank = info.rank;
-            for segment in &selection.segments {
-                match segment {
-                    SelectionSegment::Primary { range, .. } => {
-                        control_points.extend([(rank, range[0]), (rank, range[1])])
-                    }
-                    SelectionSegment::EasingLeft { end_pos, .. }
-                    | SelectionSegment::EasingRight { end_pos, .. } => {
-                        control_points.push((rank, *end_pos))
-                    }
-                }
+            let mut cp = Vec::new();
+            for &(x, _) in selection.control_points() {
+                cp.push(x);
+            }
+
+            if !cp.is_empty() {
+                control_points.push((rank, cp));
             }
         }
 
@@ -138,38 +131,14 @@ impl SelectionCurveBuilder {
         let mut control_points = Vec::new();
         for selection in &self.selections {
             let mut cp = Vec::new();
-            for segment in &selection.segments {
-                match segment {
-                    SelectionSegment::Primary { range, values } => {
-                        cp.push([range[0], values[0]]);
-                        cp.push([range[1], values[1]])
-                    }
-                    SelectionSegment::EasingLeft {
-                        end_pos, end_value, ..
-                    }
-                    | SelectionSegment::EasingRight {
-                        end_pos, end_value, ..
-                    } => {
-                        cp.push([*end_pos, *end_value]);
-                    }
-                }
+            for &control_point in selection.control_points() {
+                cp.push(control_point.into());
             }
             if !cp.is_empty() {
                 control_points.push(cp);
             }
         }
         control_points.into()
-    }
-
-    pub fn get_selection_containing(&self, value: f32, rank: usize) -> Option<usize> {
-        self.selection_infos
-            .iter()
-            .enumerate()
-            .filter(|&(_, info)| {
-                info.rank == rank && (info.range[0]..=info.range[1]).contains(&value)
-            })
-            .map(|(i, _)| i)
-            .next()
     }
 
     pub fn get_group_containing(&self, value: f32) -> Option<usize> {
@@ -371,43 +340,42 @@ impl SelectionInfo {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Selection {
     primary_segment_idx: usize,
-    segments: Vec<SelectionSegment>,
+    control_points: Vec<(f32, f32)>,
+    // segments: Vec<SelectionSegment>,
 }
 
 impl Selection {
     pub fn new(start: [f32; 2], end: [f32; 2]) -> Self {
-        if start[1] > end[1] {
+        if start[0] > end[0] {
             panic!("invalid selection range")
         }
 
-        if !(0.0..=1.0).contains(&start[0]) || !(0.0..=1.0).contains(&end[0]) {
+        if !(0.0..=1.0).contains(&start[1]) || !(0.0..=1.0).contains(&end[1]) {
             panic!("invalid probability for selection")
         }
 
         Self {
             primary_segment_idx: 0,
-            segments: vec![SelectionSegment::Primary {
-                range: [start[0], end[0]],
-                values: [start[1], end[1]],
-            }],
+            control_points: vec![start.into(), end.into()],
         }
     }
 
-    pub fn from_segments(segments: Vec<SelectionSegment>, primary_segment: usize) -> Self {
+    pub fn from_control_points(control_points: Vec<(f32, f32)>, primary_segment: usize) -> Self {
+        assert!(primary_segment < control_points.len());
         Self {
             primary_segment_idx: primary_segment,
-            segments,
+            control_points,
         }
     }
 
     pub fn segment_containing(&self, value: f32) -> Option<usize> {
-        (0..self.segments.len())
+        (0..self.num_segments())
             .find(|&i| self.lower_bound(i) <= value && self.upper_bound(i) >= value)
     }
 
     pub fn get_selection_range(&self) -> [f32; 2] {
-        let start = self.lower_bound(0);
-        let end = self.upper_bound(self.segments.len() - 1);
+        let start = self.control_point_x(0);
+        let end = self.control_point_x(self.num_control_points() - 1);
 
         [start, end]
     }
@@ -421,175 +389,141 @@ impl Selection {
     }
 
     pub fn num_segments(&self) -> usize {
-        self.segments.len()
+        self.control_points.len() - 1
+    }
+
+    pub fn num_control_points(&self) -> usize {
+        self.control_points.len()
     }
 
     pub fn primary_segment_idx(&self) -> usize {
         self.primary_segment_idx
     }
 
-    pub fn lower_bound(&self, segment_idx: usize) -> f32 {
-        match &self.segments[segment_idx] {
-            SelectionSegment::Primary { range, .. } => range[0],
-            SelectionSegment::EasingLeft { end_pos, .. } => *end_pos,
-            SelectionSegment::EasingRight { .. } => match &self.segments[segment_idx - 1] {
-                SelectionSegment::Primary { range, .. } => range[1],
-                SelectionSegment::EasingLeft { .. } => unreachable!(),
-                SelectionSegment::EasingRight { end_pos, .. } => *end_pos,
-            },
+    pub fn control_point(&self, control_point_idx: usize) -> (f32, f32) {
+        self.control_points[control_point_idx]
+    }
+
+    pub fn control_points(&self) -> &[(f32, f32)] {
+        &self.control_points
+    }
+
+    pub fn control_point_x(&self, control_point_idx: usize) -> f32 {
+        let (x, _) = self.control_point(control_point_idx);
+        x
+    }
+
+    pub fn set_control_point_x(&mut self, control_point_idx: usize, mut bound: f32) {
+        if control_point_idx != 0 {
+            bound = bound.max(self.control_point_x(control_point_idx - 1));
         }
+        if control_point_idx < self.num_control_points() - 1 {
+            bound = bound.min(self.control_point_x(control_point_idx + 1));
+        }
+        self.control_points[control_point_idx].0 = bound;
+    }
+
+    pub fn control_point_y(&self, control_point_idx: usize) -> f32 {
+        let (_, y) = self.control_point(control_point_idx);
+        y
+    }
+
+    pub fn set_control_point_y(&mut self, control_point_idx: usize, mut value: f32) {
+        value = value.clamp(0.0, 1.0);
+        self.control_points[control_point_idx].1 = value;
+    }
+
+    pub fn lower_bound(&self, segment_idx: usize) -> f32 {
+        self.control_point_x(segment_idx)
     }
 
     pub fn set_lower_bound(&mut self, segment_idx: usize, bound: f32) {
-        let mut bound = bound.min(self.upper_bound(segment_idx));
-        if segment_idx != 0 {
-            bound = bound.max(self.lower_bound(segment_idx - 1));
-        }
-
-        match &mut self.segments[segment_idx] {
-            SelectionSegment::Primary { range, .. } => range[0] = bound,
-            SelectionSegment::EasingLeft { end_pos, .. } => *end_pos = bound,
-            SelectionSegment::EasingRight { .. } => match &mut self.segments[segment_idx - 1] {
-                SelectionSegment::Primary { range, .. } => range[1] = bound,
-                SelectionSegment::EasingLeft { .. } => unreachable!(),
-                SelectionSegment::EasingRight { end_pos, .. } => *end_pos = bound,
-            },
-        }
+        self.set_control_point_x(segment_idx, bound)
     }
 
     pub fn lower_value(&self, segment_idx: usize) -> f32 {
-        match &self.segments[segment_idx] {
-            SelectionSegment::Primary { values, .. } => values[0],
-            SelectionSegment::EasingLeft { end_value, .. } => *end_value,
-            SelectionSegment::EasingRight { .. } => match &self.segments[segment_idx - 1] {
-                SelectionSegment::Primary { values, .. } => values[1],
-                SelectionSegment::EasingLeft { .. } => unreachable!(),
-                SelectionSegment::EasingRight { end_value, .. } => *end_value,
-            },
-        }
+        self.control_point_y(segment_idx)
     }
 
     pub fn set_lower_value(&mut self, segment_idx: usize, value: f32) {
-        let value = value.clamp(0.0, 1.0);
-        match &mut self.segments[segment_idx] {
-            SelectionSegment::Primary { values, .. } => values[0] = value,
-            SelectionSegment::EasingLeft { end_value, .. } => *end_value = value,
-            SelectionSegment::EasingRight { .. } => match &mut self.segments[segment_idx - 1] {
-                SelectionSegment::Primary { values, .. } => values[1] = value,
-                SelectionSegment::EasingLeft { .. } => unreachable!(),
-                SelectionSegment::EasingRight { end_value, .. } => *end_value = value,
-            },
-        }
+        self.set_control_point_y(segment_idx, value)
     }
 
     pub fn upper_bound(&self, segment_idx: usize) -> f32 {
-        match &self.segments[segment_idx] {
-            SelectionSegment::Primary { range, .. } => range[1],
-            SelectionSegment::EasingLeft { .. } => match &self.segments[segment_idx + 1] {
-                SelectionSegment::Primary { range, .. } => range[0],
-                SelectionSegment::EasingLeft { end_pos, .. } => *end_pos,
-                SelectionSegment::EasingRight { .. } => unreachable!(),
-            },
-            SelectionSegment::EasingRight { end_pos, .. } => *end_pos,
-        }
+        self.control_point_x(segment_idx + 1)
     }
 
     pub fn set_upper_bound(&mut self, segment_idx: usize, bound: f32) {
-        let mut bound = bound.max(self.lower_bound(segment_idx));
-        if segment_idx != self.segments.len() - 1 {
-            bound = bound.min(self.upper_bound(segment_idx + 1));
-        }
-
-        match &mut self.segments[segment_idx] {
-            SelectionSegment::Primary { range, .. } => range[1] = bound,
-            SelectionSegment::EasingLeft { .. } => match &mut self.segments[segment_idx + 1] {
-                SelectionSegment::Primary { range, .. } => range[0] = bound,
-                SelectionSegment::EasingLeft { end_pos, .. } => *end_pos = bound,
-                SelectionSegment::EasingRight { .. } => unreachable!(),
-            },
-            SelectionSegment::EasingRight { end_pos, .. } => *end_pos = bound,
-        }
+        self.set_control_point_x(segment_idx + 1, bound)
     }
 
     pub fn upper_value(&self, segment_idx: usize) -> f32 {
-        match &self.segments[segment_idx] {
-            SelectionSegment::Primary { values, .. } => values[1],
-            SelectionSegment::EasingLeft { .. } => match &self.segments[segment_idx + 1] {
-                SelectionSegment::Primary { values, .. } => values[0],
-                SelectionSegment::EasingLeft { end_value, .. } => *end_value,
-                SelectionSegment::EasingRight { .. } => unreachable!(),
-            },
-            SelectionSegment::EasingRight { end_value, .. } => *end_value,
-        }
+        self.control_point_y(segment_idx + 1)
     }
 
     pub fn set_upper_value(&mut self, segment_idx: usize, value: f32) {
-        let value = value.clamp(0.0, 1.0);
-        match &mut self.segments[segment_idx] {
-            SelectionSegment::Primary { values, .. } => values[1] = value,
-            SelectionSegment::EasingLeft { .. } => match &mut self.segments[segment_idx + 1] {
-                SelectionSegment::Primary { values, .. } => values[0] = value,
-                SelectionSegment::EasingLeft { end_value, .. } => *end_value = value,
-                SelectionSegment::EasingRight { .. } => unreachable!(),
-            },
-            SelectionSegment::EasingRight { end_value, .. } => *end_value = value,
-        }
+        self.set_control_point_y(segment_idx + 1, value)
     }
 
-    pub fn remove_segment(&mut self, segment_idx: usize) {
-        assert_ne!(
-            segment_idx, self.primary_segment_idx,
-            "can not remove primary segment"
-        );
-
-        if segment_idx < self.primary_segment_idx {
+    pub fn remove_control_point(&mut self, control_point_idx: usize) {
+        if control_point_idx <= self.primary_segment_idx {
             self.primary_segment_idx -= 1;
         }
-        self.segments.remove(segment_idx);
+        self.control_points.remove(control_point_idx);
     }
 
-    pub fn insert_segment(&mut self, segment_idx: usize) {
-        if segment_idx <= self.primary_segment_idx {
-            let end_pos = self.lower_bound(segment_idx);
-            let end_value = if segment_idx == 0 {
-                0.0
+    pub fn insert_control_point(&mut self, x: f32, direction: Direction) -> usize {
+        let (idx, y) = if let Some(segment) = self.segment_containing(x) {
+            if x == self.control_point_x(segment) && direction == Direction::Down {
+                if segment == 0 {
+                    (0, 0.0)
+                } else {
+                    let segment = segment - 1;
+                    let y1 = self.control_point_y(segment);
+                    let y2 = self.control_point_y(segment + 1);
+                    let y = (y1 + y2) / 2.0;
+                    (segment + 1, y)
+                }
+            } else if x == self.control_point_x(segment + 1) && direction == Direction::Up {
+                if segment == self.num_segments() - 1 {
+                    (self.num_control_points(), 0.0)
+                } else {
+                    let segment = segment + 1;
+                    let y1 = self.control_point_y(segment);
+                    let y2 = self.control_point_y(segment + 1);
+                    let y = (y1 + y2) / 2.0;
+                    (segment + 1, y)
+                }
             } else {
-                (self.lower_value(segment_idx) + self.lower_value(segment_idx - 1)) / 2.0
-            };
-
-            self.primary_segment_idx += 1;
-            self.segments.insert(
-                segment_idx,
-                SelectionSegment::EasingLeft { end_pos, end_value },
-            );
+                let y1 = self.control_point_y(segment);
+                let y2 = self.control_point_y(segment + 1);
+                let y = (y1 + y2) / 2.0;
+                (segment + 1, y)
+            }
+        } else if x < self.get_selection_range()[0] {
+            (0, 0.0)
         } else {
-            let end_pos = self.upper_bound(segment_idx - 1);
-            let end_value = if segment_idx == self.segments.len() {
-                0.0
-            } else {
-                (self.upper_value(segment_idx) + self.upper_value(segment_idx - 1)) / 2.0
-            };
+            (self.num_control_points(), 0.0)
+        };
 
-            self.segments.insert(
-                segment_idx,
-                SelectionSegment::EasingRight { end_pos, end_value },
-            );
+        if idx != self.primary_segment_idx + 1 {
+            if idx <= self.primary_segment_idx {
+                self.primary_segment_idx += 1;
+            }
+            self.control_points.insert(idx, (x, y));
+        } else {
+            if direction == Direction::Up {
+                self.primary_segment_idx += 1;
+            }
+            self.control_points.insert(idx, (x, y));
         }
+
+        idx
     }
 
     pub fn offset(&mut self, offset: f32) {
-        for segment in &mut self.segments {
-            match segment {
-                SelectionSegment::Primary {
-                    range: [start_pos, end_pos],
-                    ..
-                } => {
-                    *start_pos += offset;
-                    *end_pos += offset;
-                }
-                SelectionSegment::EasingLeft { end_pos, .. } => *end_pos += offset,
-                SelectionSegment::EasingRight { end_pos, .. } => *end_pos += offset,
-            }
+        for (x, _) in &mut self.control_points {
+            *x += offset;
         }
     }
 
@@ -600,23 +534,36 @@ impl Selection {
     ) -> Box<[SplineSegment]> {
         let mut segments = Vec::new();
 
-        for i in 0..self.segments.len() {
-            if self.upper_bound(i) < min {
+        for (i, (cp1, cp2)) in self
+            .control_points
+            .iter()
+            .zip(&self.control_points[1..])
+            .enumerate()
+        {
+            let cp1 @ (lower_bound, _) = *cp1;
+            let cp2 @ (upper_bound, _) = *cp2;
+
+            if upper_bound < min {
                 continue;
-            } else if self.lower_bound(i) > max {
+            } else if lower_bound > max {
                 break;
             }
 
-            let start @ [l, _] = [self.lower_bound(i), self.lower_value(i)];
-            let end @ [u, _] = [self.upper_bound(i), self.upper_value(i)];
-
-            if l == u {
+            if lower_bound == upper_bound {
                 continue;
             }
 
             let t_range = [
-                if l < min { min.inv_lerp(l, u) } else { 0.0 },
-                if u > max { max.inv_lerp(l, u) } else { 1.0 },
+                if lower_bound < min {
+                    min.inv_lerp(lower_bound, upper_bound)
+                } else {
+                    0.0
+                },
+                if upper_bound > max {
+                    max.inv_lerp(lower_bound, upper_bound)
+                } else {
+                    1.0
+                },
             ];
 
             if t_range[0] == t_range[1] {
@@ -630,17 +577,23 @@ impl Selection {
             };
 
             match easing_type {
-                EasingType::Linear => {
-                    segments.push(SplineSegment::new_linear(start, end, Some(t_range)))
-                }
-                EasingType::EaseIn => {
-                    segments.push(SplineSegment::new_ease_in(start, end, Some(t_range)))
-                }
-                EasingType::EaseOut => {
-                    segments.push(SplineSegment::new_ease_out(start, end, Some(t_range)))
-                }
+                EasingType::Linear => segments.push(SplineSegment::new_linear(
+                    cp1.into(),
+                    cp2.into(),
+                    Some(t_range),
+                )),
+                EasingType::EaseIn => segments.push(SplineSegment::new_ease_in(
+                    cp1.into(),
+                    cp2.into(),
+                    Some(t_range),
+                )),
+                EasingType::EaseOut => segments.push(SplineSegment::new_ease_out(
+                    cp1.into(),
+                    cp2.into(),
+                    Some(t_range),
+                )),
                 EasingType::EaseInOut => segments.extend(Vec::from(
-                    SplineSegment::new_ease_in_out(start, end, Some(t_range)),
+                    SplineSegment::new_ease_in_out(cp1.into(), cp2.into(), Some(t_range)),
                 )),
             }
         }
@@ -657,9 +610,8 @@ pub enum EasingType {
     EaseInOut,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub enum SelectionSegment {
-    Primary { range: [f32; 2], values: [f32; 2] },
-    EasingLeft { end_pos: f32, end_value: f32 },
-    EasingRight { end_pos: f32, end_value: f32 },
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Direction {
+    Up,
+    Down,
 }

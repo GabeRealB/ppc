@@ -641,43 +641,112 @@ impl Renderer {
             };
 
             let (axis_start, axis_end) = ax.axis_line_range();
-            for (rank, axis_value) in sel_control_points {
-                if !(0.0..=1.0).contains(&axis_value) {
-                    continue;
+            for (rank, selection_control_points) in sel_control_points {
+                for axis_value in selection_control_points {
+                    if !(0.0..=1.0).contains(&axis_value) {
+                        continue;
+                    }
+
+                    let rank_offset = ax.selection_offset_at_rank(rank);
+                    let position = axis_start.lerp(axis_end, axis_value) + rank_offset;
+                    let (x, y) = position
+                        .transform(&world_mapper)
+                        .transform(&screen_mapper)
+                        .extract();
+
+                    self.context_2d.begin_path();
+                    self.context_2d
+                        .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
+                        .unwrap();
+                    self.context_2d.fill();
                 }
-
-                let rank_offset = ax.selection_offset_at_rank(rank);
-                let position = axis_start.lerp(axis_end, axis_value) + rank_offset;
-                let (x, y) = position
-                    .transform(&world_mapper)
-                    .transform(&screen_mapper)
-                    .extract();
-
-                self.context_2d.begin_path();
-                self.context_2d
-                    .arc(x as f64, y as f64, radius, 0.0, std::f64::consts::TAU)
-                    .unwrap();
-                self.context_2d.fill();
             }
 
             for selection_control_points in curve_control_points {
                 let mut first = true;
                 let curve = web_sys::Path2d::new().unwrap();
+
+                let zero_offset = ax.curve_offset_at_curve_value(0.0);
+                let positions = selection_control_points
+                    .iter()
+                    .map(|&[axis_value, curve_value]| {
+                        let curve_offset = ax.curve_offset_at_curve_value(curve_value);
+                        axis_start.lerp(axis_end, axis_value) + curve_offset
+                    })
+                    .collect::<Vec<_>>();
+
+                if let Some(&[axis_value, _]) = selection_control_points.first() {
+                    if (0.0..=1.0).contains(&axis_value) {
+                        first = false;
+                        let position = axis_start.lerp(axis_end, axis_value) + zero_offset;
+                        let (x, y) = position
+                            .transform(&world_mapper)
+                            .transform(&screen_mapper)
+                            .extract();
+                        curve.move_to(x as f64, y as f64);
+
+                        let position = positions.first().unwrap();
+                        let (x, y) = position
+                            .transform(&world_mapper)
+                            .transform(&screen_mapper)
+                            .extract();
+                        curve.line_to(x as f64, y as f64);
+                    }
+                }
+
+                for (start, end) in positions.iter().zip(&positions[1..]) {
+                    let range = axis_start.y..=axis_end.y;
+                    let start_inside = range.contains(&start.y);
+                    let end_inside = range.contains(&end.y);
+                    if !start_inside && !end_inside {
+                        continue;
+                    }
+
+                    let start_y = start.y.clamp(axis_start.y, axis_end.y);
+                    let end_y = end.y.clamp(axis_start.y, axis_end.y);
+
+                    let start_t = start_y.inv_lerp(start.y, end.y);
+                    let end_t = end_y.inv_lerp(start.y, end.y);
+
+                    let new_start = start.lerp(*end, start_t);
+                    let new_end = start.lerp(*end, end_t);
+
+                    let (x, y) = new_start
+                        .transform(&world_mapper)
+                        .transform(&screen_mapper)
+                        .extract();
+
+                    if !start_inside || first {
+                        curve.move_to(x as f64, y as f64);
+                        first = false;
+                    }
+
+                    let (x, y) = new_end
+                        .transform(&world_mapper)
+                        .transform(&screen_mapper)
+                        .extract();
+
+                    curve.line_to(x as f64, y as f64)
+                }
+
+                if let Some(&[axis_value, _]) = selection_control_points.last() {
+                    if (0.0..=1.0).contains(&axis_value) {
+                        let position = axis_start.lerp(axis_end, axis_value) + zero_offset;
+                        let (x, y) = position
+                            .transform(&world_mapper)
+                            .transform(&screen_mapper)
+                            .extract();
+                        curve.line_to(x as f64, y as f64);
+                    }
+                }
+
                 for [axis_value, curve_value] in selection_control_points {
-                    let axis_value = axis_value.clamp(0.0, 1.0);
                     let curve_offset = ax.curve_offset_at_curve_value(curve_value);
                     let position = axis_start.lerp(axis_end, axis_value) + curve_offset;
                     let (x, y) = position
                         .transform(&world_mapper)
                         .transform(&screen_mapper)
                         .extract();
-
-                    if first {
-                        curve.move_to(x as f64, y as f64);
-                        first = false;
-                    } else {
-                        curve.line_to(x as f64, y as f64);
-                    }
 
                     if (0.0..=1.0).contains(&axis_value) {
                         self.context_2d.begin_path();
@@ -1223,35 +1292,16 @@ impl Renderer {
                         main_segment_idx,
                     } = brush;
 
-                    let segments = control_points
-                        .iter()
-                        .zip(&control_points[1..])
-                        .enumerate()
-                        .map(|(i, (c1, c2))| {
-                            let c1 = (c1.0.inv_lerp(data_start, data_end), c1.1);
-                            let c2 = (c2.0.inv_lerp(data_start, data_end), c2.1);
-                            match i {
-                                i if i < main_segment_idx => {
-                                    selection::SelectionSegment::EasingLeft {
-                                        end_pos: c1.0,
-                                        end_value: c1.1,
-                                    }
-                                }
-                                i if i > main_segment_idx => {
-                                    selection::SelectionSegment::EasingRight {
-                                        end_pos: c2.0,
-                                        end_value: c2.1,
-                                    }
-                                }
-                                _ => selection::SelectionSegment::Primary {
-                                    range: [c1.0, c2.0],
-                                    values: [c1.1, c2.1],
-                                },
-                            }
+                    let control_points = control_points
+                        .into_iter()
+                        .map(|(x, y)| {
+                            let x = x.inv_lerp(data_start, data_end);
+                            (x, y)
                         })
                         .collect();
 
-                    let selection = selection::Selection::from_segments(segments, main_segment_idx);
+                    let selection =
+                        selection::Selection::from_control_points(control_points, main_segment_idx);
                     curve_builder.add_selection(selection);
                 }
 
@@ -2029,21 +2079,20 @@ impl Renderer {
                         ))
                     }
                 }
-                axis::Element::SelectionControlPoint {
+                axis::Element::AxisControlPoint {
                     axis,
                     selection_idx,
-                    segment_idx,
+                    control_point_idx,
                 } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
-                        self.active_action =
-                            Some(action::Action::new_select_selection_control_point_action(
-                                axis,
-                                selection_idx,
-                                segment_idx,
-                                active_label_idx,
-                                self.labels[active_label_idx].easing,
-                                event,
-                            ))
+                        self.active_action = Some(action::Action::new_select_axis_control_point(
+                            axis,
+                            selection_idx,
+                            control_point_idx,
+                            active_label_idx,
+                            self.labels[active_label_idx].easing,
+                            event,
+                        ))
                     }
                 }
                 axis::Element::CurveControlPoint {
@@ -2111,7 +2160,7 @@ impl Renderer {
                     .style()
                     .set_property("cursor", "ns-resize")
                     .unwrap(),
-                Some(axis::Element::SelectionControlPoint { .. }) if enable_modification => self
+                Some(axis::Element::AxisControlPoint { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "row-resize")

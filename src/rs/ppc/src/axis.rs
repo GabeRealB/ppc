@@ -35,9 +35,6 @@ const CONTROL_POINTS_RADIUS_REM: f32 = 0.3;
 const LABEL_PADDING_REM: f32 = 1.0;
 const LABEL_MARGIN_REM: f32 = 1.0;
 
-const SELECTION_CONTROL_POINT_PADDING_REL: f32 = 0.2;
-const MAX_SELECTION_CONTROL_POINT_PADDING: f32 = 0.02;
-
 const TICKS_PADDING_REM: f32 = 0.5;
 
 const MIN_CURVE_T: f32 = 0.1;
@@ -1288,6 +1285,10 @@ impl Axes {
         (self.get_rem_length_screen)(CONTROL_POINTS_RADIUS_REM)
     }
 
+    fn control_points_radius_local(&self) -> (Length<LocalSpace>, Length<LocalSpace>) {
+        (self.get_rem_length_local)(CONTROL_POINTS_RADIUS_REM)
+    }
+
     pub fn element_at_position(
         &self,
         position: Position<ScreenSpace>,
@@ -1324,41 +1325,55 @@ impl Axes {
             let bounding_box = ax.selections_bounding_box(active_label_idx);
             if bounding_box.contains_point(&position) {
                 if let Some(rank) = ax.selection_rank_at_position(&position, active_label_idx) {
-                    let range = ax.axis_line_range();
-                    let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
-
-                    let selection = {
+                    let (axis_start, axis_end) = ax.axis_line_range();
+                    let control_points = {
                         let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                        curve_builder.get_selection_containing(axis_value, rank)
+                        curve_builder.get_selection_control_points().into_vec()
                     };
 
-                    if let Some(selection) = selection {
-                        let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
-                        let sel = curve_builder.get_selection(selection);
-                        let segment = sel.segment_containing(axis_value).unwrap();
+                    let (_, control_point_height) = self.control_points_radius_local();
+                    let padding = control_point_height.extract::<f32>();
 
-                        let lower_bound = sel.lower_bound(segment);
-                        let upper_bound = sel.upper_bound(segment);
-                        drop(curve_builder);
+                    for (selection_idx, (selection_rank, control_points)) in
+                        control_points.into_iter().enumerate()
+                    {
+                        if selection_rank != rank {
+                            continue;
+                        }
 
-                        let segment_length = upper_bound - lower_bound;
-                        let segment_padding = (SELECTION_CONTROL_POINT_PADDING_REL
-                            * segment_length)
-                            .min(MAX_SELECTION_CONTROL_POINT_PADDING);
+                        let (selection_start, selection_end) = (
+                            axis_start.lerp(axis_end, *control_points.first().unwrap()),
+                            axis_start.lerp(axis_end, *control_points.last().unwrap()),
+                        );
+                        let (_, start_y) = selection_start.extract();
+                        let (_, end_y) = selection_end.extract();
 
-                        let lower_range = lower_bound..=lower_bound + segment_padding;
-                        let upper_range = upper_bound - segment_padding..=upper_bound;
+                        let selection_range = start_y..=end_y;
+                        let extended_selection_range = start_y - padding..=end_y + padding;
 
-                        if lower_range.contains(&axis_value) || upper_range.contains(&axis_value) {
-                            return Some(Element::SelectionControlPoint {
-                                axis: ax,
-                                selection_idx: selection,
-                                segment_idx: segment,
-                            });
-                        } else {
+                        if !extended_selection_range.contains(&position.y) {
+                            continue;
+                        }
+
+                        for (i, point) in control_points.into_iter().enumerate() {
+                            if !(0.0..=1.0).contains(&point) {
+                                continue;
+                            }
+                            let (_, y) = axis_start.lerp(axis_end, point).extract();
+                            let hovering_range = y - padding..=y + padding;
+                            if hovering_range.contains(&position.y) {
+                                return Some(Element::AxisControlPoint {
+                                    axis: ax,
+                                    selection_idx,
+                                    control_point_idx: i,
+                                });
+                            }
+                        }
+
+                        if selection_range.contains(&position.y) {
                             return Some(Element::Selection {
                                 axis: ax,
-                                selection_idx: selection,
+                                selection_idx,
                             });
                         }
                     }
@@ -1637,10 +1652,10 @@ pub enum Element {
         axis: Rc<Axis>,
         selection_idx: usize,
     },
-    SelectionControlPoint {
+    AxisControlPoint {
         axis: Rc<Axis>,
         selection_idx: usize,
-        segment_idx: usize,
+        control_point_idx: usize,
     },
     CurveControlPoint {
         axis: Rc<Axis>,
