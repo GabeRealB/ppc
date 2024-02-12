@@ -705,8 +705,14 @@ impl Renderer {
                     let start_y = start.y.clamp(axis_start.y, axis_end.y);
                     let end_y = end.y.clamp(axis_start.y, axis_end.y);
 
-                    let start_t = start_y.inv_lerp(start.y, end.y);
-                    let end_t = end_y.inv_lerp(start.y, end.y);
+                    let (start_t, end_t) = if start_y == end_y {
+                        (0.0, 1.0)
+                    } else {
+                        (
+                            start_y.inv_lerp(start.y, end.y),
+                            end_y.inv_lerp(start.y, end.y),
+                        )
+                    };
 
                     let new_start = start.lerp(*end, start_t);
                     let new_end = start.lerp(*end, end_t);
