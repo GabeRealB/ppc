@@ -149,6 +149,8 @@ pub enum SegmentRemovalOp {
 }
 
 impl SplineSegment {
+    const PRECISION: f32 = 1e-5;
+
     pub fn new_constant(value: f32, range: [f32; 2], t_range: Option<[f32; 2]>) -> Self {
         Self::new_linear([range[0], value], [range[1], value], t_range)
     }
@@ -169,11 +171,17 @@ impl SplineSegment {
         let a = p1[1] - p0[1];
         let b = p0[1];
 
-        let bounds = if t_range == [0.0, 1.0] {
+        let mut bounds = if t_range == [0.0, 1.0] {
             [p0[0], p1[0]]
         } else {
             [p0[0].lerp(p1[0], t_range[0]), p0[0].lerp(p1[0], t_range[1])]
         };
+        if (0.0..=Self::PRECISION).contains(&bounds[0]) {
+            bounds[0] = 0.0;
+        }
+        if (1.0 - Self::PRECISION..=1.0).contains(&bounds[1]) {
+            bounds[1] = 1.0;
+        }
 
         Self {
             bounds,
@@ -214,11 +222,17 @@ impl SplineSegment {
         let b = (((p2[1] - p0[1]) * p1x_2) + p0[1] - p1[1]) / (p1x_2 - p1x);
         let a = p2[1] - b - c;
 
-        let bounds = if t_range == [0.0, 1.0] {
+        let mut bounds = if t_range == [0.0, 1.0] {
             [p0[0], p2[0]]
         } else {
             [p0[0].lerp(p2[0], t_range[0]), p0[0].lerp(p2[0], t_range[1])]
         };
+        if (0.0..=Self::PRECISION).contains(&bounds[0]) {
+            bounds[0] = 0.0;
+        }
+        if (1.0 - Self::PRECISION..=1.0).contains(&bounds[1]) {
+            bounds[1] = 1.0;
+        }
 
         Self {
             bounds,
@@ -287,11 +301,17 @@ impl SplineSegment {
         let b = ((p1[1] - (p1x_3 * p3[1])) + (p1x_3_1 * c) + (p1x_3_0 * d)) / (-p1x_3_2);
         let a = p3[1] - b - c - d;
 
-        let bounds = if t_range == [0.0, 1.0] {
+        let mut bounds = if t_range == [0.0, 1.0] {
             [p0[0], p3[0]]
         } else {
             [p0[0].lerp(p3[0], t_range[0]), p0[0].lerp(p3[0], t_range[1])]
         };
+        if (0.0..=Self::PRECISION).contains(&bounds[0]) {
+            bounds[0] = 0.0;
+        }
+        if (1.0 - Self::PRECISION..=1.0).contains(&bounds[1]) {
+            bounds[1] = 1.0;
+        }
 
         Self {
             bounds,
@@ -310,11 +330,17 @@ impl SplineSegment {
             panic!("invalid segment t range '{t_range:?}'")
         }
 
-        let bounds = if t_range == [0.0, 1.0] {
+        let mut bounds = if t_range == [0.0, 1.0] {
             [p0[0], p1[0]]
         } else {
             [p0[0].lerp(p1[0], t_range[0]), p0[0].lerp(p1[0], t_range[1])]
         };
+        if (0.0..=Self::PRECISION).contains(&bounds[0]) {
+            bounds[0] = 0.0;
+        }
+        if (1.0 - Self::PRECISION..=1.0).contains(&bounds[1]) {
+            bounds[1] = 1.0;
+        }
 
         // We go either from 0 to one (first), or from 1 to 0 (second).
         if p0[1] < p1[1] {
@@ -350,11 +376,17 @@ impl SplineSegment {
             panic!("invalid segment t range '{t_range:?}'")
         }
 
-        let bounds = if t_range == [0.0, 1.0] {
+        let mut bounds = if t_range == [0.0, 1.0] {
             [p0[0], p1[0]]
         } else {
             [p0[0].lerp(p1[0], t_range[0]), p0[0].lerp(p1[0], t_range[1])]
         };
+        if (0.0..=Self::PRECISION).contains(&bounds[0]) {
+            bounds[0] = 0.0;
+        }
+        if (1.0 - Self::PRECISION..=1.0).contains(&bounds[1]) {
+            bounds[1] = 1.0;
+        }
 
         // We go either from 0 to one (first), or from 1 to 0 (second).
         if p0[1] < p1[1] {
@@ -390,11 +422,17 @@ impl SplineSegment {
             panic!("invalid segment t range '{t_range:?}'")
         }
 
-        let bounds = if t_range == [0.0, 1.0] {
+        let mut bounds = if t_range == [0.0, 1.0] {
             [p0[0], p1[0]]
         } else {
             [p0[0].lerp(p1[0], t_range[0]), p0[0].lerp(p1[0], t_range[1])]
         };
+        if (0.0..=Self::PRECISION).contains(&bounds[0]) {
+            bounds[0] = 0.0;
+        }
+        if (1.0 - Self::PRECISION..=1.0).contains(&bounds[1]) {
+            bounds[1] = 1.0;
+        }
 
         let mid = (p0[0] + p1[0]) / 2.0;
         let mut segments = Vec::new();
@@ -408,8 +446,11 @@ impl SplineSegment {
             // Check if we need the first segment from t in [0.0, 0.5].
             if (p0[0]..=mid).contains(&bounds[0]) && (0.0..=0.5).contains(&t_range[0]) {
                 let seg_t_range = [t_range[0], 0.5f32.min(t_range[1])];
-                let seg_bounds = [bounds[0], p0[0].lerp(p1[0], seg_t_range[1])];
+                let mut seg_bounds = [bounds[0], p0[0].lerp(p1[0], seg_t_range[1])];
                 let seg_coeff = [4.0 * diff, 0.0, 0.0, min]; // (P1 - P0) * (4 * t^3) + P0
+                if (1.0 - Self::PRECISION..=1.0).contains(&seg_bounds[1]) {
+                    seg_bounds[1] = 1.0;
+                }
 
                 segments.push(Self {
                     bounds: seg_bounds,
@@ -421,8 +462,11 @@ impl SplineSegment {
             // Check if we need the second segment from t in [0.5, 1.0].
             if (mid..=p1[0]).contains(&bounds[1]) && (0.5..=1.0).contains(&t_range[1]) {
                 let seg_t_range = [0.5f32.max(t_range[0]), t_range[1]];
-                let seg_bounds = [p0[0].lerp(p1[0], seg_t_range[0]), bounds[1]];
+                let mut seg_bounds = [p0[0].lerp(p1[0], seg_t_range[0]), bounds[1]];
                 let seg_coeff = [4.0 * diff, -12.0 * diff, 12.0 * diff, (-3.0 * diff) + min]; // (P1 - P0) * (4 * (t-1)^3 + 1) + P0
+                if (0.0..=Self::PRECISION).contains(&seg_bounds[0]) {
+                    seg_bounds[0] = 0.0;
+                }
 
                 segments.push(Self {
                     bounds: seg_bounds,
@@ -438,8 +482,11 @@ impl SplineSegment {
             // Check if we need the first segment from t in [0.0, 0.5].
             if (p0[0]..=mid).contains(&bounds[0]) && (0.0..=0.5).contains(&t_range[0]) {
                 let seg_t_range = [t_range[0], 0.5f32.min(t_range[1])];
-                let seg_bounds = [bounds[0], p0[0].lerp(p1[0], seg_t_range[1])];
+                let mut seg_bounds = [bounds[0], p0[0].lerp(p1[0], seg_t_range[1])];
                 let seg_coeff = [-4.0 * diff, 0.0, 0.0, max]; // (P0 - P1) * (1 - (4 * t^3)) + P1
+                if (1.0 - Self::PRECISION..=1.0).contains(&seg_bounds[1]) {
+                    seg_bounds[1] = 1.0;
+                }
 
                 segments.push(Self {
                     bounds: seg_bounds,
@@ -451,8 +498,11 @@ impl SplineSegment {
             // Check if we need the second segment from t in [0.5, 1.0].
             if (mid..=p1[0]).contains(&bounds[1]) && (0.5..=1.0).contains(&t_range[1]) {
                 let seg_t_range = [0.5f32.max(t_range[0]), t_range[1]];
-                let seg_bounds = [p0[0].lerp(p1[0], seg_t_range[0]), bounds[1]];
+                let mut seg_bounds = [p0[0].lerp(p1[0], seg_t_range[0]), bounds[1]];
                 let seg_coeff = [-4.0 * diff, 12.0 * diff, -12.0 * diff, (4.0 * diff) + min]; // (P0 - P1) * (-4 * (t-1)^3) + P1
+                if (0.0..=Self::PRECISION).contains(&seg_bounds[0]) {
+                    seg_bounds[0] = 0.0;
+                }
 
                 segments.push(Self {
                     bounds: seg_bounds,
