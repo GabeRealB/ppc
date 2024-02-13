@@ -23,7 +23,7 @@ enum ActionInner {
     CreateSelection(CreateSelectionAction),
     SelectSelection(SelectSelectionAction),
     SelectAxisCP(SelectAxisCP),
-    SelectCurveControlPoint(SelectCurveControlPointAction),
+    SelectCurveCP(SelectCurveCP),
 }
 
 impl Action {
@@ -111,21 +111,19 @@ impl Action {
         }
     }
 
-    pub fn new_select_curve_control_point_action(
+    pub fn new_select_curve_control_point(
         axis: Rc<Axis>,
         selection_idx: usize,
-        segment_idx: usize,
+        control_point_idx: usize,
         active_label_idx: usize,
-        is_upper: bool,
         easing_type: EasingType,
     ) -> Self {
         Self {
-            inner: ActionInner::SelectCurveControlPoint(SelectCurveControlPointAction::new(
+            inner: ActionInner::SelectCurveCP(SelectCurveCP::new(
                 axis,
                 selection_idx,
-                segment_idx,
+                control_point_idx,
                 active_label_idx,
-                is_upper,
                 easing_type,
             )),
         }
@@ -138,7 +136,7 @@ impl Action {
             ActionInner::CreateSelection(e) => e.update(event),
             ActionInner::SelectSelection(e) => e.update(event),
             ActionInner::SelectAxisCP(e) => e.update(event),
-            ActionInner::SelectCurveControlPoint(e) => e.update(event),
+            ActionInner::SelectCurveCP(e) => e.update(event),
         }
     }
 
@@ -149,7 +147,7 @@ impl Action {
             ActionInner::CreateSelection(e) => e.finish(),
             ActionInner::SelectSelection(e) => e.finish(),
             ActionInner::SelectAxisCP(e) => e.finish(),
-            ActionInner::SelectCurveControlPoint(e) => e.finish(),
+            ActionInner::SelectCurveCP(e) => e.finish(),
         }
     }
 }
@@ -404,9 +402,9 @@ impl CreateSelectionAction {
         };
 
         if axis_value <= self.start_axis_value {
-            self.selection.set_lower_bound(0, axis_value);
+            self.selection.set_control_point_x(0, axis_value);
         } else {
-            self.selection.set_upper_bound(0, axis_value);
+            self.selection.set_control_point_x(1, axis_value);
         }
 
         let mut curve_builder = self.curve_builder.clone();
@@ -427,7 +425,7 @@ impl CreateSelectionAction {
         let mut curve_builder = self.curve_builder;
         let datums_range = self.axis.visible_data_range_normalized().into();
 
-        if !self.selection.segment_is_point(0) {
+        if self.selection.control_point_x(0) != self.selection.control_point_x(1) {
             curve_builder.add_selection(self.selection);
         }
 
@@ -884,24 +882,22 @@ impl SelectAxisCP {
 }
 
 #[derive(Debug)]
-struct SelectCurveControlPointAction {
+struct SelectCurveCP {
     axis: Rc<Axis>,
-    lower_bound: bool,
-    active_label_idx: usize,
-    segment_idx: usize,
     selection_idx: usize,
+    control_point_idx: usize,
+    active_label_idx: usize,
     easing_type: EasingType,
     selection: Selection,
     curve_builder: SelectionCurveBuilder,
 }
 
-impl SelectCurveControlPointAction {
+impl SelectCurveCP {
     fn new(
         axis: Rc<Axis>,
         selection_idx: usize,
-        segment_idx: usize,
+        control_point_idx: usize,
         active_label_idx: usize,
-        is_upper: bool,
         easing_type: EasingType,
     ) -> Self {
         let mut curve_builder = axis
@@ -911,10 +907,9 @@ impl SelectCurveControlPointAction {
 
         Self {
             axis,
-            lower_bound: !is_upper,
-            active_label_idx,
-            segment_idx,
             selection_idx,
+            control_point_idx,
+            active_label_idx,
             easing_type,
             selection,
             curve_builder,
@@ -944,20 +939,18 @@ impl SelectCurveControlPointAction {
                 .inv_lerp(min_curve_position_x, max_curve_position_x);
 
             let (axis_start, axis_end) = self.axis.axis_line_range();
-            let axis_value = position.y.inv_lerp(axis_start.y, axis_end.y);
+            let axis_value = position
+                .y
+                .inv_lerp(axis_start.y, axis_end.y)
+                .clamp(0.0, 1.0);
 
             (curve_value, axis_value)
         };
 
-        if self.lower_bound {
-            self.selection.set_lower_bound(self.segment_idx, axis_value);
-            self.selection
-                .set_lower_value(self.segment_idx, curve_value);
-        } else {
-            self.selection.set_upper_bound(self.segment_idx, axis_value);
-            self.selection
-                .set_upper_value(self.segment_idx, curve_value);
-        }
+        self.selection
+            .set_control_point_x(self.control_point_idx, axis_value);
+        self.selection
+            .set_control_point_y(self.control_point_idx, curve_value);
 
         let mut curve_builder = self.curve_builder.clone();
         curve_builder.insert_selection(self.selection.clone(), self.selection_idx);

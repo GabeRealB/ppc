@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::{fmt::Debug, mem::MaybeUninit};
 
 /// Marker for types that can be shared between the host and the gpu.

@@ -445,36 +445,31 @@ impl Axis {
 
     /// Returns the bounding box of the axis.
     pub fn bounding_box(&self, active_label_idx: Option<usize>) -> Aabb<LocalSpace> {
-        let (axis_width, _) = (self.get_rem_length)(
-            AXIS_LINE_PADDING_REM + AXIS_LINE_PADDING_REM + AXIS_LINE_SIZE_REM,
-        );
-        let (label_width, _) = (self.get_text_length)(&self.label);
-        let (padding_width, _) = (self.get_rem_length)(AXIS_LINE_PADDING_REM);
-        let label_width = label_width + padding_width + padding_width;
+        let label_bb = self.label_bounding_box();
+        let axis_line_bb = self.axis_line_bounding_box();
+        let curves_bb = self.curves_bounding_box();
 
-        let width = if axis_width <= label_width {
-            label_width
-        } else {
-            axis_width
-        };
+        let mut min_x = label_bb
+            .start()
+            .x
+            .min(axis_line_bb.start().x)
+            .min(curves_bb.start().x);
+        let mut max_x = label_bb
+            .end()
+            .x
+            .max(axis_line_bb.end().x)
+            .max(curves_bb.end().x);
 
-        let half_width = width / Length::new(2.0);
-        let width_offset = Offset::<LocalSpace>::new((1.0, 0.0)) * half_width;
-
-        let mut start = Position::<LocalSpace>::new((0.0, 0.0));
-        let mut end = Position::<LocalSpace>::new((0.0, 1.0));
-
-        start -= width_offset;
-        end += width_offset;
-
-        if self.is_expanded() {
-            let expanded_extends = self.expanded_extends(active_label_idx);
-            start.x = expanded_extends.start().x.min(start.x);
-            end.x = expanded_extends.end().x.max(end.x);
+        if let Some(active_label_idx) = active_label_idx {
+            let selections_bb = self.selections_bounding_box(active_label_idx);
+            max_x = max_x.max(selections_bb.end().x);
         }
 
-        start.x = start.x.clamp(-0.4, 0.4);
-        end.x = end.x.clamp(-0.4, 0.4);
+        min_x = min_x.clamp(-0.4, 0.4);
+        max_x = max_x.clamp(-0.4, 0.4);
+
+        let start = Position::<LocalSpace>::new((min_x, 0.0));
+        let end = Position::<LocalSpace>::new((max_x, 1.0));
 
         Aabb::new(start, end)
     }
@@ -513,13 +508,10 @@ impl Axis {
             curve_builders[active_label_idx].max_rank()
         };
 
-        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
-        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
-        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
+        let (control_point_radius_w, _) = self.axes().borrow().control_points_radius_local();
 
-        let start_x = -(width.0 / 2.0) - padding.0;
-        let mut end_x = (width.0 / 2.0) + padding.0;
-        end_x += max_rank as f32 * (margin + width + padding).0;
+        let start_x = -control_point_radius_w.0;
+        let end_x = self.selection_offset_at_rank(max_rank).x + control_point_radius_w.0;
 
         let start = Position::new((start_x, 0.0));
         let end = Position::new((end_x, 1.0));
@@ -572,24 +564,19 @@ impl Axis {
     ) -> Option<usize> {
         let curve_builders = self.curve_builders.borrow();
         let max_rank = curve_builders[active_label_idx].max_rank();
-
-        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
-        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
-        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
-
-        let zero_rank_start = -(width.0 / 2.0) - padding.0;
-        if position.x < zero_rank_start {
-            return None;
-        }
+        let (control_point_radius_w, _) = self.axes().borrow().control_points_radius_local();
 
         for i in 0..=max_rank {
-            let rank_start =
-                zero_rank_start + ((i as f32) * (margin + width + padding + padding).0);
-            let rank_end =
-                zero_rank_start + (((i + 1) as f32) * (margin + width + padding + padding).0);
+            let rank_middle = self.selection_offset_at_rank(i).x;
+            let rank_start = rank_middle - control_point_radius_w.0;
+            let rank_end = rank_middle + control_point_radius_w.0;
 
             if (rank_start..=rank_end).contains(&position.x) {
                 return Some(i);
+            }
+
+            if position.x < rank_start {
+                return None;
             }
         }
 
@@ -603,12 +590,7 @@ impl Axis {
             .map(|active_label_idx| curve_builders[active_label_idx].max_rank())
             .unwrap_or(0);
 
-        let (width, _) = (self.get_rem_length)(SELECTION_LINE_SIZE_REM);
-        let (padding, _) = (self.get_rem_length)(SELECTION_LINE_PADDING_REM);
-        let (margin, _) = (self.get_rem_length)(SELECTION_LINE_MARGIN_REM);
-
-        let mut end_x = (width.0 / 2.0) + padding.0;
-        end_x += max_rank as f32 * (margin + width + padding).0;
+        let end_x = self.selection_offset_at_rank(max_rank).x;
 
         let start = Position::new((-0.4, 0.0));
         let end = Position::new((end_x, 1.0));
@@ -1304,17 +1286,20 @@ impl Axes {
 
         let handle_collapsed = |ax: Rc<Axis>, position: Position<LocalSpace>, active_label_idx| {
             // Check if we are hovering a group.
-            let range = ax.axis_line_range();
-            let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
-            let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
+            let bounding_box = ax.selections_bounding_box(active_label_idx);
+            if bounding_box.contains_point(&position) {
+                let range = ax.axis_line_range();
+                let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
+                let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
 
-            let group = curve_builder.get_group_containing(axis_value);
-            if let Some(group) = group {
-                drop(curve_builder);
-                return Some(Element::Group {
-                    axis: ax,
-                    group_idx: group,
-                });
+                let group = curve_builder.get_group_containing(axis_value);
+                if let Some(group) = group {
+                    drop(curve_builder);
+                    return Some(Element::Group {
+                        axis: ax,
+                        group_idx: group,
+                    });
+                }
             }
 
             None
@@ -1380,48 +1365,30 @@ impl Axes {
                 }
             }
 
-            let control_points_radius = self.control_points_radius();
+            let (cp_radius_w, cp_radius_h) = self.control_points_radius_local();
             let bounding_box = ax.curves_bounding_box();
             if bounding_box.contains_point(&position) {
-                let range = ax.axis_line_range();
-                let axis_value = position.y.inv_lerp(range.0.y, range.1.y);
-
+                let (axis_start, axis_end) = ax.axis_line_range();
                 let curve_builder = ax.borrow_selection_curve_builder(active_label_idx);
                 for (selection_idx, selection) in curve_builder.selections().iter().enumerate() {
-                    let segment_idx = match selection.segment_containing(axis_value) {
-                        Some(x) => x,
-                        None => continue,
-                    };
+                    for (control_point_idx, &(x, y)) in
+                        selection.control_points().iter().enumerate()
+                    {
+                        let cp_position = axis_start.lerp(axis_end, x);
+                        let cp_position = cp_position + ax.curve_offset_at_curve_value(y);
 
-                    let lower_bound = selection.lower_bound(segment_idx);
-                    let upper_bound = selection.upper_bound(segment_idx);
-
-                    let lower_value = selection.lower_value(segment_idx);
-                    let upper_value = selection.upper_value(segment_idx);
-
-                    let lower_position = range.0.lerp(range.1, lower_bound)
-                        + ax.curve_offset_at_curve_value(lower_value);
-                    let upper_position = range.0.lerp(range.1, upper_bound)
-                        + ax.curve_offset_at_curve_value(upper_value);
-
-                    let offset = Offset::<ScreenSpace>::new((
-                        control_points_radius.0,
-                        control_points_radius.0,
-                    ))
-                    .transform(&self.space_transformer())
-                    .transform(&ax.space_transformer());
-
-                    let lower_bb = Aabb::new(lower_position - offset, lower_position + offset);
-                    let upper_bb = Aabb::new(upper_position - offset, upper_position + offset);
-
-                    if lower_bb.contains_point(&position) || upper_bb.contains_point(&position) {
-                        drop(curve_builder);
-                        return Some(Element::CurveControlPoint {
-                            axis: ax,
-                            selection_idx,
-                            segment_idx,
-                            is_upper: upper_bb.contains_point(&position),
-                        });
+                        let offset = Offset::<LocalSpace>::new((cp_radius_w.0, cp_radius_h.0));
+                        let start = cp_position - offset;
+                        let end = cp_position + offset;
+                        let bb = Aabb::new(start, end);
+                        if bb.contains_point(&position) {
+                            drop(curve_builder);
+                            return Some(Element::CurveControlPoint {
+                                axis: ax,
+                                selection_idx,
+                                control_point_idx,
+                            });
+                        }
                     }
                 }
             }
@@ -1660,8 +1627,7 @@ pub enum Element {
     CurveControlPoint {
         axis: Rc<Axis>,
         selection_idx: usize,
-        segment_idx: usize,
-        is_upper: bool,
+        control_point_idx: usize,
     },
     AxisLine {
         axis: Rc<Axis>,

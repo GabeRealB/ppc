@@ -216,7 +216,7 @@ impl SelectionCurveBuilder {
 
         // Determine the groups of the selections.
         for (i, selection) in self.selections.iter().enumerate() {
-            let selection_range = selection.get_selection_range();
+            let selection_range = selection.selection_range();
             self.selection_infos
                 .push(SelectionInfo::new(0, selection_range));
             SelectionGroup::add_selection_to_groups(&mut self.selection_groups, i, selection_range);
@@ -341,7 +341,6 @@ impl SelectionInfo {
 pub struct Selection {
     primary_segment_idx: usize,
     control_points: Vec<(f32, f32)>,
-    // segments: Vec<SelectionSegment>,
 }
 
 impl Selection {
@@ -369,23 +368,27 @@ impl Selection {
     }
 
     pub fn segment_containing(&self, value: f32) -> Option<usize> {
-        (0..self.num_segments())
-            .find(|&i| self.lower_bound(i) <= value && self.upper_bound(i) >= value)
+        (0..self.num_segments()).find(|&i| {
+            let [start, end] = self.segment_range(i);
+            (start..=end).contains(&value)
+        })
     }
 
-    pub fn get_selection_range(&self) -> [f32; 2] {
+    pub fn selection_range(&self) -> [f32; 2] {
         let start = self.control_point_x(0);
         let end = self.control_point_x(self.num_control_points() - 1);
 
         [start, end]
     }
 
-    pub fn segment_is_primary(&self, segment_idx: usize) -> bool {
-        segment_idx == self.primary_segment_idx
+    pub fn segment_range(&self, segment_idx: usize) -> [f32; 2] {
+        let start = self.control_point_x(segment_idx);
+        let end = self.control_point_x(segment_idx + 1);
+        [start, end]
     }
 
-    pub fn segment_is_point(&self, segment_idx: usize) -> bool {
-        self.lower_bound(segment_idx) == self.upper_bound(segment_idx)
+    pub fn segment_is_primary(&self, segment_idx: usize) -> bool {
+        segment_idx == self.primary_segment_idx
     }
 
     pub fn num_segments(&self) -> usize {
@@ -433,38 +436,6 @@ impl Selection {
         self.control_points[control_point_idx].1 = value;
     }
 
-    pub fn lower_bound(&self, segment_idx: usize) -> f32 {
-        self.control_point_x(segment_idx)
-    }
-
-    pub fn set_lower_bound(&mut self, segment_idx: usize, bound: f32) {
-        self.set_control_point_x(segment_idx, bound)
-    }
-
-    pub fn lower_value(&self, segment_idx: usize) -> f32 {
-        self.control_point_y(segment_idx)
-    }
-
-    pub fn set_lower_value(&mut self, segment_idx: usize, value: f32) {
-        self.set_control_point_y(segment_idx, value)
-    }
-
-    pub fn upper_bound(&self, segment_idx: usize) -> f32 {
-        self.control_point_x(segment_idx + 1)
-    }
-
-    pub fn set_upper_bound(&mut self, segment_idx: usize, bound: f32) {
-        self.set_control_point_x(segment_idx + 1, bound)
-    }
-
-    pub fn upper_value(&self, segment_idx: usize) -> f32 {
-        self.control_point_y(segment_idx + 1)
-    }
-
-    pub fn set_upper_value(&mut self, segment_idx: usize, value: f32) {
-        self.set_control_point_y(segment_idx + 1, value)
-    }
-
     pub fn remove_control_point(&mut self, control_point_idx: usize) {
         if control_point_idx <= self.primary_segment_idx {
             self.primary_segment_idx -= 1;
@@ -500,7 +471,7 @@ impl Selection {
                 let y = (y1 + y2) / 2.0;
                 (segment + 1, y)
             }
-        } else if x < self.get_selection_range()[0] {
+        } else if x < self.selection_range()[0] {
             (0, 0.0)
         } else {
             (self.num_control_points(), 0.0)

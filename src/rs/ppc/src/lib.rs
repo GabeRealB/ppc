@@ -1082,48 +1082,13 @@ impl Renderer {
                     let control_points = js_sys::Array::new();
 
                     let main_segment_idx = selection.primary_segment_idx();
-                    for segment_idx in 0..selection.num_segments() {
-                        match segment_idx {
-                            x if x < main_segment_idx => {
-                                let lower_bound = selection.lower_bound(x);
-                                let lower_bound = data_start.lerp(data_end, lower_bound);
-                                let lower_value = selection.lower_value(x);
-                                let control_point = js_sys::Array::from_iter([
-                                    &wasm_bindgen::JsValue::from(lower_bound),
-                                    &wasm_bindgen::JsValue::from(lower_value),
-                                ]);
-                                control_points.push(&control_point.into());
-                            }
-                            x if x > main_segment_idx => {
-                                let upper_bound = selection.upper_bound(x);
-                                let upper_bound = data_start.lerp(data_end, upper_bound);
-                                let upper_value = selection.upper_value(x);
-                                let control_point = js_sys::Array::from_iter([
-                                    &wasm_bindgen::JsValue::from(upper_bound),
-                                    &wasm_bindgen::JsValue::from(upper_value),
-                                ]);
-                                control_points.push(&control_point.into());
-                            }
-                            x => {
-                                let lower_bound = selection.lower_bound(x);
-                                let lower_bound = data_start.lerp(data_end, lower_bound);
-                                let lower_value = selection.lower_value(x);
-                                let control_point = js_sys::Array::from_iter([
-                                    &wasm_bindgen::JsValue::from(lower_bound),
-                                    &wasm_bindgen::JsValue::from(lower_value),
-                                ]);
-                                control_points.push(&control_point.into());
-
-                                let upper_bound = selection.upper_bound(x);
-                                let upper_bound = data_start.lerp(data_end, upper_bound);
-                                let upper_value = selection.upper_value(x);
-                                let control_point = js_sys::Array::from_iter([
-                                    &wasm_bindgen::JsValue::from(upper_bound),
-                                    &wasm_bindgen::JsValue::from(upper_value),
-                                ]);
-                                control_points.push(&control_point.into());
-                            }
-                        }
+                    for &(x, y) in selection.control_points() {
+                        let x = data_start.lerp(data_end, x);
+                        let control_point = js_sys::Array::from_iter([
+                            &wasm_bindgen::JsValue::from(x),
+                            &wasm_bindgen::JsValue::from(y),
+                        ]);
+                        control_points.push(&control_point.into());
                     }
 
                     if control_points.length() != 0 {
@@ -1827,21 +1792,20 @@ impl Renderer {
                             return false;
                         }
 
-                        let mut last_position =
-                            brush.control_points.first().unwrap_or(&(0.0, 0.0)).0;
-                        for point in &brush.control_points[1..] {
-                            if !point.0.is_finite() || !(0.0..=1.0).contains(&point.1) {
+                        let mut last_x = brush.control_points.first().unwrap_or(&(0.0, 0.0)).0;
+                        for &(x, y) in &brush.control_points {
+                            if !x.is_finite() || !(0.0..=1.0).contains(&y) {
                                 web_sys::console::warn_1(&"Invalid brush control point".into());
                                 return false;
                             }
-                            if last_position >= point.0 {
+                            if last_x > x {
                                 web_sys::console::warn_1(
-                                    &"Brush control points must be ordered by increasing value"
+                                    &"Brush control points must be ordered by increasing x value"
                                         .into(),
                                 );
                                 return false;
                             }
-                            last_position = point.1;
+                            last_x = x;
                         }
                     }
                 }
@@ -2104,19 +2068,16 @@ impl Renderer {
                 axis::Element::CurveControlPoint {
                     axis,
                     selection_idx,
-                    segment_idx,
-                    is_upper,
+                    control_point_idx,
                 } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
-                        self.active_action =
-                            Some(action::Action::new_select_curve_control_point_action(
-                                axis,
-                                selection_idx,
-                                segment_idx,
-                                active_label_idx,
-                                is_upper,
-                                self.labels[active_label_idx].easing,
-                            ))
+                        self.active_action = Some(action::Action::new_select_curve_control_point(
+                            axis,
+                            selection_idx,
+                            control_point_idx,
+                            active_label_idx,
+                            self.labels[active_label_idx].easing,
+                        ))
                     }
                 }
                 axis::Element::AxisLine { axis } if enable_modification => {
