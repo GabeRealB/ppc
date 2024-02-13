@@ -1356,7 +1356,7 @@ impl Axes {
                         }
 
                         if selection_range.contains(&position.y) {
-                            return Some(Element::Selection {
+                            return Some(Element::Brush {
                                 axis: ax,
                                 selection_idx,
                             });
@@ -1615,7 +1615,7 @@ pub enum Element {
         axis: Rc<Axis>,
         group_idx: usize,
     },
-    Selection {
+    Brush {
         axis: Rc<Axis>,
         selection_idx: usize,
     },

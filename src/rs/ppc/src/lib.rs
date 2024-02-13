@@ -2019,7 +2019,7 @@ impl Renderer {
         if let Some(element) = element {
             match element {
                 axis::Element::Label { axis } if enable_reorder => {
-                    self.active_action = Some(action::Action::new_move_axis_action(
+                    self.active_action = Some(action::Action::new_move_axis(
                         axis,
                         event,
                         self.active_label_idx,
@@ -2028,7 +2028,7 @@ impl Renderer {
                 }
                 axis::Element::Group { axis, group_idx } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
-                        self.active_action = Some(action::Action::new_select_group_action(
+                        self.active_action = Some(action::Action::new_select_group(
                             axis,
                             group_idx,
                             active_label_idx,
@@ -2036,12 +2036,12 @@ impl Renderer {
                         ))
                     }
                 }
-                axis::Element::Selection {
+                axis::Element::Brush {
                     axis,
                     selection_idx,
                 } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
-                        self.active_action = Some(action::Action::new_select_selection_action(
+                        self.active_action = Some(action::Action::new_select_brush(
                             axis,
                             selection_idx,
                             active_label_idx,
@@ -2082,7 +2082,7 @@ impl Renderer {
                 }
                 axis::Element::AxisLine { axis } if enable_modification => {
                     if let Some(active_label_idx) = self.active_label_idx {
-                        self.active_action = Some(action::Action::new_create_selection_action(
+                        self.active_action = Some(action::Action::new_create_brush(
                             axis,
                             event,
                             active_label_idx,
@@ -2122,7 +2122,7 @@ impl Renderer {
                     .style()
                     .set_property("cursor", "ns-resize")
                     .unwrap(),
-                Some(axis::Element::Selection { .. }) if enable_modification => self
+                Some(axis::Element::Brush { .. }) if enable_modification => self
                     .canvas_2d
                     .style()
                     .set_property("cursor", "ns-resize")

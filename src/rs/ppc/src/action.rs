@@ -18,23 +18,23 @@ pub struct Action {
 
 #[derive(Debug)]
 enum ActionInner {
-    MoveAxis(MoveAxisAction),
-    SelectGroup(SelectGroupAction),
-    CreateSelection(CreateSelectionAction),
-    SelectSelection(SelectSelectionAction),
+    MoveAxis(MoveAxis),
+    SelectGroup(SelectGroup),
+    CreateBrush(CreateBrush),
+    SelectBrush(SelectBrush),
     SelectAxisCP(SelectAxisCP),
     SelectCurveCP(SelectCurveCP),
 }
 
 impl Action {
-    pub fn new_move_axis_action(
+    pub fn new_move_axis(
         axis: Rc<Axis>,
         event: PointerEvent,
         active_label_idx: Option<usize>,
         interaction_mode: InteractionMode,
     ) -> Self {
         Self {
-            inner: ActionInner::MoveAxis(MoveAxisAction::new(
+            inner: ActionInner::MoveAxis(MoveAxis::new(
                 axis,
                 event,
                 active_label_idx,
@@ -43,14 +43,14 @@ impl Action {
         }
     }
 
-    pub fn new_select_group_action(
+    pub fn new_select_group(
         axis: Rc<Axis>,
         group_idx: usize,
         active_label_idx: usize,
         easing_type: EasingType,
     ) -> Self {
         Self {
-            inner: ActionInner::SelectGroup(SelectGroupAction::new(
+            inner: ActionInner::SelectGroup(SelectGroup::new(
                 axis,
                 group_idx,
                 active_label_idx,
@@ -59,14 +59,14 @@ impl Action {
         }
     }
 
-    pub fn new_create_selection_action(
+    pub fn new_create_brush(
         axis: Rc<Axis>,
         event: PointerEvent,
         active_label_idx: usize,
         easing_type: EasingType,
     ) -> Self {
         Self {
-            inner: ActionInner::CreateSelection(CreateSelectionAction::new(
+            inner: ActionInner::CreateBrush(CreateBrush::new(
                 axis,
                 event,
                 active_label_idx,
@@ -75,14 +75,14 @@ impl Action {
         }
     }
 
-    pub fn new_select_selection_action(
+    pub fn new_select_brush(
         axis: Rc<Axis>,
         selection_idx: usize,
         active_label_idx: usize,
         easing_type: EasingType,
     ) -> Self {
         Self {
-            inner: ActionInner::SelectSelection(SelectSelectionAction::new(
+            inner: ActionInner::SelectBrush(SelectBrush::new(
                 axis,
                 selection_idx,
                 active_label_idx,
@@ -133,8 +133,8 @@ impl Action {
         match &mut self.inner {
             ActionInner::MoveAxis(e) => e.update(event),
             ActionInner::SelectGroup(e) => e.update(event),
-            ActionInner::CreateSelection(e) => e.update(event),
-            ActionInner::SelectSelection(e) => e.update(event),
+            ActionInner::CreateBrush(e) => e.update(event),
+            ActionInner::SelectBrush(e) => e.update(event),
             ActionInner::SelectAxisCP(e) => e.update(event),
             ActionInner::SelectCurveCP(e) => e.update(event),
         }
@@ -144,8 +144,8 @@ impl Action {
         match self.inner {
             ActionInner::MoveAxis(e) => e.finish(),
             ActionInner::SelectGroup(e) => e.finish(),
-            ActionInner::CreateSelection(e) => e.finish(),
-            ActionInner::SelectSelection(e) => e.finish(),
+            ActionInner::CreateBrush(e) => e.finish(),
+            ActionInner::SelectBrush(e) => e.finish(),
             ActionInner::SelectAxisCP(e) => e.finish(),
             ActionInner::SelectCurveCP(e) => e.finish(),
         }
@@ -153,7 +153,7 @@ impl Action {
 }
 
 #[derive(Debug)]
-struct MoveAxisAction {
+struct MoveAxis {
     axis: Rc<Axis>,
     moved: bool,
     active_label_idx: Option<usize>,
@@ -161,7 +161,7 @@ struct MoveAxisAction {
     interaction_mode: InteractionMode,
 }
 
-impl MoveAxisAction {
+impl MoveAxis {
     fn new(
         axis: Rc<Axis>,
         event: PointerEvent,
@@ -254,7 +254,7 @@ impl MoveAxisAction {
 }
 
 #[derive(Debug)]
-struct SelectGroupAction {
+struct SelectGroup {
     axis: Rc<Axis>,
     moved: bool,
     offset: f32,
@@ -264,7 +264,7 @@ struct SelectGroupAction {
     curve_builder: SelectionCurveBuilder,
 }
 
-impl SelectGroupAction {
+impl SelectGroup {
     fn new(
         axis: Rc<Axis>,
         group_idx: usize,
@@ -340,7 +340,7 @@ impl SelectGroupAction {
 }
 
 #[derive(Debug)]
-struct CreateSelectionAction {
+struct CreateBrush {
     axis: Rc<Axis>,
     start_axis_value: f32,
     active_label_idx: usize,
@@ -349,7 +349,7 @@ struct CreateSelectionAction {
     curve_builder: SelectionCurveBuilder,
 }
 
-impl CreateSelectionAction {
+impl CreateBrush {
     fn new(
         axis: Rc<Axis>,
         event: PointerEvent,
@@ -441,7 +441,7 @@ impl CreateSelectionAction {
 }
 
 #[derive(Debug)]
-struct SelectSelectionAction {
+struct SelectBrush {
     axis: Rc<Axis>,
     moved: bool,
     selection_idx: usize,
@@ -451,7 +451,7 @@ struct SelectSelectionAction {
     curve_builder: SelectionCurveBuilder,
 }
 
-impl SelectSelectionAction {
+impl SelectBrush {
     fn new(
         axis: Rc<Axis>,
         selection_idx: usize,
