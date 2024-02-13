@@ -22,8 +22,9 @@ enum ActionInner {
     SelectGroup(SelectGroup),
     CreateBrush(CreateBrush),
     SelectBrush(SelectBrush),
-    SelectAxisCP(SelectAxisCP),
-    SelectCurveCP(SelectCurveCP),
+    SelectCP(SelectCP),
+    // SelectAxisCP(SelectAxisCP),
+    // SelectCurveCP(SelectCurveCP),
 }
 
 impl Action {
@@ -97,16 +98,15 @@ impl Action {
         control_point_idx: usize,
         active_label_idx: usize,
         easing_type: EasingType,
-        event: PointerEvent,
     ) -> Self {
         Self {
-            inner: ActionInner::SelectAxisCP(SelectAxisCP::new(
+            inner: ActionInner::SelectCP(SelectCP::new(
                 axis,
                 selection_idx,
                 control_point_idx,
                 active_label_idx,
                 easing_type,
-                event,
+                false,
             )),
         }
     }
@@ -119,12 +119,13 @@ impl Action {
         easing_type: EasingType,
     ) -> Self {
         Self {
-            inner: ActionInner::SelectCurveCP(SelectCurveCP::new(
+            inner: ActionInner::SelectCP(SelectCP::new(
                 axis,
                 selection_idx,
                 control_point_idx,
                 active_label_idx,
                 easing_type,
+                true,
             )),
         }
     }
@@ -135,8 +136,9 @@ impl Action {
             ActionInner::SelectGroup(e) => e.update(event),
             ActionInner::CreateBrush(e) => e.update(event),
             ActionInner::SelectBrush(e) => e.update(event),
-            ActionInner::SelectAxisCP(e) => e.update(event),
-            ActionInner::SelectCurveCP(e) => e.update(event),
+            ActionInner::SelectCP(e) => e.update(event),
+            // ActionInner::SelectAxisCP(e) => e.update(event),
+            // ActionInner::SelectCurveCP(e) => e.update(event),
         }
     }
 
@@ -146,8 +148,9 @@ impl Action {
             ActionInner::SelectGroup(e) => e.finish(),
             ActionInner::CreateBrush(e) => e.finish(),
             ActionInner::SelectBrush(e) => e.finish(),
-            ActionInner::SelectAxisCP(e) => e.finish(),
-            ActionInner::SelectCurveCP(e) => e.finish(),
+            ActionInner::SelectCP(e) => e.finish(),
+            // ActionInner::SelectAxisCP(e) => e.finish(),
+            // ActionInner::SelectCurveCP(e) => e.finish(),
         }
     }
 }
@@ -524,9 +527,10 @@ impl SelectBrush {
 }
 
 #[derive(Debug)]
-enum SelectAxisCP {
+enum SelectCP {
     Selected {
         axis: Rc<Axis>,
+        modify_curve_value: bool,
         selection_idx: usize,
         control_point_idx: usize,
         active_label_idx: usize,
@@ -536,6 +540,7 @@ enum SelectAxisCP {
     },
     DraggedSingle {
         axis: Rc<Axis>,
+        modify_curve_value: bool,
         selection_idx: usize,
         control_point_idx: usize,
         active_label_idx: usize,
@@ -545,6 +550,7 @@ enum SelectAxisCP {
     },
     DraggedSymmetric {
         axis: Rc<Axis>,
+        modify_curve_value: bool,
         selection_idx: usize,
         lower_x: f32,
         upper_x: f32,
@@ -559,14 +565,14 @@ enum SelectAxisCP {
     Undefined,
 }
 
-impl SelectAxisCP {
+impl SelectCP {
     fn new(
         axis: Rc<Axis>,
         selection_idx: usize,
         control_point_idx: usize,
         active_label_idx: usize,
         easing_type: EasingType,
-        _event: PointerEvent,
+        modify_curve_value: bool,
     ) -> Self {
         let mut curve_builder = axis
             .borrow_selection_curve_builder(active_label_idx)
@@ -581,16 +587,17 @@ impl SelectAxisCP {
             easing_type,
             selection,
             curve_builder,
+            modify_curve_value,
         }
     }
 
     fn update(&mut self, event: PointerEvent) -> Event {
-        if event.movement_y() == 0 {
+        if event.movement_x() == 0 && event.movement_y() == 0 {
             return Event::NONE;
         }
 
         match self {
-            SelectAxisCP::Selected {
+            Self::Selected {
                 axis,
                 selection_idx,
                 control_point_idx,
@@ -598,8 +605,9 @@ impl SelectAxisCP {
                 easing_type,
                 selection,
                 curve_builder,
+                modify_curve_value,
             } => 'block: {
-                let axis_value = {
+                let (curve_value, axis_value) = {
                     let axes = axis.axes();
                     let axes = axes.borrow();
                     let position = Position::<ScreenSpace>::new((
@@ -609,14 +617,25 @@ impl SelectAxisCP {
                     let position = position.transform(&axes.space_transformer());
                     let position = position.transform(&axis.space_transformer());
 
+                    let max_offset = axis.curve_offset_at_curve_value(1.0);
+                    let min_offset = axis.curve_offset_at_curve_value(0.0);
+                    let axis_center = axis.label_position().x;
+                    let min_curve_position_x = axis_center + min_offset.x;
+                    let max_curve_position_x = axis_center + max_offset.x;
+                    let curve_value = position
+                        .x
+                        .inv_lerp(min_curve_position_x, max_curve_position_x);
+
                     let (axis_start, axis_end) = axis.axis_line_range();
-                    position
+                    let axis_value = position
                         .y
                         .inv_lerp(axis_start.y, axis_end.y)
-                        .clamp(0.0, 1.0)
+                        .clamp(0.0, 1.0);
+
+                    (curve_value, axis_value)
                 };
 
-                let move_direction = if event.movement_y() < 0 {
+                let move_direction = if event.movement_y() <= 0 {
                     Direction::Up
                 } else {
                     Direction::Down
@@ -643,6 +662,11 @@ impl SelectAxisCP {
                         (i1, i2)
                     };
 
+                    if *modify_curve_value {
+                        selection.set_control_point_y(control_point_idx_1, curve_value);
+                        selection.set_control_point_y(control_point_idx_2, curve_value);
+                    }
+
                     {
                         let mut curve_builder = curve_builder.clone();
                         curve_builder.insert_selection(selection.clone(), *selection_idx);
@@ -653,9 +677,9 @@ impl SelectAxisCP {
                         *axis.borrow_selection_curve_builder_mut(*active_label_idx) = curve_builder;
                     }
 
-                    let this = std::mem::replace(self, SelectAxisCP::Undefined);
+                    let this = std::mem::replace(self, Self::Undefined);
                     match this {
-                        SelectAxisCP::Selected {
+                        Self::Selected {
                             axis,
                             selection_idx,
                             control_point_idx,
@@ -663,8 +687,9 @@ impl SelectAxisCP {
                             easing_type,
                             selection,
                             curve_builder,
+                            modify_curve_value,
                         } => {
-                            *self = SelectAxisCP::DraggedSymmetric {
+                            *self = Self::DraggedSymmetric {
                                 axis,
                                 selection_idx,
                                 lower_x: lower,
@@ -676,6 +701,7 @@ impl SelectAxisCP {
                                 easing_type,
                                 selection,
                                 curve_builder,
+                                modify_curve_value,
                             };
                         }
                         _ => unreachable!(),
@@ -685,17 +711,14 @@ impl SelectAxisCP {
 
                 if create_new {
                     let control_point_x = selection.control_point_x(*control_point_idx);
-                    let axis_value = if axis_value < control_point_x
-                        && move_direction == Direction::Up
-                        || axis_value > control_point_x && move_direction == Direction::Down
-                    {
-                        control_point_x
-                    } else {
-                        axis_value
-                    };
-                    *control_point_idx = selection.insert_control_point(axis_value, move_direction);
+                    *control_point_idx =
+                        selection.insert_control_point(control_point_x, move_direction);
                 } else {
                     selection.set_control_point_x(*control_point_idx, axis_value);
+                }
+
+                if *modify_curve_value {
+                    selection.set_control_point_y(*control_point_idx, curve_value)
                 }
 
                 {
@@ -708,9 +731,9 @@ impl SelectAxisCP {
                     *axis.borrow_selection_curve_builder_mut(*active_label_idx) = curve_builder;
                 }
 
-                let this = std::mem::replace(self, SelectAxisCP::Undefined);
+                let this = std::mem::replace(self, Self::Undefined);
                 match this {
-                    SelectAxisCP::Selected {
+                    Self::Selected {
                         axis,
                         selection_idx,
                         control_point_idx,
@@ -718,8 +741,9 @@ impl SelectAxisCP {
                         easing_type,
                         selection,
                         curve_builder,
+                        modify_curve_value,
                     } => {
-                        *self = SelectAxisCP::DraggedSingle {
+                        *self = Self::DraggedSingle {
                             axis,
                             selection_idx,
                             control_point_idx,
@@ -727,12 +751,13 @@ impl SelectAxisCP {
                             easing_type,
                             selection,
                             curve_builder,
+                            modify_curve_value,
                         };
                     }
                     _ => unreachable!(),
                 }
             }
-            SelectAxisCP::DraggedSingle {
+            Self::DraggedSingle {
                 axis,
                 selection_idx,
                 control_point_idx,
@@ -740,8 +765,9 @@ impl SelectAxisCP {
                 easing_type,
                 selection,
                 curve_builder,
+                modify_curve_value,
             } => {
-                let axis_value = {
+                let (curve_value, axis_value) = {
                     let axes = axis.axes();
                     let axes = axes.borrow();
                     let position = Position::<ScreenSpace>::new((
@@ -751,14 +777,29 @@ impl SelectAxisCP {
                     let position = position.transform(&axes.space_transformer());
                     let position = position.transform(&axis.space_transformer());
 
+                    let max_offset = axis.curve_offset_at_curve_value(1.0);
+                    let min_offset = axis.curve_offset_at_curve_value(0.0);
+                    let axis_center = axis.label_position().x;
+                    let min_curve_position_x = axis_center + min_offset.x;
+                    let max_curve_position_x = axis_center + max_offset.x;
+                    let curve_value = position
+                        .x
+                        .inv_lerp(min_curve_position_x, max_curve_position_x);
+
                     let (axis_start, axis_end) = axis.axis_line_range();
-                    position
+                    let axis_value = position
                         .y
                         .inv_lerp(axis_start.y, axis_end.y)
-                        .clamp(0.0, 1.0)
+                        .clamp(0.0, 1.0);
+
+                    (curve_value, axis_value)
                 };
 
                 selection.set_control_point_x(*control_point_idx, axis_value);
+
+                if *modify_curve_value {
+                    selection.set_control_point_y(*control_point_idx, curve_value);
+                }
 
                 let mut curve_builder = curve_builder.clone();
                 curve_builder.insert_selection(selection.clone(), *selection_idx);
@@ -768,7 +809,7 @@ impl SelectAxisCP {
                     .set_curve(curve_builder.build(datums_range, *easing_type));
                 *axis.borrow_selection_curve_builder_mut(*active_label_idx) = curve_builder;
             }
-            SelectAxisCP::DraggedSymmetric {
+            Self::DraggedSymmetric {
                 axis,
                 selection_idx,
                 lower_x,
@@ -780,8 +821,9 @@ impl SelectAxisCP {
                 easing_type,
                 selection,
                 curve_builder,
+                modify_curve_value,
             } => {
-                let axis_value = {
+                let (curve_value, axis_value) = {
                     let axes = axis.axes();
                     let axes = axes.borrow();
                     let position = Position::<ScreenSpace>::new((
@@ -791,11 +833,22 @@ impl SelectAxisCP {
                     let position = position.transform(&axes.space_transformer());
                     let position = position.transform(&axis.space_transformer());
 
+                    let max_offset = axis.curve_offset_at_curve_value(1.0);
+                    let min_offset = axis.curve_offset_at_curve_value(0.0);
+                    let axis_center = axis.label_position().x;
+                    let min_curve_position_x = axis_center + min_offset.x;
+                    let max_curve_position_x = axis_center + max_offset.x;
+                    let curve_value = position
+                        .x
+                        .inv_lerp(min_curve_position_x, max_curve_position_x);
+
                     let (axis_start, axis_end) = axis.axis_line_range();
-                    position
+                    let axis_value = position
                         .y
                         .inv_lerp(axis_start.y, axis_end.y)
-                        .clamp(0.0, 1.0)
+                        .clamp(0.0, 1.0);
+
+                    (curve_value, axis_value)
                 };
 
                 let (lower, upper) = if *extending_start {
@@ -809,6 +862,11 @@ impl SelectAxisCP {
                 selection.set_control_point_x(*control_point_idx_1, lower);
                 selection.set_control_point_x(*control_point_idx_2, upper);
 
+                if *modify_curve_value {
+                    selection.set_control_point_y(*control_point_idx_1, curve_value);
+                    selection.set_control_point_y(*control_point_idx_2, curve_value);
+                }
+
                 let mut curve_builder = curve_builder.clone();
                 curve_builder.insert_selection(selection.clone(), *selection_idx);
 
@@ -817,7 +875,7 @@ impl SelectAxisCP {
                     .set_curve(curve_builder.build(datums_range, *easing_type));
                 *axis.borrow_selection_curve_builder_mut(*active_label_idx) = curve_builder;
             }
-            SelectAxisCP::Undefined => unreachable!(),
+            Self::Undefined => unreachable!(),
         }
 
         Event::SELECTIONS_CHANGE
@@ -825,7 +883,7 @@ impl SelectAxisCP {
 
     fn finish(self) -> Event {
         match self {
-            SelectAxisCP::Selected {
+            Self::Selected {
                 axis,
                 selection_idx,
                 control_point_idx,
@@ -833,6 +891,7 @@ impl SelectAxisCP {
                 easing_type,
                 mut selection,
                 mut curve_builder,
+                ..
             } => {
                 if selection.num_control_points() != 2 {
                     selection.remove_control_point(control_point_idx);
@@ -844,7 +903,7 @@ impl SelectAxisCP {
                     .set_curve(curve_builder.build(datums_range, easing_type));
                 *axis.borrow_selection_curve_builder_mut(active_label_idx) = curve_builder;
             }
-            SelectAxisCP::DraggedSingle {
+            Self::DraggedSingle {
                 axis,
                 selection_idx,
                 active_label_idx,
@@ -859,7 +918,7 @@ impl SelectAxisCP {
                     .set_curve(curve_builder.build(datums_range, easing_type));
                 *axis.borrow_selection_curve_builder_mut(active_label_idx) = curve_builder;
             }
-            SelectAxisCP::DraggedSymmetric {
+            Self::DraggedSymmetric {
                 axis,
                 selection_idx,
                 active_label_idx,
@@ -874,110 +933,8 @@ impl SelectAxisCP {
                     .set_curve(curve_builder.build(datums_range, easing_type));
                 *axis.borrow_selection_curve_builder_mut(active_label_idx) = curve_builder;
             }
-            SelectAxisCP::Undefined => unreachable!(),
+            Self::Undefined => unreachable!(),
         }
-
-        Event::SELECTIONS_CHANGE
-    }
-}
-
-#[derive(Debug)]
-struct SelectCurveCP {
-    axis: Rc<Axis>,
-    selection_idx: usize,
-    control_point_idx: usize,
-    active_label_idx: usize,
-    easing_type: EasingType,
-    selection: Selection,
-    curve_builder: SelectionCurveBuilder,
-}
-
-impl SelectCurveCP {
-    fn new(
-        axis: Rc<Axis>,
-        selection_idx: usize,
-        control_point_idx: usize,
-        active_label_idx: usize,
-        easing_type: EasingType,
-    ) -> Self {
-        let mut curve_builder = axis
-            .borrow_selection_curve_builder(active_label_idx)
-            .clone();
-        let selection = curve_builder.remove_selection(selection_idx);
-
-        Self {
-            axis,
-            selection_idx,
-            control_point_idx,
-            active_label_idx,
-            easing_type,
-            selection,
-            curve_builder,
-        }
-    }
-
-    fn update(&mut self, event: PointerEvent) -> Event {
-        if event.movement_x() == 0 && event.movement_y() == 0 {
-            return Event::NONE;
-        }
-
-        let (curve_value, axis_value) = {
-            let axes = self.axis.axes();
-            let axes = axes.borrow();
-            let position =
-                Position::<ScreenSpace>::new((event.offset_x() as f32, event.offset_y() as f32));
-            let position = position.transform(&axes.space_transformer());
-            let position = position.transform(&self.axis.space_transformer());
-
-            let max_offset = self.axis.curve_offset_at_curve_value(1.0);
-            let min_offset = self.axis.curve_offset_at_curve_value(0.0);
-            let axis_center = self.axis.label_position().x;
-            let min_curve_position_x = axis_center + min_offset.x;
-            let max_curve_position_x = axis_center + max_offset.x;
-            let curve_value = position
-                .x
-                .inv_lerp(min_curve_position_x, max_curve_position_x);
-
-            let (axis_start, axis_end) = self.axis.axis_line_range();
-            let axis_value = position
-                .y
-                .inv_lerp(axis_start.y, axis_end.y)
-                .clamp(0.0, 1.0);
-
-            (curve_value, axis_value)
-        };
-
-        self.selection
-            .set_control_point_x(self.control_point_idx, axis_value);
-        self.selection
-            .set_control_point_y(self.control_point_idx, curve_value);
-
-        let mut curve_builder = self.curve_builder.clone();
-        curve_builder.insert_selection(self.selection.clone(), self.selection_idx);
-
-        let datums_range = self.axis.visible_data_range_normalized().into();
-        self.axis
-            .borrow_selection_curve_mut(self.active_label_idx)
-            .set_curve(curve_builder.build(datums_range, self.easing_type));
-        *self
-            .axis
-            .borrow_selection_curve_builder_mut(self.active_label_idx) = curve_builder;
-
-        Event::SELECTIONS_CHANGE
-    }
-
-    fn finish(self) -> Event {
-        let selection = self.selection;
-        let mut curve_builder = self.curve_builder;
-        let datums_range = self.axis.visible_data_range_normalized().into();
-        curve_builder.insert_selection(selection, self.selection_idx);
-
-        self.axis
-            .borrow_selection_curve_mut(self.active_label_idx)
-            .set_curve(curve_builder.build(datums_range, self.easing_type));
-        *self
-            .axis
-            .borrow_selection_curve_builder_mut(self.active_label_idx) = curve_builder;
 
         Event::SELECTIONS_CHANGE
     }

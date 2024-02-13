@@ -2061,7 +2061,6 @@ impl Renderer {
                             control_point_idx,
                             active_label_idx,
                             self.labels[active_label_idx].easing,
-                            event,
                         ))
                     }
                 }
