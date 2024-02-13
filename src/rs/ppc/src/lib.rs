@@ -1608,6 +1608,7 @@ impl Renderer {
 
         self.update_selections_config_buffer();
         self.update_selection_lines_buffer();
+        self.update_data_config_buffer();
         self.update_color_scale_bounds_buffer();
     }
 

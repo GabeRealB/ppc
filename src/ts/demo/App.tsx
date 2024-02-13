@@ -1049,6 +1049,11 @@ const LabelsView = (
         }
     }
 
+    const probabilityLabelFormat = (value: number) => {
+        let percent = Math.round((value + Number.EPSILON) * 100 * 100) / 100;
+        return `${percent}%`
+    };
+
     return (
         <Box width={"100%"}>
             <Typography variant='h5'>Labels</Typography>
@@ -1089,6 +1094,8 @@ const LabelsView = (
                             value={selectionBounds}
                             onChange={handleProbabilityRangeChange}
                             onChangeCommitted={handleProbabilityRangeChange}
+                            getAriaValueText={probabilityLabelFormat}
+                            valueLabelFormat={probabilityLabelFormat}
                             valueLabelDisplay="auto"
                             size="small"
                         />
