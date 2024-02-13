@@ -51,7 +51,7 @@ const DEFAULT_DATA_COLOR_MODE: fn() -> wasm_bridge::DataColorMode =
 const DEFAULT_COLOR_SCALE: fn() -> ColorScaleDescriptor<'static> =
     || ColorScaleDescriptor::Constant(ColorQuery::Named("blue".into()));
 
-const MSAA_SAMPLES: u32 = 4;
+const DEFAULT_DRAW_ORDER: wasm_bridge::DrawOrder = wasm_bridge::DrawOrder::SelectedProbability;
 
 /// Implementation of the renderer for the parallel coordinates.
 #[wasm_bindgen]
@@ -64,7 +64,8 @@ pub struct Renderer {
     device: webgpu::Device,
     pipelines: pipelines::Pipelines,
     buffers: buffers::Buffers,
-    render_texture: webgpu::Texture,
+    render_texture: buffers::RenderTexture,
+    depth_texture: buffers::DepthTexture,
     event_queue: Option<Receiver<wasm_bridge::Event>>,
     axes: Rc<RefCell<axis::Axes>>,
     color_bar: color_bar::ColorBar,
@@ -78,6 +79,7 @@ pub struct Renderer {
     background_color: ColorTransparent<SRgb>,
     brush_color: ColorOpaque<Xyz>,
     unselected_color: ColorTransparent<Xyz>,
+    draw_order: wasm_bridge::DrawOrder,
     interaction_mode: wasm_bridge::InteractionMode,
     debug: wasm_bridge::DebugOptions,
     pixel_ratio: f32,
@@ -239,16 +241,8 @@ impl Renderer {
         let preferred_format = gpu.get_preferred_canvas_format().into();
         let pipelines = pipelines::Pipelines::new(&device, preferred_format).await;
         let buffers = buffers::Buffers::new(&device);
-        let render_texture = device.create_texture(webgpu::TextureDescriptor::<'_, 2, 0> {
-            label: Some(Cow::Borrowed("render texture")),
-            dimension: None,
-            format: preferred_format,
-            mip_level_count: None,
-            sample_count: Some(MSAA_SAMPLES),
-            size: [canvas_gpu.width() as usize, canvas_gpu.height() as usize],
-            usage: webgpu::TextureUsage::RENDER_ATTACHMENT,
-            view_formats: None,
-        });
+        let render_texture = buffers::RenderTexture::new(&device, preferred_format);
+        let depth_texture = buffers::DepthTexture::new(&device);
 
         let client_width = canvas_gpu.client_width() as f32;
         let client_height = canvas_gpu.client_height() as f32;
@@ -299,6 +293,7 @@ impl Renderer {
             device,
             pipelines,
             render_texture,
+            depth_texture,
             buffers,
             event_queue: None,
             axes,
@@ -314,6 +309,7 @@ impl Renderer {
             background_color: DEFAULT_BACKGROUND_COLOR(),
             brush_color: DEFAULT_BRUSH_COLOR(),
             unselected_color: DEFAULT_UNSELECTED_COLOR(),
+            draw_order: DEFAULT_DRAW_ORDER,
             interaction_mode: wasm_bridge::InteractionMode::Full,
             debug: Default::default(),
             staging_data: StagingData::default(),
@@ -933,7 +929,8 @@ impl Renderer {
         if self.canvas_gpu.width() != 0 && self.canvas_gpu.height() != 0 {
             let texture_view =
                 webgpu::Texture::from_raw(self.context_gpu.get_current_texture()).create_view(None);
-            let msaa_texture_view = self.render_texture.create_view(None);
+            let msaa_texture_view = self.render_texture.view();
+            let depth_texture_view = self.depth_texture.view();
 
             let render_pass_descriptor = webgpu::RenderPassDescriptor {
                 label: Some("render pass".into()),
@@ -944,6 +941,17 @@ impl Renderer {
                     resolve_target: Some(texture_view.clone()),
                     view: msaa_texture_view.clone(),
                 }],
+                depth_stencil_attachment: Some(webgpu::RenderPassDepthStencilAttachment {
+                    view: depth_texture_view,
+                    depth_clear_value: Some(1.0),
+                    depth_load_op: Some(webgpu::RenderPassLoadOp::Clear),
+                    depth_read_only: Some(false),
+                    depth_store_op: Some(webgpu::RenderPassStoreOp::Store),
+                    stencil_clear_value: None,
+                    stencil_load_op: None,
+                    stencil_read_only: None,
+                    stencil_store_op: None,
+                }),
                 max_draw_count: None,
             };
             let render_pass = command_encoder.begin_render_pass(render_pass_descriptor);
@@ -1335,6 +1343,11 @@ impl Renderer {
         self.update_data_config_buffer();
     }
 
+    fn set_draw_order(&mut self, draw_order: wasm_bridge::DrawOrder) {
+        self.draw_order = draw_order;
+        self.update_data_config_buffer();
+    }
+
     fn set_color_scale(
         &mut self,
         color_space: wasm_bridge::ColorSpace,
@@ -1439,18 +1452,10 @@ impl Renderer {
             .scale(device_pixel_ratio as f64, device_pixel_ratio as f64)
             .unwrap();
 
-        self.render_texture = self
-            .device
-            .create_texture(webgpu::TextureDescriptor::<'_, 2, 0> {
-                label: Some(Cow::Borrowed("render texture")),
-                dimension: None,
-                format: self.render_texture.format(),
-                mip_level_count: None,
-                sample_count: Some(MSAA_SAMPLES),
-                size: [scaled_width as usize, scaled_height as usize],
-                usage: webgpu::TextureUsage::RENDER_ATTACHMENT,
-                view_formats: None,
-            });
+        self.render_texture
+            .resize(&self.device, width, height, device_pixel_ratio);
+        self.depth_texture
+            .resize(&self.device, width, height, device_pixel_ratio);
 
         self.color_bar.set_screen_size(width as f32, height as f32);
         if self.color_bar.is_visible() {
@@ -1901,6 +1906,7 @@ impl Renderer {
                 background,
                 brush,
                 unselected,
+                draw_order,
                 color_scale,
                 color_mode,
             } = colors;
@@ -1913,6 +1919,9 @@ impl Renderer {
             }
             if let Some(unselected) = unselected {
                 self.set_unselected_color(unselected);
+            }
+            if let Some(draw_order) = draw_order {
+                self.set_draw_order(draw_order);
             }
             if let Some(color_scale) = color_scale {
                 self.set_color_scale(color_scale.color_space, color_scale.scale);
@@ -2369,6 +2378,22 @@ impl Renderer {
             self.data_color_mode,
             wasm_bridge::DataColorMode::Probability
         ) as u32;
+        let render_order = match self.draw_order {
+            wasm_bridge::DrawOrder::Unordered => buffers::DataLineConfig::ORDER_UNORDERED,
+            wasm_bridge::DrawOrder::Probability => buffers::DataLineConfig::ORDER_PROBABILITY,
+            wasm_bridge::DrawOrder::InvertedProbability => {
+                buffers::DataLineConfig::ORDER_PROBABILITY_INVERTED
+            }
+            wasm_bridge::DrawOrder::SelectedUnordered => {
+                buffers::DataLineConfig::ORDER_SELECTED_UNORDERED
+            }
+            wasm_bridge::DrawOrder::SelectedProbability => {
+                buffers::DataLineConfig::ORDER_SELECTED_PROBABILITY
+            }
+            wasm_bridge::DrawOrder::SelectedInvertedProbability => {
+                buffers::DataLineConfig::ORDER_SELECTED_PROBABILITY_INVERTED
+            }
+        };
         let (width, height) = guard.data_line_size();
         self.buffers.data_mut().config_mut().update(
             &self.device,
@@ -2376,6 +2401,7 @@ impl Renderer {
                 line_width: wgsl::Vec2([width.0, height.0]),
                 selection_bounds: wgsl::Vec2(selection_bounds.into()),
                 color_probabilities,
+                render_order,
                 unselected_color: wgsl::Vec4(self.unselected_color.to_f32_with_alpha()),
             },
         );

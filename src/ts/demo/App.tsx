@@ -1191,6 +1191,7 @@ const ColorSettings = (
         return (undefined);
     }
 
+    const drawOrder = colors.drawOrder ? colors.drawOrder : 'selected_probability';
     const constantColorModeValue = typeof (ppc.colors?.selected?.color) == "number"
         ? ppc.colors?.selected?.color
         : 0.5;
@@ -1243,6 +1244,16 @@ const ColorSettings = (
         setProps({ ppcState: ppc });
     };
 
+    const switchDrawOrder = (e, drawOrder) => {
+        const colorsClone = colors ?
+            window.structuredClone(colors)
+            : { selected: { color: 0.5, scale: 'plasma' } };
+        colorsClone.drawOrder = drawOrder;
+        ppc.colors = colorsClone;
+        logPPCEvent({ colors: colorsClone });
+        setProps({ ppcState: ppc });
+    }
+
     const setConstantColorValue = (e: Event, value: number) => {
         const colorsClone = colors ?
             window.structuredClone(colors)
@@ -1292,13 +1303,37 @@ const ColorSettings = (
                         row
                         aria-labelledby="color-settings-color-bar-group-label"
                         name="color-settings-color-bar-group"
-                        value={colorBar}
+                        value={colorBar ? colorBar : 'hidden'}
                         onChange={switchColorBarVisibility}
                     >
                         <FormControlLabel value="hidden" control={<Radio />} label="Hidden" />
                         <FormControlLabel value="visible" control={<Radio />} label="Visible" />
                     </RadioGroup>
                 </FormControl>
+                {userGroup === "PPC" ? <FormControl fullWidth>
+                    <FormLabel>Draw order</FormLabel>
+                    <RadioGroup
+                        row
+                        value={drawOrder}
+                        onChange={switchDrawOrder}
+                    >
+                        <FormControlLabel
+                            control={<Radio />}
+                            value={"selected_unordered"}
+                            label={"Unord."}
+                        />
+                        <FormControlLabel
+                            control={<Radio />}
+                            value={"selected_probability"}
+                            label={"Prob."}
+                        />
+                        <FormControlLabel
+                            control={<Radio />}
+                            value={"selected_inverted_probability"}
+                            label={"Inv."}
+                        />
+                    </RadioGroup>
+                </FormControl> : null}
                 <FormControl fullWidth>
                     <FormLabel>Color Mode</FormLabel>
                     <RadioGroup

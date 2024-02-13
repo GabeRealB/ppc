@@ -9,6 +9,13 @@ export type Color = {
     values: number[]
 };
 
+export type DrawOrder = 'unordered'
+    | 'probability'
+    | 'inverted_probability'
+    | 'selected_unordered'
+    | 'selected_probability'
+    | 'selected_inverted_probability';
+
 export type ColorScale = {
     colorSpace: ColorSpace,
     gradient: [Color][] | [Color, number][]
@@ -27,6 +34,7 @@ export type Colors = {
     background?: string | Color
     brush?: string | Color
     unselected?: string | Color
+    drawOrder?: DrawOrder
     selected: SelectedColor
 };
 

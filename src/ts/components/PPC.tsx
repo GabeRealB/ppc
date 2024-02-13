@@ -101,6 +101,7 @@ const PPC = (props: Props) => {
                 AxisDef,
                 AxisTicksDef,
                 Element,
+                DrawOrder,
                 ColorDescription,
                 ColorScaleDescription,
                 DebugOptions,
@@ -293,6 +294,7 @@ const PPC = (props: Props) => {
                     currentTransaction.setDefaultColor(Element.Background);
                     currentTransaction.setDefaultColor(Element.Brush);
                     currentTransaction.setDefaultColor(Element.Unselected);
+                    currentTransaction.setDefaultDrawOrder();
                     currentTransaction.setDefaultColorScaleColor();
                     currentTransaction.setDefaultSelectedDataColorMode();
                     return;
@@ -364,6 +366,31 @@ const PPC = (props: Props) => {
                 setColor(Element.Brush, colors.brush);
                 setColor(Element.Unselected, colors.unselected);
                 setSelected(colors.selected);
+
+                if (colors.drawOrder) {
+                    switch (colors.drawOrder) {
+                        case 'unordered':
+                            currentTransaction.setDrawOrder(DrawOrder.Unordered);
+                            break;
+                        case 'probability':
+                            currentTransaction.setDrawOrder(DrawOrder.Probability);
+                            break;
+                        case 'inverted_probability':
+                            currentTransaction.setDrawOrder(DrawOrder.InvertedProbability);
+                            break;
+                        case 'selected_unordered':
+                            currentTransaction.setDrawOrder(DrawOrder.SelectedUnordered);
+                            break;
+                        case 'selected_probability':
+                            currentTransaction.setDrawOrder(DrawOrder.SelectedProbability);
+                            break;
+                        case 'selected_inverted_probability':
+                            currentTransaction.setDrawOrder(DrawOrder.SelectedInvertedProbability);
+                            break;
+                    }
+                } else {
+                    currentTransaction.setDefaultDrawOrder();
+                }
             }
             const setColorBarVisibility = (data: SetColorBarVisibilityMsgPayload) => {
                 if (rendererState.exited) {

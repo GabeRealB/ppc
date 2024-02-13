@@ -1733,6 +1733,7 @@ impl<'a> From<ProgrammableStage<'a>> for web_sys::GpuProgrammableStage {
 pub struct RenderPipelineDescriptor<'a, const N: usize> {
     pub label: Option<Cow<'a, str>>,
     pub layout: PipelineLayoutType,
+    pub depth_stencil: Option<DepthStencilState>,
     pub vertex: VertexState<'a>,
     pub fragment: Option<FragmentState<'a, N>>,
     pub multisample: Option<MultisampleState>,
@@ -1750,6 +1751,10 @@ impl<'a, const N: usize> From<RenderPipelineDescriptor<'a, N>>
 
         if let Some(label) = value.label {
             descriptor.label(&label);
+        }
+
+        if let Some(depth_stencil) = value.depth_stencil {
+            descriptor.depth_stencil(&depth_stencil.into());
         }
 
         if let Some(fragment) = value.fragment {
@@ -1800,6 +1805,33 @@ impl<'a, const N: usize> From<PipelineLayoutDescriptor<'a, N>>
         let mut descriptor = web_sys::GpuPipelineLayoutDescriptor::new(&layouts);
         value.label.map(|l| descriptor.label(&l));
         descriptor
+    }
+}
+
+/// Representation of a [`web_sys::GpuDepthStencilState`].
+#[derive(Debug)]
+pub struct DepthStencilState {
+    pub depth_bias: Option<i32>,
+    pub depth_bias_clamp: Option<f32>,
+    pub depth_bias_slope_scale: Option<f32>,
+    pub depth_compare: CompareFunction,
+    pub depth_write_enabled: bool,
+    pub format: TextureFormat,
+}
+
+impl From<DepthStencilState> for web_sys::GpuDepthStencilState {
+    fn from(value: DepthStencilState) -> Self {
+        let mut state = web_sys::GpuDepthStencilState::new(value.format.into());
+        value.depth_bias.map(|x| state.depth_bias(x));
+        value.depth_bias_clamp.map(|x| state.depth_bias_clamp(x));
+        value
+            .depth_bias_slope_scale
+            .map(|x| state.depth_bias_slope_scale(x));
+
+        state.depth_compare(value.depth_compare.into());
+        state.depth_write_enabled(value.depth_write_enabled);
+
+        state
     }
 }
 
@@ -2388,6 +2420,7 @@ impl From<ComputePassDescriptor<'_>> for web_sys::GpuComputePassDescriptor {
 pub struct RenderPassDescriptor<'a, const N: usize> {
     pub label: Option<Cow<'a, str>>,
     pub color_attachments: [RenderPassColorAttachments; N],
+    pub depth_stencil_attachment: Option<RenderPassDepthStencilAttachment>,
     pub max_draw_count: Option<usize>,
 }
 
@@ -2398,6 +2431,9 @@ impl<const N: usize> From<RenderPassDescriptor<'_, N>> for web_sys::GpuRenderPas
 
         let mut descriptor = web_sys::GpuRenderPassDescriptor::new(&color_attachments);
         value.label.map(|x| descriptor.label(&x));
+        value
+            .depth_stencil_attachment
+            .map(|x| descriptor.depth_stencil_attachment(&x.into()));
         value
             .max_draw_count
             .map(|x| descriptor.max_draw_count(x as f64));
@@ -2439,7 +2475,51 @@ impl From<RenderPassColorAttachments> for JsValue {
     }
 }
 
-/// Load operation of a [`RenderPassColorAttachments`].
+/// Depth stencil attachment of a [`RenderPassDescriptor`].
+#[derive(Debug)]
+pub struct RenderPassDepthStencilAttachment {
+    pub view: TextureView,
+    pub depth_clear_value: Option<f32>,
+    pub depth_load_op: Option<RenderPassLoadOp>,
+    pub depth_read_only: Option<bool>,
+    pub depth_store_op: Option<RenderPassStoreOp>,
+    pub stencil_clear_value: Option<u32>,
+    pub stencil_load_op: Option<RenderPassLoadOp>,
+    pub stencil_read_only: Option<bool>,
+    pub stencil_store_op: Option<RenderPassStoreOp>,
+}
+
+impl From<RenderPassDepthStencilAttachment> for web_sys::GpuRenderPassDepthStencilAttachment {
+    fn from(value: RenderPassDepthStencilAttachment) -> Self {
+        let mut attachment = web_sys::GpuRenderPassDepthStencilAttachment::new(&value.view.view);
+        value
+            .depth_clear_value
+            .map(|x| attachment.depth_clear_value(x));
+        value
+            .depth_load_op
+            .map(|x| attachment.depth_load_op(x.into()));
+        value.depth_read_only.map(|x| attachment.depth_read_only(x));
+        value
+            .depth_store_op
+            .map(|x| attachment.depth_store_op(x.into()));
+        value
+            .stencil_clear_value
+            .map(|x| attachment.stencil_clear_value(x));
+        value
+            .stencil_load_op
+            .map(|x| attachment.stencil_load_op(x.into()));
+        value
+            .stencil_read_only
+            .map(|x| attachment.stencil_read_only(x));
+        value
+            .stencil_store_op
+            .map(|x| attachment.stencil_store_op(x.into()));
+
+        attachment
+    }
+}
+
+/// Load operation of a [`RenderPassColorAttachments`] and [`RenderPassDepthStencilAttachment`].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RenderPassLoadOp {
     Clear,
@@ -2455,7 +2535,16 @@ impl From<RenderPassLoadOp> for JsValue {
     }
 }
 
-/// Store operation of a [`RenderPassColorAttachments`].
+impl From<RenderPassLoadOp> for web_sys::GpuLoadOp {
+    fn from(value: RenderPassLoadOp) -> Self {
+        match value {
+            RenderPassLoadOp::Clear => web_sys::GpuLoadOp::Clear,
+            RenderPassLoadOp::Load => web_sys::GpuLoadOp::Load,
+        }
+    }
+}
+
+/// Store operation of a [`RenderPassColorAttachments`] and [`RenderPassDepthStencilAttachment`].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RenderPassStoreOp {
     Discard,
@@ -2467,6 +2556,15 @@ impl From<RenderPassStoreOp> for JsValue {
         match value {
             RenderPassStoreOp::Discard => JsValue::from_str("discard"),
             RenderPassStoreOp::Store => JsValue::from_str("store"),
+        }
+    }
+}
+
+impl From<RenderPassStoreOp> for web_sys::GpuStoreOp {
+    fn from(value: RenderPassStoreOp) -> Self {
+        match value {
+            RenderPassStoreOp::Discard => web_sys::GpuStoreOp::Discard,
+            RenderPassStoreOp::Store => web_sys::GpuStoreOp::Store,
         }
     }
 }

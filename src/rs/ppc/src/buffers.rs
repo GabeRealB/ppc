@@ -97,7 +97,17 @@ pub struct DataLineConfig {
     pub line_width: Vec2<f32>,
     pub selection_bounds: Vec2<f32>,
     pub color_probabilities: u32,
+    pub render_order: u32,
     pub unselected_color: Vec4<f32>,
+}
+
+impl DataLineConfig {
+    pub const ORDER_UNORDERED: u32 = 0;
+    pub const ORDER_PROBABILITY: u32 = 1;
+    pub const ORDER_PROBABILITY_INVERTED: u32 = 2;
+    pub const ORDER_SELECTED_UNORDERED: u32 = 3;
+    pub const ORDER_SELECTED_PROBABILITY: u32 = 4;
+    pub const ORDER_SELECTED_PROBABILITY_INVERTED: u32 = 5;
 }
 
 unsafe impl HostSharable for DataLineConfig {}
@@ -499,6 +509,96 @@ impl LabelColorBuffer {
         }
 
         device.queue().write_buffer(&self.buffer, 0, colors);
+    }
+}
+
+/// A texture for storing the rendered view.
+#[derive(Debug, Clone)]
+pub struct RenderTexture {
+    texture: Texture,
+}
+
+impl RenderTexture {
+    pub const MSAA_SAMPLES: u32 = 4;
+
+    pub fn new(device: &Device, format: TextureFormat) -> Self {
+        let texture = device.create_texture(TextureDescriptor::<3, 0> {
+            label: Some(Cow::Borrowed("render texture")),
+            dimension: Some(TextureDimension::D2),
+            format,
+            mip_level_count: None,
+            sample_count: Some(RenderTexture::MSAA_SAMPLES),
+            size: [1, 1, 1],
+            usage: TextureUsage::RENDER_ATTACHMENT,
+            view_formats: None,
+        });
+
+        Self { texture }
+    }
+
+    pub fn view(&self) -> TextureView {
+        self.texture.create_view(None)
+    }
+
+    pub fn resize(&mut self, device: &Device, width: u32, height: u32, device_pixel_ratio: f32) {
+        let width = (width.max(1) as f32 * device_pixel_ratio) as usize;
+        let height = (height.max(1) as f32 * device_pixel_ratio) as usize;
+
+        self.texture = device.create_texture(TextureDescriptor::<2, 0> {
+            label: Some(Cow::Borrowed("depth texture")),
+            dimension: Some(TextureDimension::D2),
+            format: self.texture.format(),
+            mip_level_count: None,
+            sample_count: Some(RenderTexture::MSAA_SAMPLES),
+            size: [width, height],
+            usage: TextureUsage::RENDER_ATTACHMENT,
+            view_formats: None,
+        });
+    }
+}
+
+/// A texture for storing the depth information.
+#[derive(Debug, Clone)]
+pub struct DepthTexture {
+    texture: Texture,
+}
+
+impl DepthTexture {
+    pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth24plus;
+
+    pub fn new(device: &Device) -> Self {
+        let texture = device.create_texture(TextureDescriptor::<2, 0> {
+            label: Some(Cow::Borrowed("depth texture")),
+            dimension: Some(TextureDimension::D2),
+            format: Self::DEPTH_FORMAT,
+            mip_level_count: None,
+            sample_count: Some(RenderTexture::MSAA_SAMPLES),
+            size: [1, 1],
+            usage: TextureUsage::RENDER_ATTACHMENT,
+            view_formats: None,
+        });
+
+        Self { texture }
+    }
+
+    pub fn view(&self) -> TextureView {
+        self.texture.create_view(None)
+    }
+
+    pub fn resize(&mut self, device: &Device, width: u32, height: u32, device_pixel_ratio: f32) {
+        let width = (width.max(1) as f32 * device_pixel_ratio) as usize;
+        let height = (height.max(1) as f32 * device_pixel_ratio) as usize;
+
+        self.texture = device.create_texture(TextureDescriptor::<3, 0> {
+            label: Some(Cow::Borrowed("depth texture")),
+            dimension: Some(TextureDimension::D2),
+            format: Self::DEPTH_FORMAT,
+            mip_level_count: None,
+            sample_count: Some(RenderTexture::MSAA_SAMPLES),
+            size: [width, height, 1],
+            usage: TextureUsage::RENDER_ATTACHMENT,
+            view_formats: None,
+        });
     }
 }
 

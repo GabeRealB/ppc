@@ -7,6 +7,7 @@ struct Config {
     line_width: vec2<f32>,
     selection_bounds: vec2<f32>,
     color_probabilities: u32,
+    render_order: u32,
     unselected_color: vec4<f32>,
 }
 
@@ -98,6 +99,7 @@ fn vertex_main(
 
     let index = INDEX_BUFFER[vertex_idx];
     let value = values[instance_idx];
+    let probability = probabilities[value.curve_idx];
 
     let start_axis = axes[value.start_axis];
     let end_axis = axes[value.end_axis];
@@ -125,7 +127,37 @@ fn vertex_main(
 
     let delta = matrices.mv_matrix * vec4<f32>(vertex_normal * config.line_width, 0.0, 0.0);
     let pos = matrices.mv_matrix * vec4<f32>(vertex_pos, 0.0, 1.0);
-    let offset_position = matrices.p_matrix * (pos + delta);
+    var offset_position = matrices.p_matrix * (pos + delta);
+
+    switch config.render_order {
+        case 0u, default {
+            offset_position.z = 0.0;
+        }
+        case 1u {
+            offset_position.z = 1.0 - probability;
+        }
+        case 2u {
+            offset_position.z = probability;
+        }
+        case 3u {
+            let sample_in_bounds_0 = config.selection_bounds.x <= probability;
+            let sample_in_bounds_1 = probability <= config.selection_bounds.y;
+            let sample_in_bounds = sample_in_bounds_0 && sample_in_bounds_1;
+            offset_position.z = select(1.0, 0.0, sample_in_bounds);
+        }
+        case 4u {
+            let sample_in_bounds_0 = config.selection_bounds.x <= probability;
+            let sample_in_bounds_1 = probability <= config.selection_bounds.y;
+            let sample_in_bounds = sample_in_bounds_0 && sample_in_bounds_1;
+            offset_position.z = select(1.0, 1.0 - probability, sample_in_bounds);
+        }
+        case 5u {
+            let sample_in_bounds_0 = config.selection_bounds.x <= probability;
+            let sample_in_bounds_1 = probability <= config.selection_bounds.y;
+            let sample_in_bounds = sample_in_bounds_0 && sample_in_bounds_1;
+            offset_position.z = select(1.0, probability, sample_in_bounds);
+        }
+    }
 
     return VertexOutput(offset_position, vertex_normal, discard_value, value.curve_idx);
 }

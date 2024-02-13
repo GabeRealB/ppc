@@ -205,6 +205,17 @@ pub struct ColorScale {
     pub scale: color_scale::ColorScaleDescriptor<'static>,
 }
 
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DrawOrder {
+    Unordered,
+    Probability,
+    InvertedProbability,
+    SelectedUnordered,
+    SelectedProbability,
+    SelectedInvertedProbability,
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum DataColorMode {
     Constant(f32),
@@ -218,6 +229,7 @@ pub struct Colors {
     pub brush: Option<colors::ColorQuery<'static>>,
     pub unselected: Option<colors::ColorQuery<'static>>,
     pub color_scale: Option<ColorScale>,
+    pub draw_order: Option<DrawOrder>,
     pub color_mode: Option<DataColorMode>,
 }
 
@@ -329,6 +341,9 @@ enum StateTransactionOperation {
     SetUnselectedColor {
         color: colors::ColorQuery<'static>,
     },
+    SetDrawOrder {
+        order: DrawOrder,
+    },
     SetColorScale {
         color_scale: ColorScale,
     },
@@ -430,6 +445,11 @@ impl StateTransactionBuilder {
         self.operations.push(event);
     }
 
+    #[wasm_bindgen(js_name = setDefaultDrawOrder)]
+    pub fn set_default_draw_order(&mut self) {
+        self.set_draw_order(crate::DEFAULT_DRAW_ORDER);
+    }
+
     #[wasm_bindgen(js_name = setColorNamed)]
     pub fn set_color_named(&mut self, element: Element, color: &str) {
         let color = colors::ColorQuery::Named(color.to_string().into());
@@ -463,6 +483,12 @@ impl StateTransactionBuilder {
         };
 
         self.operations.push(event);
+    }
+
+    #[wasm_bindgen(js_name = setDrawOrder)]
+    pub fn set_draw_order(&mut self, order: DrawOrder) {
+        self.operations
+            .push(StateTransactionOperation::SetDrawOrder { order });
     }
 
     #[wasm_bindgen(js_name = setDefaultColorScaleColor)]
@@ -817,6 +843,7 @@ impl StateTransactionBuilder {
                         background: None,
                         brush: None,
                         unselected: None,
+                        draw_order: None,
                         color_scale: None,
                         color_mode: None,
                     });
@@ -827,6 +854,7 @@ impl StateTransactionBuilder {
                         background: None,
                         brush: None,
                         unselected: None,
+                        draw_order: None,
                         color_scale: None,
                         color_mode: None,
                     });
@@ -837,16 +865,29 @@ impl StateTransactionBuilder {
                         background: None,
                         brush: None,
                         unselected: None,
+                        draw_order: None,
                         color_scale: None,
                         color_mode: None,
                     });
                     c.unselected = Some(color);
+                }
+                StateTransactionOperation::SetDrawOrder { order } => {
+                    let c = colors_change.get_or_insert(Colors {
+                        background: None,
+                        brush: None,
+                        unselected: None,
+                        draw_order: None,
+                        color_scale: None,
+                        color_mode: None,
+                    });
+                    c.draw_order = Some(order);
                 }
                 StateTransactionOperation::SetColorScale { color_scale } => {
                     let c = colors_change.get_or_insert(Colors {
                         background: None,
                         brush: None,
                         unselected: None,
+                        draw_order: None,
                         color_scale: None,
                         color_mode: None,
                     });
@@ -857,6 +898,7 @@ impl StateTransactionBuilder {
                         background: None,
                         brush: None,
                         unselected: None,
+                        draw_order: None,
                         color_scale: None,
                         color_mode: None,
                     });

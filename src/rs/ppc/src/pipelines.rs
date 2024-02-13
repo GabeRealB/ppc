@@ -133,6 +133,14 @@ impl AxisLinesRenderPipeline {
                         layouts: [layout.clone()],
                     },
                 )),
+                depth_stencil: Some(DepthStencilState {
+                    depth_bias: None,
+                    depth_bias_clamp: None,
+                    depth_bias_slope_scale: None,
+                    depth_compare: CompareFunction::Always,
+                    depth_write_enabled: false,
+                    format: buffers::DepthTexture::DEPTH_FORMAT,
+                }),
                 vertex: VertexState {
                     entry_point: "vertex_main",
                     module: shader_module.clone(),
@@ -298,7 +306,7 @@ impl DataLinesRenderPipeline {
                 },
                 BindGroupLayoutEntry {
                     binding: 5,
-                    visibility: ShaderStage::FRAGMENT,
+                    visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
                     resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
                         r#type: Some(BufferBindingType::ReadOnlyStorage),
                         ..Default::default()
@@ -325,6 +333,14 @@ impl DataLinesRenderPipeline {
                         layouts: [layout.clone()],
                     },
                 )),
+                depth_stencil: Some(DepthStencilState {
+                    depth_bias: None,
+                    depth_bias_clamp: None,
+                    depth_bias_slope_scale: None,
+                    depth_compare: CompareFunction::LessEqual,
+                    depth_write_enabled: true,
+                    format: buffers::DepthTexture::DEPTH_FORMAT,
+                }),
                 vertex: VertexState {
                     entry_point: "vertex_main",
                     module: shader_module.clone(),
@@ -515,6 +531,14 @@ impl CurveLinesRenderPipeline {
                         layouts: [layout.clone()],
                     },
                 )),
+                depth_stencil: Some(DepthStencilState {
+                    depth_bias: None,
+                    depth_bias_clamp: None,
+                    depth_bias_slope_scale: None,
+                    depth_compare: CompareFunction::Always,
+                    depth_write_enabled: false,
+                    format: buffers::DepthTexture::DEPTH_FORMAT,
+                }),
                 vertex: VertexState {
                     entry_point: "vertex_main",
                     module: shader_module.clone(),
@@ -699,6 +723,14 @@ impl SelectionsRenderPipeline {
                         layouts: [layout.clone()],
                     },
                 )),
+                depth_stencil: Some(DepthStencilState {
+                    depth_bias: None,
+                    depth_bias_clamp: None,
+                    depth_bias_slope_scale: None,
+                    depth_compare: CompareFunction::Always,
+                    depth_write_enabled: false,
+                    format: buffers::DepthTexture::DEPTH_FORMAT,
+                }),
                 vertex: VertexState {
                     entry_point: "vertex_main",
                     module: shader_module.clone(),
@@ -888,6 +920,14 @@ impl CurveSegmentsRenderPipeline {
                         layouts: [layout.clone()],
                     },
                 )),
+                depth_stencil: Some(DepthStencilState {
+                    depth_bias: None,
+                    depth_bias_clamp: None,
+                    depth_bias_slope_scale: None,
+                    depth_compare: CompareFunction::Always,
+                    depth_write_enabled: false,
+                    format: buffers::DepthTexture::DEPTH_FORMAT,
+                }),
                 vertex: VertexState {
                     entry_point: "vertex_main",
                     module: shader_module.clone(),
@@ -1061,6 +1101,14 @@ impl ColorBarRenderPipeline {
                         layouts: [layout.clone()],
                     },
                 )),
+                depth_stencil: Some(DepthStencilState {
+                    depth_bias: None,
+                    depth_bias_clamp: None,
+                    depth_bias_slope_scale: None,
+                    depth_compare: CompareFunction::Always,
+                    depth_write_enabled: false,
+                    format: buffers::DepthTexture::DEPTH_FORMAT,
+                }),
                 vertex: VertexState {
                     entry_point: "vertex_main",
                     module: shader_module.clone(),
