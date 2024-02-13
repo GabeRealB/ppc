@@ -60,7 +60,7 @@ type SetColorsMsgPayload = {
 }
 
 type SetColorBarVisibilityMsgPayload = {
-    colorBar?: "hidden" | "visible",
+    colorBar?: 'hidden' | 'visible',
 }
 
 type SetLabelsMsgPayload = {
@@ -142,7 +142,7 @@ const PPC = (props: Props) => {
 
             // Listen for Changes in the device pixel ratio.
             const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-            mql.addEventListener("change", () => {
+            mql.addEventListener('change', () => {
                 if (rendererState.exited) {
                     return;
                 }
@@ -159,30 +159,33 @@ const PPC = (props: Props) => {
             resizeObserver.observe(canvas2D);
 
             // Listen for mouse events.
-            canvas2D.addEventListener("pointerdown", (event) => {
+            canvas2D.addEventListener('pointerdown', (event) => {
                 if (rendererState.exited) {
                     return;
                 }
                 queue.pointerDown(event);
             });
-            canvas2D.addEventListener("pointerup", (event) => {
+            canvas2D.addEventListener('pointerup', (event) => {
                 if (rendererState.exited) {
                     return;
                 }
                 queue.pointerUp(event);
             });
-            canvas2D.addEventListener("pointerleave", (event) => {
+            canvas2D.addEventListener('pointerleave', (event) => {
                 if (rendererState.exited) {
                     return;
                 }
                 queue.pointerUp(event);
             });
-            canvas2D.addEventListener("pointermove", (event) => {
+            canvas2D.addEventListener('pointermove', (event) => {
                 if (rendererState.exited) {
                     return;
                 }
                 queue.pointerMove(event);
             });
+            canvas2D.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+            })
 
             // Listen for custom events.
             let currentTransaction = new StateTransactionBuilder();
@@ -238,8 +241,8 @@ const PPC = (props: Props) => {
                         let hasValidTicks = axis.tickPositions !== undefined;
                         if (hasValidTicks && axis.tickLabels !== undefined) {
                             if (axis.tickPositions.length !== axis.tickLabels.length) {
-                                console.warn("Axis has defined tick labels, but the number of tick " +
-                                    "labels does not match the specified tick positions.");
+                                console.warn('Axis has defined tick labels, but the number of tick ' +
+                                    'labels does not match the specified tick positions.');
                                 hasValidTicks = false;
                             }
                         }
@@ -352,7 +355,7 @@ const PPC = (props: Props) => {
                         } else if ('type' in colors.color && colors.color.type === 'probability') {
                             currentTransaction.setSelectedDataColorModeProbability();
                         } else {
-                            throw new Error("Unknown color scale color provided");
+                            throw new Error('Unknown color scale color provided');
                         }
                     }
                 }
@@ -368,12 +371,12 @@ const PPC = (props: Props) => {
                 }
 
                 let visibility = data.colorBar;
-                if (!visibility || visibility === "hidden") {
+                if (!visibility || visibility === 'hidden') {
                     currentTransaction.setColorBarVisibility(false);
-                } else if (visibility === "visible") {
+                } else if (visibility === 'visible') {
                     currentTransaction.setColorBarVisibility(true);
                 } else {
-                    throw new Error("Unknown color bar visibility string")
+                    throw new Error('Unknown color bar visibility string')
                 }
             }
             const setLabels = (data: SetLabelsMsgPayload) => {
@@ -492,7 +495,7 @@ const PPC = (props: Props) => {
                         setDebugOptions(data.payload);
                         break;
                     default:
-                        console.warn("unknown message", data);
+                        console.warn('unknown message', data);
                 }
             };
 
@@ -634,7 +637,7 @@ const PPC = (props: Props) => {
             }
         }
 
-        diff["order"] = order;
+        diff['order'] = order;
     }
     const handleBrushesChangeEvent = (diff, brushes) => {
         if (lastProps.current.brushes) {
@@ -643,7 +646,7 @@ const PPC = (props: Props) => {
             }
         }
 
-        diff["brushes"] = brushes;
+        diff['brushes'] = brushes;
     }
     const handleProbabilitiesChangeEvent = (diff, value) => {
         const { probabilities, indices } = value;
@@ -680,13 +683,13 @@ const PPC = (props: Props) => {
         if (!props.selectionProbabilities ||
             (props.selectionProbabilities
                 && !_.isEqual(props.selectionProbabilities, selectionProbabilities))) {
-            diff["selectionProbabilities"] = selectionProbabilities;
+            diff['selectionProbabilities'] = selectionProbabilities;
         }
 
         if (!props.selectionIndices ||
             (props.selectionIndices
                 && !_.isEqual(props.selectionIndices, selectionIndices))) {
-            diff["selectionIndices"] = selectionIndices;
+            diff['selectionIndices'] = selectionIndices;
         }
     }
 
@@ -701,13 +704,13 @@ const PPC = (props: Props) => {
         const diff = {};
         for (const { type, value } of events) {
             switch (type) {
-                case "axis_order":
+                case 'axis_order':
                     handleAxisOrderChangeEvent(diff, value);
                     break;
-                case "brushes":
+                case 'brushes':
                     handleBrushesChangeEvent(diff, value);
                     break;
-                case "probabilities":
+                case 'probabilities':
                     handleProbabilitiesChangeEvent(diff, value);
                     break;
             }
@@ -731,12 +734,12 @@ const PPC = (props: Props) => {
     if (props.activeLabel) {
         const { labels } = props;
         const label = labels[props.activeLabel];
-        easing = label.easing ? label.easing : "linear";
+        easing = label.easing ? label.easing : 'linear';
     }
-    const easingLinearRes = easing == "linear" ? easingLinearSelRes : easingLinearUnRes;
-    const easingInRes = easing == "in" ? easingInSelRes : easingInUnRes;
-    const easingOutRes = easing == "out" ? easingOutSelRes : easingOutUnRes;
-    const easingInOutRes = easing == "inout" ? easingInOutSelRes : easingInOutUnRes;
+    const easingLinearRes = easing == 'linear' ? easingLinearSelRes : easingLinearUnRes;
+    const easingInRes = easing == 'in' ? easingInSelRes : easingInUnRes;
+    const easingOutRes = easing == 'out' ? easingOutSelRes : easingOutUnRes;
+    const easingInOutRes = easing == 'inout' ? easingInOutSelRes : easingInOutUnRes;
 
     return (
         <div id={id} className={styles.plot}>
@@ -744,10 +747,10 @@ const PPC = (props: Props) => {
             <canvas ref={canvas2DRef} className={styles.non_gpu}></canvas>
             {props.interactionMode == InteractionMode.Full && props.activeLabel ?
                 <div className={styles.toolbar}>
-                    <input type="image" src={easingLinearRes} className={styles.toolbar_element} value="linear" onClick={setEasingCallback}></input>
-                    <input type="image" src={easingInRes} className={styles.toolbar_element} value="in" onClick={setEasingCallback}></input>
-                    <input type="image" src={easingOutRes} className={styles.toolbar_element} value="out" onClick={setEasingCallback}></input>
-                    <input type="image" src={easingInOutRes} className={styles.toolbar_element} value="inout" onClick={setEasingCallback}></input>
+                    <input type='image' src={easingLinearRes} className={styles.toolbar_element} value='linear' onClick={setEasingCallback}></input>
+                    <input type='image' src={easingInRes} className={styles.toolbar_element} value='in' onClick={setEasingCallback}></input>
+                    <input type='image' src={easingOutRes} className={styles.toolbar_element} value='out' onClick={setEasingCallback}></input>
+                    <input type='image' src={easingInOutRes} className={styles.toolbar_element} value='inout' onClick={setEasingCallback}></input>
                 </div> : null}
         </div>
     )
@@ -757,7 +760,7 @@ PPC.defaultProps = {
     axes: {},
     order: [],
     colors: null,
-    colorBar: "hidden",
+    colorBar: 'hidden',
     labels: {},
     activeLabel: null,
     brushes: {},
