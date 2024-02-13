@@ -179,7 +179,33 @@ impl Renderer {
             Err(err) => panic!("Could not request gpu adapter. Error: '{err:?}'"),
         };
 
-        let device = match wasm_bindgen_futures::JsFuture::from(adapter.request_device()).await {
+        let required_limits = js_sys::Object::new();
+        js_sys::Reflect::set(
+            &required_limits,
+            &JsValue::from("maxBufferSize"),
+            &JsValue::from(2147483648usize),
+        )
+        .unwrap();
+        js_sys::Reflect::set(
+            &required_limits,
+            &JsValue::from("maxStorageBufferBindingSize"),
+            &JsValue::from(2147483648usize),
+        )
+        .unwrap();
+
+        let device_descriptor = web_sys::GpuDeviceDescriptor::new();
+        js_sys::Reflect::set(
+            &required_limits,
+            &JsValue::from("requiredLimits"),
+            &JsValue::from(&required_limits),
+        )
+        .unwrap();
+
+        let device = match wasm_bindgen_futures::JsFuture::from(
+            adapter.request_device_with_descriptor(&device_descriptor),
+        )
+        .await
+        {
             Ok(device) => {
                 if device.is_falsy() {
                     panic!("Could not request gpu device.");

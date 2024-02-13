@@ -47,16 +47,14 @@ struct VertexOutput {
     @location(0) @interpolate(flat) discard_segment: u32,
 }
 
-const INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
+const XYZ_SRGB_CONVERSION_MATRIX = mat3x3<f32>(
+    vec3<f32>(3.240812398895283, -0.9692430170086407, 0.055638398436112804),
+    vec3<f32>(-1.5373084456298136, 1.8759663029085742, -0.20400746093241362),
+    vec3<f32>(-0.4985865229069666, 0.04155503085668564, 1.0571295702861434),
+);
 
 fn xyz_to_srgb(color: vec3<f32>) -> vec3<f32> {
-    const conversion_matrix = mat3x3<f32>(
-        vec3<f32>(3.240812398895283, -0.9692430170086407, 0.055638398436112804),
-        vec3<f32>(-1.5373084456298136, 1.8759663029085742, -0.20400746093241362),
-        vec3<f32>(-0.4985865229069666, 0.04155503085668564, 1.0571295702861434),
-    );
-
-    let linear_srgb = conversion_matrix * color.xyz;
+    let linear_srgb = XYZ_SRGB_CONVERSION_MATRIX * color.xyz;
     let a = 12.92 * linear_srgb;
     let b = 1.055 * pow(linear_srgb, vec3<f32>(1.0 / 2.4)) - 0.055;
     let c = step(vec3<f32>(0.0031308), linear_srgb);
@@ -69,6 +67,8 @@ fn vertex_main(
     @builtin(vertex_index) vertex_idx: u32,
     @builtin(instance_index) instance_idx: u32,
 ) -> VertexOutput {
+    var INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
+
     let index = INDEX_BUFFER[vertex_idx];
     let segment = curve[instance_idx];
     let axis = axes[segment.axis];

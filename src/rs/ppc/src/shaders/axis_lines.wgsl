@@ -46,19 +46,19 @@ struct VertexOutput {
 const FEATHER: f32 = 0.5;
 const ONE_MINUS_FEATHER: f32 = 1.0 - FEATHER;
 
-const INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
-const VERTEX_NORMALS_BUFFER = array<vec2<f32>, 4>(
-    vec2<f32>(0.0, -1.0),
-    vec2<f32>(0.0, 1.0),
-    vec2<f32>(0.0, -1.0),
-    vec2<f32>(0.0, 1.0),
-);
-
 @vertex
 fn vertex_main(
     @builtin(vertex_index) vertex_idx: u32,
     @builtin(instance_index) instance_idx: u32,
 ) -> VertexOutput {
+    var INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
+    var VERTEX_NORMALS_BUFFER = array<vec2<f32>, 4>(
+        vec2<f32>(0.0, -1.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, -1.0),
+        vec2<f32>(0.0, 1.0),
+    );
+
     let index = INDEX_BUFFER[vertex_idx];
     let line = line_info[instance_idx];
 

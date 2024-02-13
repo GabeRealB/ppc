@@ -32,6 +32,7 @@ features = [
     "GpuAdapter",
     "GpuRequestAdapterOptions",
     "GpuPowerPreference",
+    "GpuDeviceDescriptor",
     "GpuDevice",
     "GpuCanvasContext",
     "GpuTextureFormat",

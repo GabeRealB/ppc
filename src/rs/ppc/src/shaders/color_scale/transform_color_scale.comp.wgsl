@@ -37,15 +37,15 @@ fn main(
     textureStore(color_scale_transformed, sample_idx, sample);
 }
 
-fn srgb_to_xyz(rgba: vec4<f32>) -> vec4<f32> {
-    const conversion_matrix = mat3x3<f32>(
-        vec3<f32>(0.4124108464885388, 0.21264934272065283, 0.019331758429150258),
-        vec3<f32>(0.3575845678529519, 0.7151691357059038, 0.11919485595098397),
-        vec3<f32>(0.18045380393360833, 0.07218152157344333, 0.9503900340503373),
-    );
+const SRGB_XYZ_CONVERSION_MATRIX = mat3x3<f32>(
+    vec3<f32>(0.4124108464885388, 0.21264934272065283, 0.019331758429150258),
+    vec3<f32>(0.3575845678529519, 0.7151691357059038, 0.11919485595098397),
+    vec3<f32>(0.18045380393360833, 0.07218152157344333, 0.9503900340503373),
+);
 
+fn srgb_to_xyz(rgba: vec4<f32>) -> vec4<f32> {
     let rgb = rgba.rgb;
-    let xyz = conversion_matrix * rgb;
+    let xyz = SRGB_XYZ_CONVERSION_MATRIX * rgb;
 
     return vec4(xyz, rgba.a);
 }
@@ -54,10 +54,9 @@ fn xyz_to_xyz(xyza: vec4<f32>) -> vec4<f32> {
     return xyza;
 }
 
+const CBRT_EPSILON: f32 = 6.0 / 29.0;
+const KAPPA: f32 = 24389.0 / 27.0;
 fn cie_lab_to_xyz(laba: vec4<f32>) -> vec4<f32> {
-    const CBRT_EPSILON: f32 = 6.0 / 29.0;
-    const KAPPA: f32 = 24389.0 / 27.0;
-
     let l = laba.r;
     let a = laba.g;
     let b = laba.b;

@@ -53,37 +53,29 @@ struct VertexOutput {
     @location(2) @interpolate(flat) instance_idx: u32,
 }
 
-const INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
-const VERTEX_NORMALS_BUFFER = array<vec2<f32>, 4>(
-    vec2<f32>(0.0, -1.0),
-    vec2<f32>(0.0, 1.0),
-    vec2<f32>(0.0, -1.0),
-    vec2<f32>(0.0, 1.0),
-);
+const FEATHER: f32 = 0.5;
+const ONE_MINUS_FEATHER: f32 = 1.0 - FEATHER;
 
 fn get_line_alpha(normal: vec2<f32>) -> f32 {
-    const feather: f32 = 0.5;
-    const one_minus_feather: f32 = 1.0 - feather;
-
     let distance = length(normal);
-    if distance <= one_minus_feather {
+    if distance <= ONE_MINUS_FEATHER {
         return 1.0;
     } else if distance <= 1.0 {
-        let t = (distance - feather) / one_minus_feather;
+        let t = (distance - FEATHER) / ONE_MINUS_FEATHER;
         return mix(1.0, 0.0, t);
     }
 
     return 0.0;
 }
 
-fn xyz_to_srgb(color: vec3<f32>) -> vec3<f32> {
-    const conversion_matrix = mat3x3<f32>(
-        vec3<f32>(3.240812398895283, -0.9692430170086407, 0.055638398436112804),
-        vec3<f32>(-1.5373084456298136, 1.8759663029085742, -0.20400746093241362),
-        vec3<f32>(-0.4985865229069666, 0.04155503085668564, 1.0571295702861434),
-    );
+const XYZ_SRGB_CONVERSION_MATRIX = mat3x3<f32>(
+    vec3<f32>(3.240812398895283, -0.9692430170086407, 0.055638398436112804),
+    vec3<f32>(-1.5373084456298136, 1.8759663029085742, -0.20400746093241362),
+    vec3<f32>(-0.4985865229069666, 0.04155503085668564, 1.0571295702861434),
+);
 
-    let linear_srgb = conversion_matrix * color.xyz;
+fn xyz_to_srgb(color: vec3<f32>) -> vec3<f32> {
+    let linear_srgb = XYZ_SRGB_CONVERSION_MATRIX * color.xyz;
     let a = 12.92 * linear_srgb;
     let b = 1.055 * pow(linear_srgb, vec3<f32>(1.0 / 2.4)) - 0.055;
     let c = step(vec3<f32>(0.0031308), linear_srgb);
@@ -96,6 +88,14 @@ fn vertex_main(
     @builtin(vertex_index) vertex_idx: u32,
     @builtin(instance_index) instance_idx: u32,
 ) -> VertexOutput {
+    var INDEX_BUFFER = array<u32, 6>(0u, 1u, 2u, 1u, 3u, 2u);
+    var VERTEX_NORMALS_BUFFER = array<vec2<f32>, 4>(
+        vec2<f32>(0.0, -1.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, -1.0),
+        vec2<f32>(0.0, 1.0),
+    );
+
     let index = INDEX_BUFFER[vertex_idx];
     let value = values[instance_idx];
 
@@ -108,9 +108,6 @@ fn vertex_main(
     let line_start = vec2<f32>(start_x, mix(start_axis.range_y.x, start_axis.range_y.y, value.start_value));
     let line_end = vec2<f32>(end_x, mix(end_axis.range_y.x, end_axis.range_y.y, value.end_value));
 
-    // let discard_start = (value.start_value < start_axis.range_y.x) || (value.start_value > start_axis.range_y.y);
-    // let discard_end = (value.end_value < end_axis.range_y.x) || (value.end_value > end_axis.range_y.y);
-    // let discard_value = select(0u, 0u, discard_start || discard_end);
     let discard_value = 0u;
 
     let line_vector = normalize(line_end - line_start);
