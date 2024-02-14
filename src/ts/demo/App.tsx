@@ -364,16 +364,19 @@ function WelcomePage(app: App) {
             <Typography variant='h2'><b>Welcome</b></Typography>
 
             <Typography variant='body1' marginY={2}>
-                Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed
-                diam nonumy eirmod tempor invidunt ut labore et dolore magna
-                aliquyam erat, sed diam voluptua. At vero eos et accusam et
-                justo duo dolores et ea rebum. Stet clita kasd gubergren, no
-                sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem
-                ipsum dolor sit amet, consetetur sadipscing elitr, sed diam
-                nonumy eirmod tempor invidunt ut labore et dolore magna
-                aliquyam erat, sed diam voluptua. At vero eos et accusam et
-                justo duo dolores et ea rebum. Stet clita kasd gubergren, no
-                sea takimata sanctus est Lorem ipsum dolor sit amet.
+                The analysis of multidimensional datasets is an important
+                aspect in the fields of visualization and data analysis.
+                One way to tackle such tasks is to perform an interactive
+                visual analysis, by visualizing the datasets using parallel
+                coordinates. Parallel coordinates is a plot, where each
+                dimension, or attribute, is represented as individual axes,
+                and the multidimensional points as curves connecting those axes.
+                In practice, we must also contend with some degree of uncertainty,
+                which is contained in the dataset. This uncertainty may be caused
+                by measurement errors, variance in the data, et cetera. In this
+                study, we want to measure the effectiveness of extending the
+                standard parallel coordinates plot with utilities that allow one
+                to model the certainty in the data.
             </Typography>
 
             <Typography variant='subtitle1' marginTop={5} marginBottom={1}>
