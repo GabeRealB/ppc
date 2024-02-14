@@ -43,7 +43,7 @@ import Select from '@mui/material/Select';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Rating from '@mui/material/Rating';
-import Input from '@mui/material/Input';
+import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import HelpIcon from '@mui/icons-material/Help';
@@ -108,6 +108,8 @@ type DemoPage = 'welcome'
     | 'demo2'
     | 'finish';
 
+type Sex = 'male' | 'female';
+
 type LevelOfEducation = 'Childhood'
     | 'Primary'
     | 'LowerSecondary'
@@ -117,6 +119,17 @@ type LevelOfEducation = 'Childhood'
     | 'Bachelor'
     | 'Master'
     | 'Doctoral'
+
+type ColorAbnormality = 'none'
+    | 'protanomaly'
+    | 'protanopia'
+    | 'deuteranomaly'
+    | 'deuteranopia'
+    | 'tritanomaly'
+    | 'tritanopia'
+    | 'blue-cone-monochromacy'
+    | 'achromatopsia'
+    | 'tetrachromacy'
 
 type Proficiency = 'NA'
     | 'Fundamental'
@@ -137,7 +150,10 @@ type TaskLog = {
 }
 
 type Results = {
+    age?: number,
+    sex?: Sex,
     education?: LevelOfEducation,
+    colorAbnormality?: ColorAbnormality,
     analysisProficiency?: Proficiency,
     pcProficiency?: Proficiency,
     taskLogs: TaskLog[],
@@ -417,13 +433,35 @@ function WelcomePage(app: App) {
 function DemoPage1(app: App) {
     const { results } = app.state.demo;
 
+    const [age, setAge] = useState<number>(undefined);
+    const [sex, setSex] = useState<Sex>(undefined);
     const [education, setEducation] = useState<LevelOfEducation>(undefined);
+    const [colorAbnormalty, setAbnormality] = useState<ColorAbnormality>(undefined);
     const [analysisProficiency, setAnalysisProficiency] = useState<number>(0);
     const [pcProficiency, setPcProficiency] = useState<number>(0);
+
+    const handleAgeChange = (e) => {
+        var age = parseInt(e.target.value);
+        if (age < 0) {
+            age = 0;
+        }
+        results.age = age;
+        setAge(age);
+    }
+
+    const handleSexChange = (e) => {
+        results.sex = e.target.value as Sex;
+        setSex(e.target.value as Sex);
+    }
 
     const handleEducationChange = (e) => {
         results.education = e.target.value as LevelOfEducation;
         setEducation(e.target.value as LevelOfEducation);
+    }
+
+    const handleColorAbnormalityChange = (e) => {
+        results.colorAbnormality = e.target.value as ColorAbnormality;
+        setAbnormality(e.target.value as ColorAbnormality);
     }
 
     const handleAnalysisProficiencyChange = (e, proficiency) => {
@@ -491,7 +529,13 @@ function DemoPage1(app: App) {
         6: 'Expert',
     };
 
-    const canContinue = education !== undefined
+    const ageError = age && age > 120;
+
+    const canContinue = age !== undefined
+        && !ageError
+        && sex !== undefined
+        && education !== undefined
+        && colorAbnormalty !== undefined
         && analysisProficiency !== 0
         && pcProficiency !== 0;
 
@@ -508,29 +552,82 @@ function DemoPage1(app: App) {
             <Divider />
 
             <Typography variant='subtitle1' marginY={2}>
-                What is your level of education?
+                Personal info.
             </Typography>
-            <FormControl>
-                <InputLabel id='education-label'>Level of education</InputLabel>
-                <Select
-                    labelId='education-label'
-                    id='education-select'
-                    value={education}
-                    label='Education'
+            <Box margin={1} marginY={1.5}>
+                <FormControl fullWidth>
+                    <FormLabel id='sex-input-label'>Sex</FormLabel>
+                    <RadioGroup
+                        row
+                        aria-labelledby='sex-input-label'
+                        name='sex-input'
+                        value={sex}
+                        onChange={handleSexChange}
+                    >
+                        <FormControlLabel value='male' control={<Radio />} label='Male' />
+                        <FormControlLabel value='female' control={<Radio />} label='Female' />
+                    </RadioGroup>
+                </FormControl>
+            </Box>
+            <Box marginY={1.5}>
+                <TextField
+                    id="age-input"
+                    label="Age"
+                    type="number"
+                    value={age}
+                    error={ageError}
+                    helperText={ageError ? 'Age is bigger than 120' : null}
                     sx={{ m: 1, minWidth: 240 }}
-                    onChange={handleEducationChange}
-                >
-                    <MenuItem value='Childhood'>Early childhood Education</MenuItem>
-                    <MenuItem value='Primary'>Primary education</MenuItem>
-                    <MenuItem value='LowerSecondary'>Lower secondary education</MenuItem>
-                    <MenuItem value='UpperSecondary'>Upper secondary education</MenuItem>
-                    <MenuItem value='Post-secondary'>Post-secondary non-tertiary education</MenuItem>
-                    <MenuItem value='Tertiary'>Short-cycle tertiary education</MenuItem>
-                    <MenuItem value='Bachelor'>Bachelor or equivalent</MenuItem>
-                    <MenuItem value='Master'>Master or equivalent</MenuItem>
-                    <MenuItem value='Doctoral'>Doctoral or equivalent</MenuItem>
-                </Select>
-            </FormControl>
+                    onChange={handleAgeChange}
+                />
+            </Box>
+            <Box marginY={1.5}>
+                <FormControl>
+                    <InputLabel id='education-label'>Level of education</InputLabel>
+                    <Select
+                        labelId='education-label'
+                        id='education-select'
+                        value={education}
+                        label='Education'
+                        sx={{ m: 1, minWidth: 240 }}
+                        onChange={handleEducationChange}
+                    >
+                        <MenuItem value='Childhood'>Early childhood Education</MenuItem>
+                        <MenuItem value='Primary'>Primary education</MenuItem>
+                        <MenuItem value='LowerSecondary'>Lower secondary education</MenuItem>
+                        <MenuItem value='UpperSecondary'>Upper secondary education</MenuItem>
+                        <MenuItem value='Post-secondary'>Post-secondary non-tertiary education</MenuItem>
+                        <MenuItem value='Tertiary'>Short-cycle tertiary education</MenuItem>
+                        <MenuItem value='Bachelor'>Bachelor or equivalent</MenuItem>
+                        <MenuItem value='Master'>Master or equivalent</MenuItem>
+                        <MenuItem value='Doctoral'>Doctoral or equivalent</MenuItem>
+                    </Select>
+                </FormControl>
+            </Box>
+            <Box marginY={1.5}>
+                <FormControl>
+                    <InputLabel id='color-abnormalities-label'>Color vision abnormality</InputLabel>
+                    <Select
+                        labelId='color-abnormalities-label'
+                        id='color-abnormalities-select'
+                        value={colorAbnormalty}
+                        label='Vision abnormality'
+                        sx={{ m: 1, minWidth: 240 }}
+                        onChange={handleColorAbnormalityChange}
+                    >
+                        <MenuItem value='none'>No abnormality</MenuItem>
+                        <MenuItem value='protanomaly'>Protanomaly</MenuItem>
+                        <MenuItem value='protanopia'>Protanopia</MenuItem>
+                        <MenuItem value='deuteranomaly'>Deuteranomaly</MenuItem>
+                        <MenuItem value='deuteranopia'>Deuteranopia</MenuItem>
+                        <MenuItem value='tritanomaly'>Tritanomaly</MenuItem>
+                        <MenuItem value='tritanopia'>Tritanopia</MenuItem>
+                        <MenuItem value='blue-cone-monochromacy'>Blue cone monochromacy</MenuItem>
+                        <MenuItem value='achromatopsia'>Achromatopsia</MenuItem>
+                        <MenuItem value='tetrachromacy'>Tetrachromacy</MenuItem>
+                    </Select>
+                </FormControl>
+            </Box>
 
             <Typography variant='subtitle1' marginY={2}>
                 How would you describe your proficiency in the task of data analysis?
