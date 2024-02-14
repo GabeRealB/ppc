@@ -288,6 +288,7 @@ function WelcomePage(app: App) {
         return check;
     })();
     const isChrome = navigator.userAgent.includes("Chrome");
+    const isLinux = /(Linux|X11(?!.*CrOS))/.test(navigator.userAgent);
 
     let statusElement = null;
     if (!hasWebgpu) {
@@ -303,6 +304,13 @@ function WelcomePage(app: App) {
         statusElement = <Alert severity="warning">
             This test has only been tested on Google Chrome and Microsoft Edge.
             Other browsers may not be able to display the contents properly.
+        </Alert>;
+    } else if (isLinux) {
+        statusElement = <Alert severity="warning">
+            This website has detected that you are running a Linux variant as your
+            operating system. As of now, WebGPU support is marked as experimental
+            on most browsers running in Linux, and may need to be enabled manually.
+            As a result, your browser may not be able to display the contents properly.
         </Alert>;
     } else {
         statusElement = <Alert severity="success">
