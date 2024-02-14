@@ -859,6 +859,9 @@ impl SelectCP {
                     (*lower_x - offset, axis_value)
                 };
 
+                let lower = lower.clamp(0.0, 1.0);
+                let upper = upper.clamp(0.0, 1.0);
+
                 selection.set_control_point_x(*control_point_idx_1, lower);
                 selection.set_control_point_x(*control_point_idx_2, upper);
 
