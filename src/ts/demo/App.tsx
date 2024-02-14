@@ -73,6 +73,7 @@ import labelsCertaintyInstr from './resources/labels_certainty_instr.mp4'
 import labelsCompareInstr from './resources/labels_compare_instr.mp4'
 import colorsInstr from './resources/colors_instr.mp4'
 import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
+import colorsOrderInstr from './resources/colors_order_instr.mp4'
 import attributesInstr from './resources/attributes_instr.mp4'
 
 import PPC from '../components/PPC';
@@ -1335,17 +1336,17 @@ const ColorSettings = (
                         <FormControlLabel
                             control={<Radio />}
                             value={'selected_unordered'}
-                            label={'Unord.'}
+                            label={'None'}
                         />
                         <FormControlLabel
                             control={<Radio />}
                             value={'selected_probability'}
-                            label={'Prob.'}
+                            label={'Incr.'}
                         />
                         <FormControlLabel
                             control={<Radio />}
                             value={'selected_inverted_probability'}
-                            label={'Inv.'}
+                            label={'Decr.'}
                         />
                     </RadioGroup>
                 </FormControl> : null}
@@ -1622,7 +1623,7 @@ const tutorial1 = (): DemoTask => {
                     neighbors. Therefore, the order of the attribute axes is significant, and it is
                     possible to reorder them at will.
                 </DialogContentText>
-                <video autoPlay loop muted id='instructions_video'>
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={moveAxesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -2202,6 +2203,19 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
                     </DialogContentText>
                     <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={colorsCertaintyInstr} type='video/mp4'></source>
+                    </video>
+                </Stack>);
+        });
+        buildInstructions.push(() => {
+            return (
+                <Stack spacing={1}>
+                    <DialogContentText>
+                        You may notice, that the parallel coordinates may suffer from a cluttering problem,
+                        where, due to overlapping curves, it becomes difficult to see the color of some
+                        group of curves. To alleviate this, we allow you to specify an ordering for the curves.
+                    </DialogContentText>
+                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                        <source src={colorsOrderInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
         });
