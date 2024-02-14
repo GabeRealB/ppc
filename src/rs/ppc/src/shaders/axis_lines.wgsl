@@ -88,7 +88,8 @@ fn vertex_main(
     let vertex_normal = rotation_matrix * VERTEX_NORMALS_BUFFER[index];
     let vertex_pos = select(line_start, line_end, vec2<bool>(index <= 1u));
 
-    let delta = matrices.mv_matrix * vec4<f32>(vertex_normal * config.line_width, 0.0, 0.0);
+    let line_width = select(config.line_width, config.line_width * 2.0, line.axis_position == 0);
+    let delta = matrices.mv_matrix * vec4<f32>(vertex_normal * line_width, 0.0, 0.0);
     let pos = matrices.mv_matrix * vec4<f32>(vertex_pos, 0.0, 1.0);
     let offset_position = matrices.p_matrix * (pos + delta);
 
