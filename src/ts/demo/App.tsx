@@ -98,34 +98,34 @@ type DemoTask = {
     disableColors?: boolean,
 };
 
-type UserGroup = "PC" | "PPC";
+type UserGroup = 'PC' | 'PPC';
 
 type TaskMode = 'Full' | 'Tutorial' | 'Eval'
 
-type DemoPage = "welcome"
-    | "demo1"
-    | "demo2"
-    | "finish";
+type DemoPage = 'welcome'
+    | 'demo1'
+    | 'demo2'
+    | 'finish';
 
-type LevelOfEducation = "Childhood"
-    | "Primary"
-    | "LowerSecondary"
-    | "UpperSecondary"
-    | "Post-secondary"
-    | "Tertiary"
-    | "Bachelor"
-    | "Master"
-    | "Doctoral"
+type LevelOfEducation = 'Childhood'
+    | 'Primary'
+    | 'LowerSecondary'
+    | 'UpperSecondary'
+    | 'Post-secondary'
+    | 'Tertiary'
+    | 'Bachelor'
+    | 'Master'
+    | 'Doctoral'
 
-type Proficiency = "NA"
-    | "Fundamental"
-    | "Novice"
-    | "Intermediate"
-    | "Advanced"
-    | "Expert"
+type Proficiency = 'NA'
+    | 'Fundamental'
+    | 'Novice'
+    | 'Intermediate'
+    | 'Advanced'
+    | 'Expert'
 
 type LogEvent = {
-    type: "start" | "event" | "end",
+    type: 'start' | 'event' | 'end',
     timestamp: DOMHighResTimeStamp,
     data?: any
 };
@@ -175,15 +175,15 @@ class App extends Component<any, AppState> {
         this.forceReRender = this.forceReRender.bind(this);
 
         const searchParams = new URLSearchParams(window.location.search);
-        const debugMode = searchParams.has("debug");
-        const dryRun = searchParams.has("dryRun");
-        let taskMode = searchParams.get("taskMode");
+        const debugMode = searchParams.has('debug');
+        const dryRun = searchParams.has('dryRun');
+        let taskMode = searchParams.get('taskMode');
         if (!['Full', 'Tutorial', 'Eval'].includes(taskMode)) {
             taskMode = 'Full' as TaskMode;
         }
-        let userGroup = searchParams.get("userGroup");
-        if (userGroup !== "PC" && userGroup !== "PPC") {
-            userGroup = Math.random() < 0.5 ? "PC" : "PPC";
+        let userGroup = searchParams.get('userGroup');
+        if (userGroup !== 'PC' && userGroup !== 'PPC') {
+            userGroup = Math.random() < 0.5 ? 'PC' : 'PPC';
         }
 
         const deadline = new Date(2024, 2, 31);
@@ -198,7 +198,7 @@ class App extends Component<any, AppState> {
         this.state = {
             ppcState: ppc,
             demo: {
-                currentPage: "welcome",
+                currentPage: 'welcome',
                 userId: uuid(),
                 userGroup: userGroup as UserGroup,
                 showInstructions: true,
@@ -235,18 +235,18 @@ class App extends Component<any, AppState> {
         const log = taskLogs[currentTask];
 
         const data = window.structuredClone(newProps);
-        if ("selectionProbabilities" in data) {
-            delete data["selectionProbabilities"];
+        if ('selectionProbabilities' in data) {
+            delete data['selectionProbabilities'];
         }
-        if ("selectionIndices" in data) {
-            delete data["selectionIndices"];
+        if ('selectionIndices' in data) {
+            delete data['selectionIndices'];
         }
         if (Object.keys(data).length == 0) {
             return;
         }
 
         const event: LogEvent = {
-            type: "event",
+            type: 'event',
             timestamp: performance.now(),
             data,
         };
@@ -287,33 +287,33 @@ function WelcomePage(app: App) {
         (function (a) { if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true; })(navigator.userAgent || navigator.vendor || (window as any).opera);
         return check;
     })();
-    const isChrome = navigator.userAgent.includes("Chrome");
+    const isChrome = navigator.userAgent.includes('Chrome');
     const isLinux = /(Linux|X11(?!.*CrOS))/.test(navigator.userAgent);
 
     let statusElement = null;
     if (!hasWebgpu) {
-        statusElement = <Alert severity="error">
+        statusElement = <Alert severity='error'>
             Your browser does not support WebGPU, which is required for this test.
             Supported browsers are Google Chrome and Microsoft Edge.
         </Alert>;
     } else if (isMobile) {
-        statusElement = <Alert severity="error">
+        statusElement = <Alert severity='error'>
             This test is not supported on mobile browsers.
         </Alert>;
     } else if (!isChrome) {
-        statusElement = <Alert severity="warning">
+        statusElement = <Alert severity='warning'>
             This test has only been tested on Google Chrome and Microsoft Edge.
             Other browsers may not be able to display the contents properly.
         </Alert>;
     } else if (isLinux) {
-        statusElement = <Alert severity="warning">
+        statusElement = <Alert severity='warning'>
             This website has detected that you are running a Linux variant as your
             operating system. As of now, WebGPU support is marked as experimental
             on most browsers running in Linux, and may need to be enabled manually.
             As a result, your browser may not be able to display the contents properly.
         </Alert>;
     } else {
-        statusElement = <Alert severity="success">
+        statusElement = <Alert severity='success'>
             All prerequisites for the test are met.
         </Alert>;
     }
@@ -327,9 +327,9 @@ function WelcomePage(app: App) {
 
     const handleClick = () => {
         const { demo } = app.state;
-        demo.currentPage = "demo1";
+        demo.currentPage = 'demo1';
         demo.results.taskLogs[0].events.push({
-            type: "start",
+            type: 'start',
             timestamp: performance.now(),
         });
         app.setProps({ demo });
@@ -343,7 +343,7 @@ function WelcomePage(app: App) {
     const { deadline, deadlinePassed, dryRun } = app.state.demo;
 
     return (
-        <Container style={{ height: "95%", padding: "2rem" }}>
+        <Container style={{ height: '95%', padding: '2rem' }}>
             <Typography variant='h2'><b>Welcome</b></Typography>
 
             <Typography variant='body1' marginY={2}>
@@ -359,7 +359,7 @@ function WelcomePage(app: App) {
                 sea takimata sanctus est Lorem ipsum dolor sit amet.
             </Typography>
 
-            <Typography variant="subtitle1" marginTop={5} marginBottom={1}>
+            <Typography variant='subtitle1' marginTop={5} marginBottom={1}>
                 <b>{dataAcquisitionTerms}</b>
             </Typography>
 
@@ -367,7 +367,7 @@ function WelcomePage(app: App) {
                 <FormControlLabel
                     required
                     control={<Checkbox value={accepted} onChange={handleChecked} />}
-                    label="I consent to the collection of anonymized user data."
+                    label='I consent to the collection of anonymized user data.'
                 />
             </FormGroup>
 
@@ -377,7 +377,7 @@ function WelcomePage(app: App) {
 
             {deadlinePassed && !dryRun ?
                 <Box marginY={2}>
-                    <Alert severity="warning">
+                    <Alert severity='warning'>
                         The study ran until {deadline.toLocaleDateString(undefined, {
                             weekday: 'long',
                             year: 'numeric',
@@ -391,7 +391,7 @@ function WelcomePage(app: App) {
 
             {dryRun ?
                 <Box marginY={2}>
-                    <Alert severity="info">
+                    <Alert severity='info'>
                         Dry run mode is active, the results will not be used for
                         the evaluation.
                     </Alert>
@@ -400,7 +400,7 @@ function WelcomePage(app: App) {
             <Container>
                 <Box marginY={2}>
                     <Button
-                        variant="contained"
+                        variant='contained'
                         onClick={handleClick}
                         fullWidth
                         disabled={!canStart}
@@ -430,22 +430,22 @@ function DemoPage1(app: App) {
         setAnalysisProficiency(proficiency);
         switch (proficiency) {
             case 1:
-                results.analysisProficiency = "NA";
+                results.analysisProficiency = 'NA';
                 break;
             case 2:
-                results.analysisProficiency = "Fundamental";
+                results.analysisProficiency = 'Fundamental';
                 break;
             case 3:
-                results.analysisProficiency = "Novice";
+                results.analysisProficiency = 'Novice';
                 break;
             case 4:
-                results.analysisProficiency = "Intermediate";
+                results.analysisProficiency = 'Intermediate';
                 break;
             case 5:
-                results.analysisProficiency = "Advanced";
+                results.analysisProficiency = 'Advanced';
                 break;
             case 6:
-                results.analysisProficiency = "Expert";
+                results.analysisProficiency = 'Expert';
                 break;
         }
     }
@@ -455,39 +455,39 @@ function DemoPage1(app: App) {
         setPcProficiency(proficiency);
         switch (proficiency) {
             case 1:
-                results.pcProficiency = "NA";
+                results.pcProficiency = 'NA';
                 break;
             case 2:
-                results.pcProficiency = "Fundamental";
+                results.pcProficiency = 'Fundamental';
                 break;
             case 3:
-                results.pcProficiency = "Novice";
+                results.pcProficiency = 'Novice';
                 break;
             case 4:
-                results.pcProficiency = "Intermediate";
+                results.pcProficiency = 'Intermediate';
                 break;
             case 5:
-                results.pcProficiency = "Advanced";
+                results.pcProficiency = 'Advanced';
                 break;
             case 6:
-                results.pcProficiency = "Expert";
+                results.pcProficiency = 'Expert';
                 break;
         }
     }
 
     const handleClick = () => {
         const { demo } = app.state;
-        demo.currentPage = "demo2";
+        demo.currentPage = 'demo2';
         app.setProps({ demo });
     }
 
     const proficiencyLabels: { [index: string]: string } = {
-        1: "No experience",
-        2: "Fundamental",
-        3: "Novice",
-        4: "Intermediate",
-        5: "Advanced",
-        6: "Expert",
+        1: 'No experience',
+        2: 'Fundamental',
+        3: 'Novice',
+        4: 'Intermediate',
+        5: 'Advanced',
+        6: 'Expert',
     };
 
     const canContinue = education !== undefined
@@ -496,42 +496,42 @@ function DemoPage1(app: App) {
 
     return (
         <Container>
-            <Typography variant="h4">
+            <Typography variant='h4'>
                 <b>Thank you for your interest in participating in this study.</b>
             </Typography>
-            <Typography variant="body1" marginY={1}>
+            <Typography variant='body1' marginY={1}>
                 Before we begin with the interactive test, we would like to ask you
                 to fill out the short questionnaire below.
             </Typography>
 
             <Divider />
 
-            <Typography variant="subtitle1" marginY={2}>
+            <Typography variant='subtitle1' marginY={2}>
                 What is your level of education?
             </Typography>
             <FormControl>
-                <InputLabel id="education-label">Level of education</InputLabel>
+                <InputLabel id='education-label'>Level of education</InputLabel>
                 <Select
-                    labelId="education-label"
-                    id="education-select"
+                    labelId='education-label'
+                    id='education-select'
                     value={education}
-                    label="Education"
+                    label='Education'
                     sx={{ m: 1, minWidth: 240 }}
                     onChange={handleEducationChange}
                 >
-                    <MenuItem value="Childhood">Early childhood Education</MenuItem>
-                    <MenuItem value="Primary">Primary education</MenuItem>
-                    <MenuItem value="LowerSecondary">Lower secondary education</MenuItem>
-                    <MenuItem value="UpperSecondary">Upper secondary education</MenuItem>
-                    <MenuItem value="Post-secondary">Post-secondary non-tertiary education</MenuItem>
-                    <MenuItem value="Tertiary">Short-cycle tertiary education</MenuItem>
-                    <MenuItem value="Bachelor">Bachelor or equivalent</MenuItem>
-                    <MenuItem value="Master">Master or equivalent</MenuItem>
-                    <MenuItem value="Doctoral">Doctoral or equivalent</MenuItem>
+                    <MenuItem value='Childhood'>Early childhood Education</MenuItem>
+                    <MenuItem value='Primary'>Primary education</MenuItem>
+                    <MenuItem value='LowerSecondary'>Lower secondary education</MenuItem>
+                    <MenuItem value='UpperSecondary'>Upper secondary education</MenuItem>
+                    <MenuItem value='Post-secondary'>Post-secondary non-tertiary education</MenuItem>
+                    <MenuItem value='Tertiary'>Short-cycle tertiary education</MenuItem>
+                    <MenuItem value='Bachelor'>Bachelor or equivalent</MenuItem>
+                    <MenuItem value='Master'>Master or equivalent</MenuItem>
+                    <MenuItem value='Doctoral'>Doctoral or equivalent</MenuItem>
                 </Select>
             </FormControl>
 
-            <Typography variant="subtitle1" marginY={2}>
+            <Typography variant='subtitle1' marginY={2}>
                 How would you describe your proficiency in the task of data analysis?
             </Typography>
             <Box
@@ -543,17 +543,17 @@ function DemoPage1(app: App) {
                 }}
             >
                 <Rating
-                    name="analysis-proficiency"
+                    name='analysis-proficiency'
                     value={analysisProficiency}
                     max={6}
-                    size="large"
+                    size='large'
                     onChange={handleAnalysisProficiencyChange}
-                    emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize="inherit" />}
+                    emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                 />
                 <Box sx={{ ml: 2 }}>{proficiencyLabels[analysisProficiency]}</Box>
             </Box>
 
-            <Typography variant="subtitle1" marginY={2}>
+            <Typography variant='subtitle1' marginY={2}>
                 How would you describe your proficiency with parallel coordinates?
             </Typography>
             <Box
@@ -565,12 +565,12 @@ function DemoPage1(app: App) {
                 }}
             >
                 <Rating
-                    name="pc-proficiency"
+                    name='pc-proficiency'
                     value={pcProficiency}
                     max={6}
-                    size="large"
+                    size='large'
                     onChange={handlePcProficiencyChange}
-                    emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize="inherit" />}
+                    emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                 />
                 <Box sx={{ ml: 2 }}>{proficiencyLabels[pcProficiency]}</Box>
             </Box>
@@ -578,7 +578,7 @@ function DemoPage1(app: App) {
             <Container>
                 <Box marginY={4}>
                     <Button
-                        variant="contained"
+                        variant='contained'
                         onClick={handleClick}
                         fullWidth
                         disabled={!canContinue}
@@ -601,19 +601,19 @@ function DemoPage2(app: App) {
     } = ppcState;
 
     return (
-        <Box style={{ height: "95%", padding: "2rem" }}>
-            <Grid container style={{ height: "100%" }} spacing={2}>
+        <Box style={{ height: '95%', padding: '2rem' }}>
+            <Grid container style={{ height: '100%' }} spacing={2}>
                 <Grid xs={10}>
                     <PPC
                         {...ppcState}
                     />
                 </Grid>
-                <Grid xs={2} maxHeight={"95%"} sx={{ overflow: "auto" }}>
+                <Grid xs={2} maxHeight={'95%'} sx={{ overflow: 'auto' }}>
                     <Stack
                         spacing={2}
-                        justifyContent="flex-start"
-                        alignItems="flex-start"
-                        paddingX={"2rem"}
+                        justifyContent='flex-start'
+                        alignItems='flex-start'
+                        paddingX={'2rem'}
                     >
                         <InstructionsDialog demo={demo} setProps={app.setProps} />
 
@@ -652,23 +652,23 @@ function FinishPage(app: App) {
         const fileContentsCompressed = pako.deflate(fileContentsJSON);
 
         if (dryRun) {
-            console.info("Dry run results", fileName, fileContents, fileContentsCompressed);
-            console.info("Raw length", fileContentsJSON.length);
-            console.info("Compressed length", fileContentsCompressed.length);
+            console.info('Dry run results', fileName, fileContents, fileContentsCompressed);
+            console.info('Raw length', fileContentsJSON.length);
+            console.info('Compressed length', fileContentsCompressed.length);
             setFinished(true);
             return;
         }
 
         const client = new S3Client({
-            region: "eu-central-1",
-            endpoint: "https://s3.hidrive.strato.com",
+            region: 'eu-central-1',
+            endpoint: 'https://s3.hidrive.strato.com',
             credentials: {
-                accessKeyId: "AHS4MOAD6Q7YF20RJLZX",
-                secretAccessKey: "IE0g/gBAFSix49pPMwZAcnWwe7OhtWWj9/ACeHQY",
+                accessKeyId: 'AHS4MOAD6Q7YF20RJLZX',
+                secretAccessKey: 'IE0g/gBAFSix49pPMwZAcnWwe7OhtWWj9/ACeHQY',
             }
         });
         const command = new PutObjectCommand({
-            Bucket: "userstudy",
+            Bucket: 'userstudy',
             Key: fileName,
             Body: fileContentsCompressed,
         });
@@ -696,9 +696,9 @@ function FinishPage(app: App) {
                 </Box> : undefined
             }
             {
-                finished && typeof (finished) === "boolean" ?
+                finished && typeof (finished) === 'boolean' ?
                     <>
-                        <Typography variant="h4">
+                        <Typography variant='h4'>
                             <b>Thank you for your participation in this study.</b>
                         </Typography>
                         <Typography variant='body1' marginY={2}>
@@ -707,8 +707,8 @@ function FinishPage(app: App) {
                     </> : undefined
             }
             {
-                finished && typeof (finished) == "object" ?
-                    <Alert severity="error">
+                finished && typeof (finished) == 'object' ?
+                    <Alert severity='error'>
                         Could not submit results. Error: {finished.error}.
                     </Alert> : undefined}
         </Container >
@@ -745,7 +745,7 @@ const InstructionsDialog = (props: {
     };
 
     useEffect(() => {
-        const video = document.getElementById("instructions_video") as HTMLMediaElement;
+        const video = document.getElementById('instructions_video') as HTMLMediaElement;
         if (video) {
             video.load();
         }
@@ -755,15 +755,15 @@ const InstructionsDialog = (props: {
         <Dialog
             onClose={handleClose}
             open={showInstructions}
-            maxWidth={"xl"}
-            scroll="paper"
-            aria-labelledby="instructions-dialog-title"
-            aria-describedby="instructions-dialog-description"
+            maxWidth={'xl'}
+            scroll='paper'
+            aria-labelledby='instructions-dialog-title'
+            aria-describedby='instructions-dialog-description'
         >
-            <DialogTitle id="instructions-dialog-title">
+            <DialogTitle id='instructions-dialog-title'>
                 {name}
             </DialogTitle>
-            <DialogContent id="instructions-dialog-description" dividers>
+            <DialogContent id='instructions-dialog-description' dividers>
                 {task.instructions[pageIdx]()}
             </DialogContent>
 
@@ -773,18 +773,18 @@ const InstructionsDialog = (props: {
                 </Button>
             </DialogActions> : undefined}
             {task.instructions.length !== 1 ? <MobileStepper
-                variant="dots"
+                variant='dots'
                 steps={task.instructions.length}
-                position="static"
+                position='static'
                 activeStep={pageIdx}
                 nextButton={
-                    <Button size="small" onClick={handleNext}>
-                        {pageIdx !== task.instructions.length - 1 ? "Next" : "Close"}
+                    <Button size='small' onClick={handleNext}>
+                        {pageIdx !== task.instructions.length - 1 ? 'Next' : 'Close'}
                         <KeyboardArrowRight />
                     </Button>
                 }
                 backButton={
-                    <Button size="small" onClick={handlePrevious} disabled={pageIdx === 0}>
+                    <Button size='small' onClick={handlePrevious} disabled={pageIdx === 0}>
                         <KeyboardArrowLeft />
                         Previous
                     </Button>
@@ -812,7 +812,7 @@ const TaskView = (
         const current = tasks[currentTask];
         const currentLog = taskLogs[currentTask];
         currentLog.events.push({
-            type: "end",
+            type: 'end',
             timestamp
         });
 
@@ -829,7 +829,7 @@ const TaskView = (
             const nextLog = taskLogs[currentTask + 1];
 
             nextLog.events.push({
-                type: "start",
+                type: 'start',
                 timestamp
             });
 
@@ -843,7 +843,7 @@ const TaskView = (
             demo.showInstructions = !next.viewed;
             setProps({ ppcState: nextPpc, demo });
         } else {
-            demo.currentPage = "finish";
+            demo.currentPage = 'finish';
             setProps({ demo });
         }
     };
@@ -855,14 +855,14 @@ const TaskView = (
         const current = tasks[currentTask];
         const currentLog = taskLogs[currentTask];
         currentLog.events.push({
-            type: "end",
+            type: 'end',
             timestamp
         });
 
         const prev = tasks[currentTask - 1];
         const prevLog = taskLogs[currentTask - 1];
         prevLog.events.push({
-            type: "start",
+            type: 'start',
             timestamp
         });
 
@@ -898,14 +898,14 @@ const TaskView = (
     }
 
     return (
-        <Stack width={"100%"} spacing={1}>
+        <Stack width={'100%'} spacing={1}>
             <Typography variant='h5'>{name}</Typography>
             <Typography variant='subtitle1'>{shortDescription}</Typography>
             <Container>
                 <Button
-                    variant="contained"
+                    variant='contained'
                     startIcon={<HelpIcon />}
-                    sx={{ width: "95%" }}
+                    sx={{ width: '95%' }}
                     onClick={openInstructionsDialog}
                 >
                     Instructions
@@ -913,9 +913,9 @@ const TaskView = (
             </Container>
             <Container>
                 <Button
-                    variant="contained"
+                    variant='contained'
                     startIcon={<RestartAltIcon />}
-                    sx={{ width: "95%" }}
+                    sx={{ width: '95%' }}
                     onClick={handleReset}
                 >
                     Reset
@@ -925,18 +925,18 @@ const TaskView = (
                 ? createElement(task.taskResultInput, { task, forceUpdate })
                 : undefined}
             <MobileStepper
-                variant="progress"
+                variant='progress'
                 steps={tasks.length}
-                position="bottom"
+                position='bottom'
                 activeStep={currentTask}
                 nextButton={
-                    <Button size="small" onClick={handleNext} disabled={!task.canContinue(ppc, task)}>
-                        {currentTask !== tasks.length - 1 ? "Next" : "Finish"}
+                    <Button size='small' onClick={handleNext} disabled={!task.canContinue(ppc, task)}>
+                        {currentTask !== tasks.length - 1 ? 'Next' : 'Finish'}
                         <KeyboardArrowRight />
                     </Button>
                 }
                 backButton={
-                    <Button size="small" onClick={handleBack} disabled={currentTask === 0}>
+                    <Button size='small' onClick={handleBack} disabled={currentTask === 0}>
                         <KeyboardArrowLeft />
                         Previous
                     </Button>
@@ -965,7 +965,7 @@ const LabelsViewItem = (
             >
                 {name}
             </Typography>
-            <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+            <Divider sx={{ height: 28, m: 0.5 }} orientation='vertical' />
             <IconButton onClick={deleteLabel} disabled={deleteLabel == null}>
                 <DeleteIcon />
             </IconButton>
@@ -1021,8 +1021,8 @@ const LabelsView = (
         return LabelsViewItem(k === activeLabel, k, deleteLabel, toggleActive);
     });
 
-    const [labelName, setLabelName] = useState<string>("");
-    const canAddLabel = labelName !== "" && !Object.keys(labels).includes(labelName);
+    const [labelName, setLabelName] = useState<string>('');
+    const canAddLabel = labelName !== '' && !Object.keys(labels).includes(labelName);
 
     const handleLabelNameChanged = (e) => {
         setLabelName(e.target.value);
@@ -1036,7 +1036,7 @@ const LabelsView = (
         ppc.activeLabel = newActiveLabel;
         logPPCEvent({ labels: labelsClone, activeLabel: newActiveLabel });
         setProps({ ppcState: ppc });
-        setLabelName("");
+        setLabelName('');
     };
 
     const handleProbabilityRangeChange = (e: Event, range: Array<number>) => {
@@ -1044,7 +1044,7 @@ const LabelsView = (
         labelsClone[activeLabel].selectionBounds = range as [number, number];
         ppc.labels = labelsClone;
 
-        if (e.type === "mouseup") {
+        if (e.type === 'mouseup') {
             logPPCEvent({ labels: labelsClone });
         }
         setProps({ ppcState: ppc })
@@ -1063,7 +1063,7 @@ const LabelsView = (
     };
 
     return (
-        <Box width={"100%"}>
+        <Box width={'100%'}>
             <Typography variant='h5'>Labels</Typography>
             <Stack spacing={1}>
                 <div />
@@ -1072,18 +1072,18 @@ const LabelsView = (
                 {interactionMode == InteractionMode.Compatibility
                     || interactionMode == InteractionMode.Full
                     ? <Paper
-                        component="form"
+                        component='form'
                         sx={{ display: 'flex', alignItems: 'center' }}
                     >
                         <InputBase
                             sx={{ ml: 1, flex: 1 }}
-                            placeholder="New label name"
+                            placeholder='New label name'
                             value={labelName}
                             onChange={handleLabelNameChanged}
                             onKeyDown={handleEnter}
                         />
                         <IconButton
-                            type="button"
+                            type='button'
                             sx={{ p: '10px' }}
                             onClick={createNewLabel}
                             disabled={!canAddLabel}
@@ -1104,8 +1104,8 @@ const LabelsView = (
                             onChangeCommitted={handleProbabilityRangeChange}
                             getAriaValueText={probabilityLabelFormat}
                             valueLabelFormat={probabilityLabelFormat}
-                            valueLabelDisplay="auto"
-                            size="small"
+                            valueLabelDisplay='auto'
+                            size='small'
                         />
                     </FormControl> : undefined}
             </Stack>
@@ -1129,7 +1129,7 @@ const AttributeListItem = (
             >
                 {label}
             </Typography>
-            <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+            <Divider sx={{ height: 28, m: 0.5 }} orientation='vertical' />
             <IconButton onClick={handleClick} disabled={handleClick == null}>
                 {visible ? <VisibilityIcon /> : <VisibilityOffIcon />}
             </IconButton>
@@ -1176,16 +1176,16 @@ const AttributeList = (
     }
 
     return (
-        <Accordion sx={{ width: "100%" }}>
+        <Accordion sx={{ width: '100%' }}>
             <AccordionSummary
-                id="attributes-header"
+                id='attributes-header'
                 aria-controls='attributes-content'
                 expandIcon={<ExpandMoreIcon />}
             >
                 <Typography variant='h5'>Attributes</Typography>
             </AccordionSummary>
             <AccordionDetails>
-                <Stack width={"100%"} spacing={1}>
+                <Stack width={'100%'} spacing={1}>
                     {items}
                 </Stack>
             </AccordionDetails>
@@ -1207,10 +1207,10 @@ const ColorSettings = (
     }
 
     const drawOrder = colors.drawOrder ? colors.drawOrder : 'selected_probability';
-    const constantColorModeValue = typeof (ppc.colors?.selected?.color) == "number"
+    const constantColorModeValue = typeof (ppc.colors?.selected?.color) == 'number'
         ? ppc.colors?.selected?.color
         : 0.5;
-    const attributeColorModeValue = typeof (ppc.colors?.selected?.color) == "string"
+    const attributeColorModeValue = typeof (ppc.colors?.selected?.color) == 'string'
         ? ppc.colors?.selected?.color
         : Object.keys(ppc.axes)[0];
 
@@ -1218,14 +1218,14 @@ const ColorSettings = (
     if (colors) {
         switch (typeof (colors.selected.color)) {
             case 'number':
-                colorMode = "constant";
+                colorMode = 'constant';
                 break;
             case 'string':
-                colorMode = "attribute";
+                colorMode = 'attribute';
             default:
                 if (typeof (colors.selected.color) == 'object'
-                    && colors.selected.color.type === "probability") {
-                    colorMode = "probability";
+                    && colors.selected.color.type === 'probability') {
+                    colorMode = 'probability';
                 }
         }
     } else {
@@ -1244,14 +1244,14 @@ const ColorSettings = (
             window.structuredClone(colors)
             : { selected: { color: 0.5, scale: 'plasma' } };
         switch (colorMode) {
-            case "constant":
+            case 'constant':
                 colorsClone.selected.color = constantColorModeValue;
                 break;
-            case "attribute":
+            case 'attribute':
                 colorsClone.selected.color = attributeColorModeValue;
                 break;
-            case "probability":
-                colorsClone.selected.color = { type: "probability" };
+            case 'probability':
+                colorsClone.selected.color = { type: 'probability' };
                 break;
         }
         ppc.colors = colorsClone;
@@ -1276,7 +1276,7 @@ const ColorSettings = (
         colorsClone.selected.color = value;
         ppc.colors = colorsClone;
 
-        if (e.type === "mouseup") {
+        if (e.type === 'mouseup') {
             logPPCEvent({ colors: colorsClone });
         }
         setProps({ ppcState: ppc, demo })
@@ -1303,9 +1303,9 @@ const ColorSettings = (
     };
 
     return (
-        <Accordion sx={{ width: "100%" }}>
+        <Accordion sx={{ width: '100%' }}>
             <AccordionSummary
-                id="color-settings-header"
+                id='color-settings-header'
                 aria-controls='color-settings-content'
                 expandIcon={<ExpandMoreIcon />}
             >
@@ -1313,19 +1313,19 @@ const ColorSettings = (
             </AccordionSummary>
             <AccordionDetails>
                 <FormControl fullWidth>
-                    <FormLabel id="color-settings-color-bar-group-label">Color Bar</FormLabel>
+                    <FormLabel id='color-settings-color-bar-group-label'>Color Bar</FormLabel>
                     <RadioGroup
                         row
-                        aria-labelledby="color-settings-color-bar-group-label"
-                        name="color-settings-color-bar-group"
+                        aria-labelledby='color-settings-color-bar-group-label'
+                        name='color-settings-color-bar-group'
                         value={colorBar ? colorBar : 'hidden'}
                         onChange={switchColorBarVisibility}
                     >
-                        <FormControlLabel value="hidden" control={<Radio />} label="Hidden" />
-                        <FormControlLabel value="visible" control={<Radio />} label="Visible" />
+                        <FormControlLabel value='hidden' control={<Radio />} label='Hidden' />
+                        <FormControlLabel value='visible' control={<Radio />} label='Visible' />
                     </RadioGroup>
                 </FormControl>
-                {userGroup === "PPC" ? <FormControl fullWidth>
+                {userGroup === 'PPC' ? <FormControl fullWidth>
                     <FormLabel>Draw order</FormLabel>
                     <RadioGroup
                         row
@@ -1334,18 +1334,18 @@ const ColorSettings = (
                     >
                         <FormControlLabel
                             control={<Radio />}
-                            value={"selected_unordered"}
-                            label={"Unord."}
+                            value={'selected_unordered'}
+                            label={'Unord.'}
                         />
                         <FormControlLabel
                             control={<Radio />}
-                            value={"selected_probability"}
-                            label={"Prob."}
+                            value={'selected_probability'}
+                            label={'Prob.'}
                         />
                         <FormControlLabel
                             control={<Radio />}
-                            value={"selected_inverted_probability"}
-                            label={"Inv."}
+                            value={'selected_inverted_probability'}
+                            label={'Inv.'}
                         />
                     </RadioGroup>
                 </FormControl> : null}
@@ -1358,24 +1358,24 @@ const ColorSettings = (
                     >
                         <FormControlLabel
                             control={<Radio />}
-                            value={"constant"}
-                            label={"Const."}
+                            value={'constant'}
+                            label={'Const.'}
                         />
                         <FormControlLabel
                             control={<Radio />}
-                            value={"attribute"}
-                            label={"Attr."}
+                            value={'attribute'}
+                            label={'Attr.'}
                         />
-                        {userGroup === "PPC" ? <FormControlLabel
+                        {userGroup === 'PPC' ? <FormControlLabel
                             control={<Radio />}
-                            value={"probability"}
-                            label={"Prob."}
+                            value={'probability'}
+                            label={'Prob.'}
                         /> : null}
                     </RadioGroup>
                 </FormControl>
                 {
-                    colorMode === "constant" ?
-                        <FormControl fullWidth disabled={colorMode !== "constant"}>
+                    colorMode === 'constant' ?
+                        <FormControl fullWidth disabled={colorMode !== 'constant'}>
                             <FormLabel>Color Mode: Constant</FormLabel>
                             <Slider
                                 min={0}
@@ -1388,7 +1388,7 @@ const ColorSettings = (
                         </FormControl> : null
                 }
                 {
-                    colorMode === "attribute" ?
+                    colorMode === 'attribute' ?
                         <FormControl fullWidth>
                             <FormLabel>Color Mode: Attribute</FormLabel>
                             <RadioGroup
@@ -1411,7 +1411,7 @@ const ColorSettings = (
                         value={colorMapValue}
                         onChange={setColorMap}
                     >
-                        {["Magma", "Inferno", "Plasma", "Viridis"].map((v) => <FormControlLabel
+                        {['Magma', 'Inferno', 'Plasma', 'Viridis'].map((v) => <FormControlLabel
                             control={<Radio />}
                             value={v.toLowerCase()}
                             label={v}
@@ -1469,9 +1469,9 @@ const ActionsInfo = (ppc: Props) => {
     ];
 
     return (
-        <Accordion sx={{ width: "100%" }}>
+        <Accordion sx={{ width: '100%' }}>
             <AccordionSummary
-                id="actions-info-header"
+                id='actions-info-header'
                 aria-controls='actions-info-content'
                 expandIcon={<ExpandMoreIcon />}
             >
@@ -1508,9 +1508,9 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
     let debugItem = null;
     if (demo.showDebugInfo) {
         debugItem = (
-            <Accordion sx={{ width: "100%" }}>
+            <Accordion sx={{ width: '100%' }}>
                 <AccordionSummary
-                    id="debug-info-header"
+                    id='debug-info-header'
                     aria-controls='debug-info-content'
                     expandIcon={<ExpandMoreIcon />}
                 >
@@ -1536,22 +1536,22 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
                                     showColorBarBoundingBox: false,
                                 };
                             switch (element.value) {
-                                case "axis":
+                                case 'axis':
                                     debugClone.showAxisBoundingBox = !debugClone.showAxisBoundingBox;
                                     break;
-                                case "label":
+                                case 'label':
                                     debugClone.showLabelBoundingBox = !debugClone.showLabelBoundingBox;
                                     break;
-                                case "curves":
+                                case 'curves':
                                     debugClone.showCurvesBoundingBox = !debugClone.showCurvesBoundingBox;
                                     break;
-                                case "axis_lines":
+                                case 'axis_lines':
                                     debugClone.showAxisLineBoundingBox = !debugClone.showAxisLineBoundingBox;
                                     break;
-                                case "selections":
+                                case 'selections':
                                     debugClone.showSelectionsBoundingBox = !debugClone.showSelectionsBoundingBox;
                                     break;
-                                case "colorbar":
+                                case 'colorbar':
                                     debugClone.showColorBarBoundingBox = !debugClone.showColorBarBoundingBox;
                                     break;
                             }
@@ -1561,12 +1561,12 @@ const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
                         }}
                     >
                         <FormLabel>Bounding Boxes</FormLabel>
-                        <FormControlLabel control={<Switch checked={debugShowAxisBB} />} value="axis" label="Axis" />
-                        <FormControlLabel control={<Switch checked={debugShowLabelBB} />} value="label" label="Label" />
-                        <FormControlLabel control={<Switch checked={debugShowCurvesBB} />} value="curves" label="Curves" />
-                        <FormControlLabel control={<Switch checked={debugShowAxisLineBB} />} value="axis_lines" label="Axis lines" />
-                        <FormControlLabel control={<Switch checked={debugShowSelectionsBB} />} value="selections" label="Selections" />
-                        <FormControlLabel control={<Switch checked={debugShowColorBarBB} />} value="colorbar" label="Colorbar" />
+                        <FormControlLabel control={<Switch checked={debugShowAxisBB} />} value='axis' label='Axis' />
+                        <FormControlLabel control={<Switch checked={debugShowLabelBB} />} value='label' label='Label' />
+                        <FormControlLabel control={<Switch checked={debugShowCurvesBB} />} value='curves' label='Curves' />
+                        <FormControlLabel control={<Switch checked={debugShowAxisLineBB} />} value='axis_lines' label='Axis lines' />
+                        <FormControlLabel control={<Switch checked={debugShowSelectionsBB} />} value='selections' label='Selections' />
+                        <FormControlLabel control={<Switch checked={debugShowColorBarBB} />} value='colorbar' label='Colorbar' />
                     </FormGroup>
                 </AccordionDetails>
             </Accordion>
@@ -1583,7 +1583,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
         tasks.push(tutorial1());
         tasks.push(tutorial2());
 
-        if (userGroup === "PPC") {
+        if (userGroup === 'PPC') {
             tasks.push(tutorial2A());
             tasks.push(tutorial2B());
         }
@@ -1622,7 +1622,7 @@ const tutorial1 = (): DemoTask => {
                     neighbors. Therefore, the order of the attribute axes is significant, and it is
                     possible to reorder them at will.
                 </DialogContentText>
-                <video autoPlay loop muted id="instructions_video">
+                <video autoPlay loop muted id='instructions_video'>
                     <source src={moveAxesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -1636,49 +1636,49 @@ const tutorial1 = (): DemoTask => {
     }];
 
     return {
-        name: "Reorder attribute axes.",
-        shortDescription: "Reorder A1 in between A2 and A3",
+        name: 'Reorder attribute axes.',
+        shortDescription: 'Reorder A1 in between A2 and A3',
         instructions: buildInstructions,
         viewed: true,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 10],
                     dataPoints: [...Array(100)].map(() => Math.random() * 10),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             interactionMode: InteractionMode.RestrictedCompatibility,
             powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
-        canContinue: (ppc: Props) => (ppc.order[0] == "a2"
-            && ppc.order[1] == "a1" && ppc.order[2] == "a3")
-            || (ppc.order[0] == "a3" && ppc.order[1] == "a1"
-                && ppc.order[2] == "a2"),
+        canContinue: (ppc: Props) => (ppc.order[0] == 'a2'
+            && ppc.order[1] == 'a1' && ppc.order[2] == 'a3')
+            || (ppc.order[0] == 'a3' && ppc.order[1] == 'a1'
+                && ppc.order[2] == 'a2'),
         disableLabels: true,
         disableAttributes: true,
         disableColors: true,
@@ -1696,7 +1696,7 @@ const tutorial2 = (): DemoTask => {
                     will be shown in a light gray color. Multiple brushes on the same axis will filter
                     curves that pass through at least one of them.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={brushingInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -1716,15 +1716,15 @@ const tutorial2 = (): DemoTask => {
     }];
 
     const checkSelectedRanges = (selections?: { [id: string]: Brushes }) => {
-        if (!selections || "Default" in selections === false) {
+        if (!selections || 'Default' in selections === false) {
             return false;
         }
 
-        const brushes = selections["Default"];
-        if ("a1" in brushes || "a3" in brushes || "a2" in brushes === false) {
+        const brushes = selections['Default'];
+        if ('a1' in brushes || 'a3' in brushes || 'a2' in brushes === false) {
             return false;
         }
-        const a2 = brushes["a2"];
+        const a2 = brushes['a2'];
 
         const mustContain: [number, boolean][] = [
             [10, false],
@@ -1767,40 +1767,40 @@ const tutorial2 = (): DemoTask => {
     }
 
     return {
-        name: "Create a new selection.",
-        shortDescription: "Select only the ranges [10, 20] and [80, 90] of A2.",
+        name: 'Create a new selection.',
+        shortDescription: 'Select only the ranges [10, 20] and [80, 90] of A2.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             interactionMode: InteractionMode.Compatibility,
             powerProfile: 'high',
             setProps: undefined,
@@ -1826,7 +1826,7 @@ const tutorial2A = (): DemoTask => {
                     of a brush is shown through the color of the brush, with <b>neon green</b> indicating
                     a certainty of <b>100%</b> and <b>black</b> indicating a certainty of <b>0%</b>.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={extendAxisInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -1841,7 +1841,7 @@ const tutorial2A = (): DemoTask => {
                     the maxium of all overlapping segments. The individual brushes are not combined
                     in the expanded mode.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={brushingExtInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -1856,7 +1856,7 @@ const tutorial2A = (): DemoTask => {
                     or <b>Option</b> keys, before dragging the first or last control points of the brush.
                     A control point can be removed by clicking it on the axis.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={brushFadeoutInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -1878,15 +1878,15 @@ const tutorial2A = (): DemoTask => {
     }];
 
     const checkSelectedRanges = (selections?: { [id: string]: Brushes }) => {
-        if (!selections || "Default" in selections === false) {
+        if (!selections || 'Default' in selections === false) {
             return false;
         }
 
-        const brushes = selections["Default"];
-        if ("a1" in brushes || "a3" in brushes || "a2" in brushes === false) {
+        const brushes = selections['Default'];
+        if ('a1' in brushes || 'a3' in brushes || 'a2' in brushes === false) {
             return false;
         }
-        const a2 = brushes["a2"];
+        const a2 = brushes['a2'];
         if (a2.length != 1) {
             return false;
         }
@@ -1918,40 +1918,40 @@ const tutorial2A = (): DemoTask => {
     }
 
     return {
-        name: "Uncertain brushing.",
-        shortDescription: "Brush A2 in the range [30, 70], where the range [40, 60] has a certainty of 100%.",
+        name: 'Uncertain brushing.',
+        shortDescription: 'Brush A2 in the range [30, 70], where the range [40, 60] has a certainty of 100%.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             interactionMode: InteractionMode.Full,
             powerProfile: 'high',
             setProps: undefined,
@@ -1977,7 +1977,7 @@ const tutorial2B = (): DemoTask => {
                     interpolation mode of the primary segment of each brush is always linear, and can
                     not be changed.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={interpolationChangeInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -1990,48 +1990,48 @@ const tutorial2B = (): DemoTask => {
     }];
 
     const checkInterpolationMode = (labels: { [id: string]: LabelInfo }) => {
-        const label = labels["Default"];
-        return label.easing === "inout";
+        const label = labels['Default'];
+        return label.easing === 'inout';
     };
 
     return {
-        name: "Different curves.",
-        shortDescription: "Switch the interpolation mode to In-Out.",
+        name: 'Different curves.',
+        shortDescription: 'Switch the interpolation mode to In-Out.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             brushes: {
-                "Default": {
-                    "a2": [
+                'Default': {
+                    'a2': [
                         { controlPoints: [[30, 0], [40, 1], [60, 1], [70, 0]], mainSegmentIdx: 1 }
                     ]
                 }
@@ -2049,7 +2049,7 @@ const tutorial2B = (): DemoTask => {
 }
 
 const tutorial3 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
+    const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
 
@@ -2063,13 +2063,13 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                     label. The active label can be changed by pressing the play button next to the
                     label name.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={labelsNewInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
     }];
 
-    if (userGroup === "PPC") {
+    if (userGroup === 'PPC') {
         buildInstructions.push(() => {
             return (
                 <Stack spacing={1}>
@@ -2080,7 +2080,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                         required to count as selected, with the slider unter the <b>Labels</b> section.
                         Different labels can have different certainty bounds.
                     </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={labelsCertaintyInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
@@ -2092,7 +2092,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                         When the attribute axis is expanded, you can see the curves of the other labels,
                         along with the curve of the currently active label.
                     </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={labelsCompareInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
@@ -2112,50 +2112,50 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
     });
 
     const checkLabels = (labels: { [id: string]: LabelInfo }) => {
-        return "My Label" in labels;
+        return 'My Label' in labels;
     };
 
     return {
-        name: "Multiple Labels.",
-        shortDescription: "Create a new label called. \"My Label\".",
+        name: 'Multiple Labels.',
+        shortDescription: 'Create a new label called. \'My Label\'.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             brushes: {
-                "Default": {
-                    "a2": [
+                'Default': {
+                    'a2': [
                         { controlPoints: [[40, 1], [60, 1]], mainSegmentIdx: 0 }
                     ],
-                    "a3": [
+                    'a3': [
                         { controlPoints: [[-50000, 1], [0, 1]], mainSegmentIdx: 0 }
                     ]
                 }
@@ -2172,7 +2172,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
 }
 
 const tutorial4 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
+    const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
 
@@ -2186,13 +2186,13 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
                     configure the color bar visibility, the information that is encoded as the color,
                     and the color scale that should be used to color the information.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={colorsInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
     }];
 
-    if (userGroup === "PPC") {
+    if (userGroup === 'PPC') {
         buildInstructions.push(() => {
             return (
                 <Stack spacing={1}>
@@ -2200,7 +2200,7 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
                         In addition to the other color modes, you can select to color the curves based on
                         their computed certainty of selection.
                     </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={colorsCertaintyInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
@@ -2220,52 +2220,52 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
     });
 
     return {
-        name: "Color settings.",
-        shortDescription: "Enable the color bar.",
+        name: 'Color settings.',
+        shortDescription: 'Enable the color bar.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             interactionMode,
             powerProfile: 'high',
             setProps: undefined,
         },
         finalState: null,
-        canContinue: (ppc: Props) => ppc.colorBar === "visible",
+        canContinue: (ppc: Props) => ppc.colorBar === 'visible',
         disableAttributes: true,
     };
 }
 
 const tutorial5 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
+    const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
 
@@ -2279,7 +2279,7 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
                     about all the attributes present in the dataset. There you can select whether
                     to show or hide an attribute from the plot.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: "fill" }} id="instructions_video">
+                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={attributesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -2296,55 +2296,55 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
     };
 
     return {
-        name: "More attributes.",
-        shortDescription: "Enable the attribute A5.",
+        name: 'More attributes.',
+        shortDescription: 'Enable the attribute A5.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
-                "a4": {
-                    label: "A4",
+                'a4': {
+                    label: 'A4',
                     range: [0, 50],
                     dataPoints: [...Array(100)].map(() => Math.random() * 50),
                 },
-                "a5": {
-                    label: "A5",
+                'a5': {
+                    label: 'A5',
                     range: [-10000, 0],
                     dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
                 },
-                "a6": {
-                    label: "A6",
+                'a6': {
+                    label: 'A6',
                     range: [0, 10],
                     dataPoints: [...Array(100)].map((v, x) => x / 10),
                 },
             },
-            order: ["a1", "a2", "a3"],
+            order: ['a1', 'a2', 'a3'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             interactionMode,
             powerProfile: 'high',
             setProps: undefined,
@@ -2355,7 +2355,7 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
 }
 
 const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
+    const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
 
@@ -2375,55 +2375,55 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
     }];
 
     return {
-        name: "Make yourself familiar with the visualization.",
-        shortDescription: "Continue when you feel ready.",
+        name: 'Make yourself familiar with the visualization.',
+        shortDescription: 'Continue when you feel ready.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
             axes: {
-                "a1": {
-                    label: "A1",
+                'a1': {
+                    label: 'A1',
                     range: [0, 10000],
                     dataPoints: [...Array(100)].map((v, x) => x * x),
                 },
-                "a2": {
-                    label: "A2",
+                'a2': {
+                    label: 'A2',
                     range: [0, 100],
                     dataPoints: [...Array(100)].map((v, x) => 100 - x),
                 },
-                "a3": {
-                    label: "A3",
+                'a3': {
+                    label: 'A3',
                     range: [-125000, 125000],
                     dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
                 },
-                "a4": {
-                    label: "A4",
+                'a4': {
+                    label: 'A4',
                     range: [0, 50],
                     dataPoints: [...Array(100)].map(() => Math.random() * 50),
                 },
-                "a5": {
-                    label: "A5",
+                'a5': {
+                    label: 'A5',
                     range: [-10000, 0],
                     dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
                 },
-                "a6": {
-                    label: "A6",
+                'a6': {
+                    label: 'A6',
                     range: [0, 10],
                     dataPoints: [...Array(100)].map((v, x) => x / 10),
                 },
             },
-            order: ["a3", "a2", "a1"],
+            order: ['a3', 'a2', 'a1'],
             labels: {
-                "Default": {},
+                'Default': {},
             },
-            activeLabel: "Default",
+            activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: "plasma",
+                    scale: 'plasma',
                     color: 0.5,
                 }
             },
-            colorBar: "hidden",
+            colorBar: 'hidden',
             interactionMode: interactionMode,
             debug: {
                 showAxisBoundingBox: false,
@@ -2442,7 +2442,7 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
 }
 
 const taskAdult = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === "PC"
+    const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
 
@@ -2513,8 +2513,8 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
     }
 
     return {
-        name: "Filter by income.",
-        shortDescription: "Select the persons with an income greater than 50K.",
+        name: 'Filter by income.',
+        shortDescription: 'Select the persons with an income greater than 50K.',
         instructions: buildInstructions,
         viewed: false,
         initialState,

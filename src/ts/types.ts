@@ -1,8 +1,8 @@
-import { DashComponentProps } from "./props";
+import { DashComponentProps } from './props';
 
 export type PowerProfile = 'auto' | 'low' | 'high'
 
-export type ColorSpace = "srgb" | "xyz" | "cie_lab" | "cie lch";
+export type ColorSpace = 'srgb' | 'xyz' | 'cie_lab' | 'cie lch';
 
 export type Color = {
     colorSpace: ColorSpace,
@@ -47,7 +47,7 @@ export type Axis = {
     tickLabels?: string[]
 };
 
-export type EasingType = "linear" | "in" | "out" | "inout";
+export type EasingType = 'linear' | 'in' | 'out' | 'inout';
 
 export type LabelInfo = {
     color?: Color,
@@ -114,7 +114,7 @@ export type Props = {
     /**
      * Color bar visibility.
      */
-    colorBar?: "hidden" | "visible",
+    colorBar?: 'hidden' | 'visible',
     /**
      * Labels of the selections.
      */

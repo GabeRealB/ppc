@@ -1,5 +1,5 @@
-import { createAdultDataset } from "./datasets/adult";
-import { Props } from "types";
+import { createAdultDataset } from './datasets/adult';
+import { Props } from 'types';
 
 export function adultDataset(visible: string[], include: string[], samples?: number): Props {
     const included = new Set([...visible, ...include]);
