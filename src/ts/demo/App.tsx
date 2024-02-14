@@ -1426,33 +1426,44 @@ const ColorSettings = (
 const ActionsInfo = (ppc: Props) => {
     const { interactionMode } = ppc;
 
+    const isMac = /(Mac OS|MacPPC|MacIntel|Mac_PowerPC|Macintosh|Mac OS X)/.test(navigator.userAgent);
+    const symmetric_cp_key = isMac ? 'Control or Option' : 'Control or Alt';
+
     const actions = [
         {
-            icon: <PanToolIcon />, desc: "Move attribute axis", sec: "Left mouse button on axis label",
+            icon: <PanToolIcon />, desc: 'Move attribute axis', sec: 'Left mouse button on axis label',
             modesCheck: (m: InteractionMode) => m != InteractionMode.Disabled
         },
         {
-            icon: <AddIcon />, desc: "Create selection", sec: "Left mouse button on empty axis line",
+            icon: <AddIcon />, desc: 'Create selection', sec: 'Left mouse button on empty axis line',
             modesCheck: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
         },
         {
-            icon: <DragHandleIcon />, desc: "Move selection", sec: "Left mouse button on selection",
+            icon: <DragHandleIcon />, desc: 'Move selection', sec: 'Left mouse button on selection',
             modesCheck: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
         },
         {
-            icon: <DeleteIcon />, desc: "Delete selection", sec: "Left click on selection",
+            icon: <DeleteIcon />, desc: 'Delete selection', sec: 'Left click on selection',
             modesCheck: (m: InteractionMode) => m == InteractionMode.Compatibility || m == InteractionMode.Full
         },
         {
-            icon: <OpenInFullIcon />, desc: "Expand/Collapse axis", sec: "Left click on axis label",
+            icon: <OpenInFullIcon />, desc: 'Expand/Collapse axis', sec: 'Left click on axis label',
             modesCheck: (m: InteractionMode) => m == InteractionMode.Restricted || m == InteractionMode.Full
         },
         {
-            icon: <OpenWithIcon />, desc: "Move control point", sec: "Left mouse button on selection control point",
+            icon: <OpenWithIcon />, desc: 'Move control point', sec: 'Left mouse button on selection control point',
             modesCheck: (m: InteractionMode) => m == InteractionMode.Full
         },
         {
-            icon: <DeleteIcon />, desc: "Delete control point", sec: "Left click on selection control point",
+            icon: <DeleteIcon />, desc: 'Delete control point', sec: 'Left click on selection control point',
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Full
+        },
+        {
+            icon: <AddIcon />, desc: 'Add control point', sec: 'Drag control point while holding the Shift key',
+            modesCheck: (m: InteractionMode) => m == InteractionMode.Full
+        },
+        {
+            icon: <AddIcon />, desc: 'Add symmetric control point', sec: `Drag first/last control point while holding the ${symmetric_cp_key} key`,
             modesCheck: (m: InteractionMode) => m == InteractionMode.Full
         },
     ];
