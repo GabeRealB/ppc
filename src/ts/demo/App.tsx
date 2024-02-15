@@ -79,7 +79,7 @@ import attributesInstr from './resources/attributes_instr.mp4'
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { adultDataset } from './datasets';
+import { adultDataset, syntheticDataset } from './datasets';
 
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 1;
@@ -1697,6 +1697,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
     }
 
     if (taskMode === 'Full' || taskMode === 'Eval') {
+        tasks.push(taskSynthetic(userGroup));
         tasks.push(taskAdult(userGroup));
     }
 
@@ -2552,6 +2553,85 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
         },
         finalState: null,
         canContinue: (ppc: Props) => true
+    };
+}
+
+const taskSynthetic = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For this task, you will look into a synthetic dataset consisting
+                    of the attributes <i>A1</i>, <i>A2</i> and <i>Class</i>, where
+                    the last attribute denotes the assigned class of each point.
+                    The class of each point is determined by assigning a probability
+                    to each value of the two attributes and treating them as
+                    statistically independent random variables. A point is then
+                    assigned to class <b>C1</b>, if the combination of the two
+                    random variables yields a probability greater or equal to <b>50%</b>.
+                    Otherwise, the point is assigned to the class <b>C2</b>.
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    Given the provided information, select the entries assigned to
+                    class <b>C1</b>. You may not apply any brush directly to the
+                    included <i>Class</i> attribute, but you may use it otherwise.
+                    You may estimate the distribution of an attribute by changing the color
+                    mode to encode the value of said attribute. For the selection, you must
+                    try to maximize the number of entries that truly belong to
+                    class <b>C1</b>, while minimizing the number of entries wrongly
+                    attributed to that class.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['a1', 'a2', 'class'];
+    const included = [];
+    const initialState = syntheticDataset(visible, included);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Label': {} };
+    initialState.activeLabel = 'Label';
+    initialState.colors = {
+        selected: { scale: 'plasma', color: 0.5 }
+    };
+    initialState.powerProfile = 'high';
+
+    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
+        if (!brushes) {
+            return false;
+        }
+
+        let hasBrushed = false;
+        for (const [_, labelBrushes] of Object.entries(brushes)) {
+            if ('class' in labelBrushes) {
+                return false;
+            }
+            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
+        }
+
+        return hasBrushed;
+    }
+
+    return {
+        name: 'Name.',
+        shortDescription: 'Description.',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
 
