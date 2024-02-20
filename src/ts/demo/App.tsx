@@ -79,7 +79,7 @@ import attributesInstr from './resources/attributes_instr.mp4'
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { adultDataset, syntheticDataset } from './datasets';
+import { syntheticDataset, adultDataset, ablationDataset } from './datasets';
 
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 1;
@@ -1699,6 +1699,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
     if (taskMode === 'Full' || taskMode === 'Eval') {
         tasks.push(taskSynthetic(userGroup));
         tasks.push(taskAdult(userGroup));
+        tasks.push(taskAblation(userGroup));
     }
 
     return tasks;
@@ -2601,11 +2602,12 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
     const included = [];
     const initialState = syntheticDataset(visible, included);
     initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Label': {} };
-    initialState.activeLabel = 'Label';
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
     initialState.colors = {
         selected: { scale: 'plasma', color: 0.5 }
     };
+    initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
@@ -2625,8 +2627,8 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
     }
 
     return {
-        name: 'Name.',
-        shortDescription: 'Description.',
+        name: 'Statistically independent variables.',
+        shortDescription: 'Select the entries assigned to class C1.',
         instructions: buildInstructions,
         viewed: false,
         initialState,
@@ -2683,11 +2685,12 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
     const included = ['income'];
     const initialState = adultDataset(visible, included, 5000);
     initialState.interactionMode = interactionMode;
-    initialState.labels = { '>=50K': {} };
-    initialState.activeLabel = '>=50K';
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
     initialState.colors = {
         selected: { scale: 'plasma', color: 0.5 }
     };
+    initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
@@ -2709,6 +2712,114 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
     return {
         name: 'Filter by income.',
         shortDescription: 'Select the persons with an income greater than 50K.',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
+    };
+}
+
+const taskAblation = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For the next task, we will look into a simulated radiofrequency
+                    ablation dataset. Radiofrequency ablation is a minimally
+                    invasive procedure that aims to remove malicious or dysfunctional
+                    tissue, like tumors. A needle-like probe is inserted into the
+                    malicious tissue and is then powered, which exposes the cells
+                    to a temperature above 60°C. Those temperatures result in the
+                    death of the affected cells, when applied for a few minutes.
+                    In the treatment of tumorous tissue, the procedure aims to
+                    ablate all tumorous cells, including a safety margin of 5 to 10mm.
+                    Apart from ablating the malicious tissue and the safety margin
+                    around it, the procedure should minimize the harm to the
+                    healthy tissue. To that extent, it is important to understand
+                    how the biological properties of the involved tissues affect
+                    the treatment.
+                    <br />
+                    <br />
+                    The dataset simulates multiple radiofrequency ablation treatments
+                    of tumorous liver tissue. Along with the liver and tumor tissues,
+                    there are also blood vessels that have to be considered. For each
+                    of those tissues, we track the <i>Density</i>, <i>Heat Capacity</i>,
+                    &#32;<i>Thermal Conductivity</i> and <i>Blood Perfusion Rate</i>.
+                    To quantify the effectiveness of the treatment, we computed
+                    the <i>DICE Coefficient</i>. This coefficient is a measure of how
+                    effective the treatment was at maximizing the ablation of the
+                    tumorous tissue, while minimizing the ablation of healthy tissue.
+                    A higher <i>DICE Coefficient</i> indicates a more effective treatment.
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    Given the provided information, select the biological properties that
+                    maximize the <i>Dice Coefficient</i>. You may not apply any brush directly
+                    to the included <i>Dice Coefficient</i> attribute, but you may use it otherwise.
+                    You may estimate the distribution of an attribute by changing the color
+                    mode to encode the value of said attribute.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = [
+        'density_liver',
+        'density_vessel',
+        'density_tumor',
+        'heat_capacity_liver',
+        'heat_capacity_vessel',
+        'heat_capacity_tumor',
+        'thermal_conductivity_liver',
+        'thermal_conductivity_vessel',
+        'thermal_conductivity_tumor',
+        'relative_blood_perfusion_rate_liver',
+        'relative_blood_perfusion_rate_vessel',
+        'relative_blood_perfusion_rate_tumor',
+        'dice_coefficient',
+    ];
+    const included = [];
+    const initialState = ablationDataset(visible, included, 5000);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'plasma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
+        if (!brushes) {
+            return false;
+        }
+
+        let hasBrushed = false;
+        for (const [_, labelBrushes] of Object.entries(brushes)) {
+            if ('dice_coefficient' in labelBrushes) {
+                return false;
+            }
+            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
+        }
+
+        return hasBrushed;
+    }
+
+    return {
+        name: 'Ablation analysis.',
+        shortDescription: 'Maximize the DICE coefficient.',
         instructions: buildInstructions,
         viewed: false,
         initialState,
