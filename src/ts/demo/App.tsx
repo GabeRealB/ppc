@@ -1765,7 +1765,6 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
 
         tasks.push(tutorial3(userGroup))
         tasks.push(tutorial4(userGroup))
-        tasks.push(tutorial5(userGroup))
 
         tasks.push(tutorialFreeRoam(userGroup));
     }
@@ -2234,129 +2233,6 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
         return (
             <Stack spacing={1}>
                 <DialogContentText>
-                    Sometimes it may be required to assign multiple labels to the filtered data points.
-                    This can be achieved by creating a new label, and brushing the curves that should
-                    be assigned to the new label. The brushes are only valid for the currently active
-                    label. The active label can be changed by pressing the play button next to the
-                    label name.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={labelsNewInstr} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    }];
-
-    if (userGroup === 'PPC') {
-        buildInstructions.push(() => {
-            return (
-                <Stack spacing={1}>
-                    <DialogContentText>
-                        Whether a data point counts as selected is decided by the computed certainty and
-                        the requested certainty range. By default, the parallel coordinates plot selects
-                        any data point, regardless of the certainty. You can configure the certainty
-                        required to count as selected, with the slider unter the <b>Labels</b> section.
-                        Different labels can have different certainty bounds.
-                    </DialogContentText>
-                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={labelsCertaintyInstr} type='video/mp4'></source>
-                    </video>
-                </Stack>);
-        });
-        buildInstructions.push(() => {
-            return (
-                <Stack spacing={1}>
-                    <DialogContentText>
-                        When the attribute axis is expanded, you can see the curves of the other labels,
-                        along with the curve of the currently active label.
-                    </DialogContentText>
-                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={labelsCompareInstr} type='video/mp4'></source>
-                    </video>
-                </Stack>);
-        });
-    }
-
-    buildInstructions.push(() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    Create a new label called <b>My Label</b>.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    });
-
-    const checkLabels = (labels: { [id: string]: LabelInfo }) => {
-        return 'My Label' in labels;
-    };
-
-    return {
-        name: 'Multiple Labels.',
-        shortDescription: 'Create a new label called. \'My Label\'.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            brushes: {
-                'Default': {
-                    'a2': [
-                        { controlPoints: [[40, 1], [60, 1]], mainSegmentIdx: 0 }
-                    ],
-                    'a3': [
-                        { controlPoints: [[-50000, 1], [0, 1]], mainSegmentIdx: 0 }
-                    ]
-                }
-            },
-            interactionMode,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => checkLabels(ppc.labels),
-        disableAttributes: true,
-        disableColors: true,
-    };
-}
-
-const tutorial4 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
                     The parallel coordinates plot can encode some information in the form of the colors
                     of the data point curves. Depending on the task, it may be worthwhile to look into
                     the color settings under the <b>Colors</b> section, on the right. There you can
@@ -2479,7 +2355,7 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
     };
 }
 
-const tutorial5 = (userGroup: UserGroup): DemoTask => {
+const tutorial4 = (userGroup: UserGroup): DemoTask => {
     const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
@@ -2699,7 +2575,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
 
     const visible = ['a1', 'a2', 'class'];
     const included = [];
-    const initialState = syntheticDataset(visible, included);
+    const { state: initialState, sampleIndices } = syntheticDataset(visible, included);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2708,6 +2584,12 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
     };
     initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        accuracy_confidence: undefined,
+        overall_confidence: undefined,
+    };
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
@@ -2732,6 +2614,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
         viewed: false,
         initialState,
         finalState: null,
+        taskResult,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
@@ -2782,7 +2665,7 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
 
     const visible = ['age', 'sex', 'education', 'hours-per-week', 'income'];
     const included = [];
-    const initialState = adultDataset(visible, included, 5000);
+    const { state: initialState, sampleIndices } = adultDataset(visible, included, 5000);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2791,6 +2674,12 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
     };
     initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        accuracy_confidence: undefined,
+        overall_confidence: undefined,
+    };
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
@@ -2815,6 +2704,7 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
         viewed: false,
         initialState,
         finalState: null,
+        taskResult,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
@@ -2887,7 +2777,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
         'ablation_volume',
     ];
     const included = [];
-    const initialState = ablationDataset(visible, included, 5000);
+    const { state: initialState, sampleIndices } = ablationDataset(visible, included, 5000);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2897,6 +2787,12 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
     initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
 
+    const taskResult = {
+        sampleIndices,
+        accuracy_confidence: undefined,
+        overall_confidence: undefined,
+    };
+
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
             return false;
@@ -2904,7 +2800,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
 
         let hasBrushed = false;
         for (const [_, labelBrushes] of Object.entries(brushes)) {
-            if ('dice_coefficient' in labelBrushes) {
+            if ('ablation_volume' in labelBrushes) {
                 return false;
             }
             hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
@@ -2920,6 +2816,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
         viewed: false,
         initialState,
         finalState: null,
+        taskResult,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }

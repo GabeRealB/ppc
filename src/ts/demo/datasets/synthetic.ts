@@ -1,3 +1,5 @@
+import _ from 'lodash';
+
 const dataset = {
     "a1": {
         "label": "A1",
@@ -841,10 +843,25 @@ const dataset = {
     }
 };
 
-export function createSyntheticDataset(include: string[]) {
+export function createSyntheticDataset(include: string[], samples?: number) {
     const data = {};
     for (const incl of include) {
         data[incl] = window.structuredClone(dataset[incl]);
     }
-    return data;
+
+    const numEntries = dataset[Object.keys(dataset)[0]]['dataPoints'].length;
+    const indices = Array.from({ length: numEntries }, (_, i) => i);
+    const sampleIndices = new Set<number>(_.sampleSize(indices, samples ? samples : numEntries));
+
+    if (samples !== undefined) {
+        for (const key in data) {
+            const attr = data[key];
+            const dataPoints = attr['dataPoints'].filter((_, idx) => sampleIndices.has(idx))
+            attr['dataPoints'] = dataPoints;
+        }
+    }
+
+    const sampleIndicesArr = Array.from(sampleIndices);
+    sampleIndicesArr.sort((a, b) => a - b);
+    return { dataset: data, sampleIndices: sampleIndicesArr };
 }
