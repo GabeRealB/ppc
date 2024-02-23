@@ -10,11 +10,11 @@ export type Color = {
 };
 
 export type DrawOrder = 'unordered'
-    | 'probability'
-    | 'inverted_probability'
+    | 'increasing'
+    | 'decreasing'
     | 'selected_unordered'
-    | 'selected_probability'
-    | 'selected_inverted_probability';
+    | 'selected_increasing'
+    | 'selected_decreasing';
 
 export type ColorScale = {
     colorSpace: ColorSpace,

@@ -99,6 +99,7 @@ fn vertex_main(
 
     let index = INDEX_BUFFER[vertex_idx];
     let value = values[instance_idx];
+    let color_value = color_values[value.curve_idx];
     let probability = probabilities[value.curve_idx];
 
     let start_axis = axes[value.start_axis];
@@ -129,6 +130,7 @@ fn vertex_main(
     let pos = matrices.mv_matrix * vec4<f32>(vertex_pos, 0.0, 1.0);
     var offset_position = matrices.p_matrix * (pos + delta);
 
+    let order_by = select(color_value, probability, config.color_probabilities == 1u);
     switch config.render_order {
         case 0u, default {
             offset_position.z = 0.0;
@@ -149,13 +151,13 @@ fn vertex_main(
             let sample_in_bounds_0 = config.selection_bounds.x <= probability;
             let sample_in_bounds_1 = probability <= config.selection_bounds.y;
             let sample_in_bounds = sample_in_bounds_0 && sample_in_bounds_1;
-            offset_position.z = select(1.0, 1.0 - probability, sample_in_bounds);
+            offset_position.z = select(1.0, 1.0 - (order_by * 0.5), sample_in_bounds);
         }
         case 5u {
             let sample_in_bounds_0 = config.selection_bounds.x <= probability;
             let sample_in_bounds_1 = probability <= config.selection_bounds.y;
             let sample_in_bounds = sample_in_bounds_0 && sample_in_bounds_1;
-            offset_position.z = select(1.0, probability, sample_in_bounds);
+            offset_position.z = select(1.0, (order_by * 0.5), sample_in_bounds);
         }
     }
 

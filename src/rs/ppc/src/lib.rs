@@ -51,7 +51,7 @@ const DEFAULT_DATA_COLOR_MODE: fn() -> wasm_bridge::DataColorMode =
 const DEFAULT_COLOR_SCALE: fn() -> ColorScaleDescriptor<'static> =
     || ColorScaleDescriptor::Constant(ColorQuery::Named("blue".into()));
 
-const DEFAULT_DRAW_ORDER: wasm_bridge::DrawOrder = wasm_bridge::DrawOrder::SelectedProbability;
+const DEFAULT_DRAW_ORDER: wasm_bridge::DrawOrder = wasm_bridge::DrawOrder::SelectedIncreasing;
 
 /// Implementation of the renderer for the parallel coordinates.
 #[wasm_bindgen]
@@ -2381,17 +2381,17 @@ impl Renderer {
         ) as u32;
         let render_order = match self.draw_order {
             wasm_bridge::DrawOrder::Unordered => buffers::DataLineConfig::ORDER_UNORDERED,
-            wasm_bridge::DrawOrder::Probability => buffers::DataLineConfig::ORDER_PROBABILITY,
-            wasm_bridge::DrawOrder::InvertedProbability => {
+            wasm_bridge::DrawOrder::Increasing => buffers::DataLineConfig::ORDER_PROBABILITY,
+            wasm_bridge::DrawOrder::Decreasing => {
                 buffers::DataLineConfig::ORDER_PROBABILITY_INVERTED
             }
             wasm_bridge::DrawOrder::SelectedUnordered => {
                 buffers::DataLineConfig::ORDER_SELECTED_UNORDERED
             }
-            wasm_bridge::DrawOrder::SelectedProbability => {
+            wasm_bridge::DrawOrder::SelectedIncreasing => {
                 buffers::DataLineConfig::ORDER_SELECTED_PROBABILITY
             }
-            wasm_bridge::DrawOrder::SelectedInvertedProbability => {
+            wasm_bridge::DrawOrder::SelectedDecreasing => {
                 buffers::DataLineConfig::ORDER_SELECTED_PROBABILITY_INVERTED
             }
         };

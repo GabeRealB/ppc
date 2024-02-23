@@ -372,20 +372,20 @@ const PPC = (props: Props) => {
                         case 'unordered':
                             currentTransaction.setDrawOrder(DrawOrder.Unordered);
                             break;
-                        case 'probability':
-                            currentTransaction.setDrawOrder(DrawOrder.Probability);
+                        case 'increasing':
+                            currentTransaction.setDrawOrder(DrawOrder.Increasing);
                             break;
-                        case 'inverted_probability':
-                            currentTransaction.setDrawOrder(DrawOrder.InvertedProbability);
+                        case 'decreasing':
+                            currentTransaction.setDrawOrder(DrawOrder.Decreasing);
                             break;
                         case 'selected_unordered':
                             currentTransaction.setDrawOrder(DrawOrder.SelectedUnordered);
                             break;
-                        case 'selected_probability':
-                            currentTransaction.setDrawOrder(DrawOrder.SelectedProbability);
+                        case 'selected_increasing':
+                            currentTransaction.setDrawOrder(DrawOrder.SelectedIncreasing);
                             break;
-                        case 'selected_inverted_probability':
-                            currentTransaction.setDrawOrder(DrawOrder.SelectedInvertedProbability);
+                        case 'selected_decreasing':
+                            currentTransaction.setDrawOrder(DrawOrder.SelectedDecreasing);
                             break;
                     }
                 } else {

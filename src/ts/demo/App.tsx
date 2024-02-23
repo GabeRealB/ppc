@@ -1331,7 +1331,7 @@ const ColorSettings = (
         return (undefined);
     }
 
-    const drawOrder = colors.drawOrder ? colors.drawOrder : 'selected_probability';
+    const drawOrder = colors.drawOrder ? colors.drawOrder : 'selected_increasing';
     const constantColorModeValue = typeof (ppc.colors?.selected?.color) == 'number'
         ? ppc.colors?.selected?.color
         : 0.5;
@@ -1450,7 +1450,7 @@ const ColorSettings = (
                         <FormControlLabel value='visible' control={<Radio />} label='Visible' />
                     </RadioGroup>
                 </FormControl>
-                {userGroup === 'PPC' ? <FormControl fullWidth>
+                <FormControl fullWidth>
                     <FormLabel>Draw order</FormLabel>
                     <RadioGroup
                         row
@@ -1464,16 +1464,16 @@ const ColorSettings = (
                         />
                         <FormControlLabel
                             control={<Radio />}
-                            value={'selected_probability'}
+                            value={'selected_increasing'}
                             label={'Incr.'}
                         />
                         <FormControlLabel
                             control={<Radio />}
-                            value={'selected_inverted_probability'}
+                            value={'selected_decreasing'}
                             label={'Decr.'}
                         />
                     </RadioGroup>
-                </FormControl> : null}
+                </FormControl>
                 <FormControl fullWidth>
                     <FormLabel>Color Mode</FormLabel>
                     <RadioGroup
@@ -2705,8 +2705,8 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
             </>);
     }];
 
-    const visible = ['age', 'sex', 'education', 'hours-per-week'];
-    const included = ['income'];
+    const visible = ['age', 'sex', 'education', 'hours-per-week', 'income'];
+    const included = [];
     const initialState = adultDataset(visible, included, 5000);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
@@ -2775,10 +2775,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
                     of those tissues, we track the <i>Density</i>, <i>Heat Capacity</i>,
                     &#32;<i>Thermal Conductivity</i> and <i>Blood Perfusion Rate</i>.
                     To quantify the effectiveness of the treatment, we computed
-                    the <i>DICE Coefficient</i>. This coefficient is a measure of how
-                    effective the treatment was at maximizing the ablation of the
-                    tumorous tissue, while minimizing the ablation of healthy tissue.
-                    A higher <i>DICE Coefficient</i> indicates a more effective treatment.
+                    the <i>Ablation Volume</i> in mm<sup>3</sup>.
                 </DialogContentText>
             </>);
     },
@@ -2787,8 +2784,8 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
             <>
                 <DialogContentText>
                     Given the provided information, select the biological properties that
-                    maximize the <i>Dice Coefficient</i>. You may not apply any brush directly
-                    to the included <i>Dice Coefficient</i> attribute, but you may use it otherwise.
+                    tend to increase the <i>Ablation Volume</i>. You may not apply any brush directly
+                    to the included <i>Ablation Volume</i> attribute, but you may use it otherwise.
                     You may estimate the distribution of an attribute by changing the color
                     mode to encode the value of said attribute.
                     <br />
@@ -2812,7 +2809,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
         'relative_blood_perfusion_rate_liver',
         'relative_blood_perfusion_rate_vessel',
         'relative_blood_perfusion_rate_tumor',
-        'dice_coefficient',
+        'ablation_volume',
     ];
     const included = [];
     const initialState = ablationDataset(visible, included, 5000);
@@ -2843,7 +2840,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
 
     return {
         name: 'Ablation analysis.',
-        shortDescription: 'Maximize the DICE coefficient.',
+        shortDescription: 'Make a selection that tends to increase the Ablation Volume.',
         instructions: buildInstructions,
         viewed: false,
         initialState,

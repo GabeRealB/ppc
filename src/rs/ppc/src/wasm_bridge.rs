@@ -209,11 +209,11 @@ pub struct ColorScale {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DrawOrder {
     Unordered,
-    Probability,
-    InvertedProbability,
+    Increasing,
+    Decreasing,
     SelectedUnordered,
-    SelectedProbability,
-    SelectedInvertedProbability,
+    SelectedIncreasing,
+    SelectedDecreasing,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

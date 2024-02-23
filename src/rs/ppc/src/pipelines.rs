@@ -298,7 +298,7 @@ impl DataLinesRenderPipeline {
                 },
                 BindGroupLayoutEntry {
                     binding: 4,
-                    visibility: ShaderStage::FRAGMENT,
+                    visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
                     resource: BindGroupLayoutEntryResource::Buffer(BufferBindingLayout {
                         r#type: Some(BufferBindingType::ReadOnlyStorage),
                         ..Default::default()
