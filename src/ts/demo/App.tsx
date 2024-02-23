@@ -112,17 +112,12 @@ type DemoPage = 'welcome'
     | 'demo2'
     | 'finish';
 
-type Sex = 'male' | 'female';
+type Sex = 'male' | 'female' | 'other';
 
-type LevelOfEducation = 'Childhood'
-    | 'Primary'
-    | 'LowerSecondary'
-    | 'UpperSecondary'
-    | 'Post-secondary'
-    | 'Tertiary'
-    | 'Bachelor'
-    | 'Master'
-    | 'Doctoral'
+type LevelOfEducation = 'tertiary'
+    | 'bachelor'
+    | 'master'
+    | 'doctoral'
 
 type ColorAbnormality = 'none'
     | 'protanomaly'
@@ -135,12 +130,12 @@ type ColorAbnormality = 'none'
     | 'achromatopsia'
     | 'tetrachromacy'
 
-type Proficiency = 'NA'
-    | 'Fundamental'
-    | 'Novice'
-    | 'Intermediate'
-    | 'Advanced'
-    | 'Expert'
+type Proficiency = 'na'
+    | 'fundamental'
+    | 'novice'
+    | 'intermediate'
+    | 'advanced'
+    | 'expert'
 
 type LogEvent = {
     type: 'start' | 'event' | 'end',
@@ -500,22 +495,22 @@ function DemoPage1(app: App) {
         setAnalysisProficiency(proficiency);
         switch (proficiency) {
             case 1:
-                results.analysisProficiency = 'NA';
+                results.analysisProficiency = 'na';
                 break;
             case 2:
-                results.analysisProficiency = 'Fundamental';
+                results.analysisProficiency = 'fundamental';
                 break;
             case 3:
-                results.analysisProficiency = 'Novice';
+                results.analysisProficiency = 'novice';
                 break;
             case 4:
-                results.analysisProficiency = 'Intermediate';
+                results.analysisProficiency = 'intermediate';
                 break;
             case 5:
-                results.analysisProficiency = 'Advanced';
+                results.analysisProficiency = 'advanced';
                 break;
             case 6:
-                results.analysisProficiency = 'Expert';
+                results.analysisProficiency = 'expert';
                 break;
         }
     }
@@ -525,22 +520,22 @@ function DemoPage1(app: App) {
         setPcProficiency(proficiency);
         switch (proficiency) {
             case 1:
-                results.pcProficiency = 'NA';
+                results.pcProficiency = 'na';
                 break;
             case 2:
-                results.pcProficiency = 'Fundamental';
+                results.pcProficiency = 'fundamental';
                 break;
             case 3:
-                results.pcProficiency = 'Novice';
+                results.pcProficiency = 'novice';
                 break;
             case 4:
-                results.pcProficiency = 'Intermediate';
+                results.pcProficiency = 'intermediate';
                 break;
             case 5:
-                results.pcProficiency = 'Advanced';
+                results.pcProficiency = 'advanced';
                 break;
             case 6:
-                results.pcProficiency = 'Expert';
+                results.pcProficiency = 'expert';
                 break;
         }
     }
@@ -597,6 +592,7 @@ function DemoPage1(app: App) {
                     >
                         <FormControlLabel value='male' control={<Radio />} label='Male' />
                         <FormControlLabel value='female' control={<Radio />} label='Female' />
+                        <FormControlLabel value='other' control={<Radio />} label='Other' />
                     </RadioGroup>
                 </FormControl>
             </Box>
@@ -623,15 +619,10 @@ function DemoPage1(app: App) {
                         sx={{ m: 1, minWidth: 240 }}
                         onChange={handleEducationChange}
                     >
-                        <MenuItem value='Childhood'>Early childhood Education</MenuItem>
-                        <MenuItem value='Primary'>Primary education</MenuItem>
-                        <MenuItem value='LowerSecondary'>Lower secondary education</MenuItem>
-                        <MenuItem value='UpperSecondary'>Upper secondary education</MenuItem>
-                        <MenuItem value='Post-secondary'>Post-secondary non-tertiary education</MenuItem>
-                        <MenuItem value='Tertiary'>Short-cycle tertiary education</MenuItem>
-                        <MenuItem value='Bachelor'>Bachelor or equivalent</MenuItem>
-                        <MenuItem value='Master'>Master or equivalent</MenuItem>
-                        <MenuItem value='Doctoral'>Doctoral or equivalent</MenuItem>
+                        <MenuItem value='tertiary'>High school or lower</MenuItem>
+                        <MenuItem value='bachelor'>Bachelor or equivalent</MenuItem>
+                        <MenuItem value='master'>Master or equivalent</MenuItem>
+                        <MenuItem value='doctoral'>Doctoral or equivalent</MenuItem>
                     </Select>
                 </FormControl>
             </Box>
