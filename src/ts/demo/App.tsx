@@ -72,6 +72,8 @@ import labelsNewInstr from './resources/labels_new_instr.mp4'
 import labelsCertaintyInstr from './resources/labels_certainty_instr.mp4'
 import labelsCompareInstr from './resources/labels_compare_instr.mp4'
 import colorsInstr from './resources/colors_instr.mp4'
+import colorsInstrAttribute from './resources/colors_instr_attribute.mp4'
+import colorsInstrDensity from './resources/colors_instr_density.mp4'
 import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
 import colorsOrderInstr from './resources/colors_order_instr.mp4'
 import attributesInstr from './resources/attributes_instr.mp4'
@@ -81,6 +83,7 @@ import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
 import { syntheticDataset, adultDataset, ablationDataset } from './datasets';
 
+const INSTRUCTIONS_VIDEO_HEIGHT = 720;
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 1;
 
@@ -1796,7 +1799,7 @@ const tutorial1 = (): DemoTask => {
                     neighbors. Therefore, the order of the attribute axes is significant, and it is
                     possible to reorder them at will.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={moveAxesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -1870,7 +1873,7 @@ const tutorial2 = (): DemoTask => {
                     will be shown in a light gray color. Multiple brushes on the same axis will filter
                     curves that pass through at least one of them.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={brushingInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -2000,7 +2003,7 @@ const tutorial2A = (): DemoTask => {
                     of a brush is shown through the color of the brush, with <b>neon green</b> indicating
                     a certainty of <b>100%</b> and <b>black</b> indicating a certainty of <b>0%</b>.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={extendAxisInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -2015,7 +2018,7 @@ const tutorial2A = (): DemoTask => {
                     the maxium of all overlapping segments. The individual brushes are not combined
                     in the expanded mode.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={brushingExtInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -2030,7 +2033,7 @@ const tutorial2A = (): DemoTask => {
                     or <b>Option</b> keys, before dragging the first or last control points of the brush.
                     A control point can be removed by clicking it on the axis.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={brushFadeoutInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -2151,7 +2154,7 @@ const tutorial2B = (): DemoTask => {
                     interpolation mode of the primary segment of each brush is always linear, and can
                     not be changed.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={interpolationChangeInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
@@ -2237,7 +2240,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                     label. The active label can be changed by pressing the play button next to the
                     label name.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={labelsNewInstr} type='video/mp4'></source>
                 </video>
             </Stack>);
@@ -2254,7 +2257,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                         required to count as selected, with the slider unter the <b>Labels</b> section.
                         Different labels can have different certainty bounds.
                     </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={labelsCertaintyInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
@@ -2266,7 +2269,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
                         When the attribute axis is expanded, you can see the curves of the other labels,
                         along with the curve of the currently active label.
                     </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={labelsCompareInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
@@ -2360,8 +2363,33 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
                     configure the color bar visibility, the information that is encoded as the color,
                     and the color scale that should be used to color the information.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={colorsInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    },
+    () => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    The attribute color mode uses the value of the curve at some specific attribute axis to
+                    determine the color of said curve. With this, you can compare the values of attributes
+                    that are not direct neighbors.
+                </DialogContentText>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
+                    <source src={colorsInstrAttribute} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    },
+    () => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    One additional color mode is the display of the density of the curves on some specific
+                    attribute axis. The main use case of this color mode is the estimation of data distributions.
+                </DialogContentText>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
+                    <source src={colorsInstrDensity} type='video/mp4'></source>
                 </video>
             </Stack>);
     }];
@@ -2374,26 +2402,26 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
                         In addition to the other color modes, you can select to color the curves based on
                         their computed certainty of selection.
                     </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                         <source src={colorsCertaintyInstr} type='video/mp4'></source>
-                    </video>
-                </Stack>);
-        });
-        buildInstructions.push(() => {
-            return (
-                <Stack spacing={1}>
-                    <DialogContentText>
-                        You may notice, that the parallel coordinates may suffer from a cluttering problem,
-                        where, due to overlapping curves, it becomes difficult to see the color of some
-                        group of curves. To alleviate this, we allow you to specify an ordering for the curves.
-                    </DialogContentText>
-                    <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={colorsOrderInstr} type='video/mp4'></source>
                     </video>
                 </Stack>);
         });
     }
 
+    buildInstructions.push(() => {
+        return (
+            <Stack spacing={1}>
+                <DialogContentText>
+                    You may notice that the parallel coordinates may suffer from a cluttering problem
+                    where, because of overlapping curves, it becomes difficult to see the color of some
+                    group of curves. To alleviate this, we allow you to specify an ordering for the curves.
+                </DialogContentText>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
+                    <source src={colorsOrderInstr} type='video/mp4'></source>
+                </video>
+            </Stack>);
+    });
     buildInstructions.push(() => {
         return (
             <Stack spacing={1}>
@@ -2466,7 +2494,7 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
                     about all the attributes present in the dataset. There you can select whether
                     to show or hide an attribute from the plot.
                 </DialogContentText>
-                <video autoPlay loop muted height={420} style={{ objectFit: 'fill' }} id='instructions_video'>
+                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
                     <source src={attributesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
