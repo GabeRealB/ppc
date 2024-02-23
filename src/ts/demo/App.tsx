@@ -2575,7 +2575,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
 
     const visible = ['a1', 'a2', 'class'];
     const included = [];
-    const { state: initialState, sampleIndices } = syntheticDataset(visible, included);
+    const { state: initialState, sampleIndices } = syntheticDataset(visible, included, 200);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';

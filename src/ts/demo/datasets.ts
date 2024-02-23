@@ -3,9 +3,9 @@ import { createAdultDataset } from './datasets/adult';
 import { createAblationDataset } from './datasets/ablation';
 import { Props } from 'types';
 
-export function syntheticDataset(visible: string[], include: string[]): { state: Props, sampleIndices: number[] } {
+export function syntheticDataset(visible: string[], include: string[], samples?: number): { state: Props, sampleIndices: number[] } {
     const included = new Set([...visible, ...include]);
-    const { dataset, sampleIndices } = createSyntheticDataset(Array.from(included));
+    const { dataset, sampleIndices } = createSyntheticDataset(Array.from(included), samples);
     const state = {
         axes: dataset,
         order: visible,
