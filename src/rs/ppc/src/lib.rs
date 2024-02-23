@@ -1233,6 +1233,9 @@ impl Renderer {
         if let wasm_bridge::DataColorMode::Attribute(id) = &self.data_color_mode {
             let axis = guard.axis(id).unwrap();
             self.color_bar.set_to_axis(&axis);
+        } else if let wasm_bridge::DataColorMode::AttributeDensity(id) = &self.data_color_mode {
+            let axis = guard.axis(id).unwrap();
+            self.color_bar.set_to_axis_density(&axis);
         }
 
         drop(guard);
@@ -1380,6 +1383,11 @@ impl Renderer {
                 let axes = self.axes.borrow();
                 let axis = axes.axis(id).unwrap();
                 self.color_bar.set_to_axis(&axis);
+            }
+            wasm_bridge::DataColorMode::AttributeDensity(id) => {
+                let axes = self.axes.borrow();
+                let axis = axes.axis(id).unwrap();
+                self.color_bar.set_to_axis_density(&axis);
             }
             wasm_bridge::DataColorMode::Probability => {
                 if let Some(active_label_idx) = self.active_label_idx {
@@ -2487,6 +2495,14 @@ impl Renderer {
             wasm_bridge::DataColorMode::Attribute(key) => {
                 let axis = axes.axis(key).expect("unknown attribute");
                 let values = axis.data_normalized();
+                self.buffers
+                    .data()
+                    .color_values()
+                    .update(&self.device, values);
+            }
+            wasm_bridge::DataColorMode::AttributeDensity(key) => {
+                let axis = axes.axis(key).expect("unknown attribute");
+                let values = axis.data_density();
                 self.buffers
                     .data()
                     .color_values()

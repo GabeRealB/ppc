@@ -354,6 +354,8 @@ const PPC = (props: Props) => {
                             currentTransaction.setSelectedDataColorModeAttribute(colors.color);
                         } else if (typeof colors.color === 'number') {
                             currentTransaction.setSelectedDataColorModeConstant(colors.color);
+                        } else if ('type' in colors.color && colors.color.type === 'attribute_density') {
+                            currentTransaction.setSelectedDataColorModeAttributeDensity(colors.color.attribute);
                         } else if ('type' in colors.color && colors.color.type === 'probability') {
                             currentTransaction.setSelectedDataColorModeProbability();
                         } else {

@@ -220,6 +220,7 @@ pub enum DrawOrder {
 pub enum DataColorMode {
     Constant(f32),
     Attribute(String),
+    AttributeDensity(String),
     Probability,
 }
 
@@ -596,6 +597,14 @@ impl StateTransactionBuilder {
         self.operations
             .push(StateTransactionOperation::SetDataColorMode {
                 color_mode: DataColorMode::Attribute(id.into()),
+            });
+    }
+
+    #[wasm_bindgen(js_name = setSelectedDataColorModeAttributeDensity)]
+    pub fn set_selected_data_color_mode_attribute_density(&mut self, id: &str) {
+        self.operations
+            .push(StateTransactionOperation::SetDataColorMode {
+                color_mode: DataColorMode::AttributeDensity(id.into()),
             });
     }
 

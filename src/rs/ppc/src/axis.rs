@@ -159,6 +159,7 @@ pub struct Axis {
     axis_index: Cell<Option<usize>>,
 
     data: Box<[f32]>,
+    data_density: Box<[f32]>,
     data_normalized: Box<[f32]>,
 
     data_range: (f32, f32),
@@ -204,7 +205,25 @@ impl Axis {
         let data_normalized = data
             .iter()
             .map(|d| d.inv_lerp(data_range.0, data_range.1))
-            .collect();
+            .collect::<Box<[_]>>();
+
+        // Compute the density of each point by counting the number
+        // of points contained within a window. Note: This could be
+        // optimized to a complexity of O(N log N) by sorting the data
+        // first.
+        let data_density = data_normalized
+            .iter()
+            .map(|&d| {
+                const WINDOW_SIZE: f32 = 0.05;
+                let window = d - WINDOW_SIZE..=d + WINDOW_SIZE;
+                let count = data_normalized
+                    .iter()
+                    .filter(|&x| window.contains(x))
+                    .count() as f64;
+                let density = count / data_normalized.len() as f64;
+                density as f32
+            })
+            .collect::<Box<[_]>>();
 
         let visible_data_range_normalized = (
             visible_data_range.0.inv_lerp(data_range.0, data_range.1),
@@ -277,6 +296,7 @@ impl Axis {
             state: Cell::new(state),
             axis_index: Cell::new(axis_index),
             data,
+            data_density,
             data_normalized,
             data_range,
             visible_data_range,
@@ -368,6 +388,11 @@ impl Axis {
     #[allow(dead_code)]
     pub fn data(&self) -> &[f32] {
         &self.data
+    }
+
+    /// Fetches the density of the data.
+    pub fn data_density(&self) -> &[f32] {
+        &self.data_density
     }
 
     /// Fetches the normalized data of the axis.

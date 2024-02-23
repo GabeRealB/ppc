@@ -118,7 +118,7 @@ impl ColorBar {
             format!("Probability {label}").into()
         };
         self.color_mode = ColorBarColorMode::Probability;
-        self.ticks = probability_ticks();
+        self.ticks = percent_ticks();
         self.max_ticks_width = self
             .ticks
             .iter()
@@ -137,6 +137,24 @@ impl ColorBar {
         self.label = axis.label();
         self.color_mode = ColorBarColorMode::Color;
         self.ticks = axis.ticks().into();
+        self.max_ticks_width = self
+            .ticks
+            .iter()
+            .map(|(_, tick)| (self.get_text_length)(tick).0)
+            .max_by(|&l, &r| l.0.total_cmp(&r.0))
+            .unwrap_or(Length::new(0.0));
+        self.max_ticks_height = self
+            .ticks
+            .iter()
+            .map(|(_, tick)| (self.get_text_length)(tick).1)
+            .max_by(|&l, &r| l.0.total_cmp(&r.0))
+            .unwrap_or(Length::new(0.0));
+    }
+
+    pub fn set_to_axis_density(&mut self, axis: &Axis) {
+        self.label = format!("Density {}", axis.label()).into();
+        self.color_mode = ColorBarColorMode::Color;
+        self.ticks = percent_ticks();
         self.max_ticks_width = self
             .ticks
             .iter()
@@ -301,7 +319,7 @@ fn default_ticks() -> Vec<(f32, Rc<str>)> {
     ]
 }
 
-fn probability_ticks() -> Vec<(f32, Rc<str>)> {
+fn percent_ticks() -> Vec<(f32, Rc<str>)> {
     vec![
         (0.0, "0%".into()),
         (0.1, "10%".into()),

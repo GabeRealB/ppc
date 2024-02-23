@@ -1338,6 +1338,9 @@ const ColorSettings = (
     const attributeColorModeValue = typeof (ppc.colors?.selected?.color) == 'string'
         ? ppc.colors?.selected?.color
         : Object.keys(ppc.axes)[0];
+    const attributeDensityColorModeValue = typeof (ppc.colors?.selected?.color) == 'object' && ppc.colors?.selected?.color.type === 'attribute_density'
+        ? ppc.colors?.selected?.color.attribute
+        : Object.keys(ppc.axes)[0];
 
     let colorMode;
     if (colors) {
@@ -1348,9 +1351,12 @@ const ColorSettings = (
             case 'string':
                 colorMode = 'attribute';
             default:
-                if (typeof (colors.selected.color) == 'object'
-                    && colors.selected.color.type === 'probability') {
-                    colorMode = 'probability';
+                if (typeof (colors.selected.color) === 'object') {
+                    if (colors.selected.color.type === 'probability') {
+                        colorMode = 'probability';
+                    } else if (colors.selected.color.type === 'attribute_density') {
+                        colorMode = 'attribute_density';
+                    }
                 }
         }
     } else {
@@ -1367,13 +1373,19 @@ const ColorSettings = (
     const switchColorMode = (e, colorMode) => {
         const colorsClone = colors ?
             window.structuredClone(colors)
-            : { selected: { color: 0.5, scale: 'plasma' } };
+            : { selected: { color: 0.5, scale: 'magma' } };
         switch (colorMode) {
             case 'constant':
                 colorsClone.selected.color = constantColorModeValue;
                 break;
             case 'attribute':
                 colorsClone.selected.color = attributeColorModeValue;
+                break;
+            case 'attribute_density':
+                colorsClone.selected.color = {
+                    type: 'attribute_density',
+                    attribute: attributeDensityColorModeValue
+                };
                 break;
             case 'probability':
                 colorsClone.selected.color = { type: 'probability' };
@@ -1387,7 +1399,7 @@ const ColorSettings = (
     const switchDrawOrder = (e, drawOrder) => {
         const colorsClone = colors ?
             window.structuredClone(colors)
-            : { selected: { color: 0.5, scale: 'plasma' } };
+            : { selected: { color: 0.5, scale: 'magma' } };
         colorsClone.drawOrder = drawOrder;
         ppc.colors = colorsClone;
         logPPCEvent({ colors: colorsClone });
@@ -1397,7 +1409,7 @@ const ColorSettings = (
     const setConstantColorValue = (e: Event, value: number) => {
         const colorsClone = colors ?
             window.structuredClone(colors)
-            : { selected: { color: 0.5, scale: 'plasma' } };
+            : { selected: { color: 0.5, scale: 'magma' } };
         colorsClone.selected.color = value;
         ppc.colors = colorsClone;
 
@@ -1410,8 +1422,21 @@ const ColorSettings = (
     const setAttributeColorValue = (e, value) => {
         const colorsClone = colors ?
             window.structuredClone(colors)
-            : { selected: { color: 0.5, scale: 'plasma' } };
+            : { selected: { color: 0.5, scale: 'magma' } };
         colorsClone.selected.color = value;
+        ppc.colors = colorsClone;
+        logPPCEvent({ colors: colorsClone });
+        setProps({ ppcState: ppc, demo })
+    };
+
+    const setAttributeDensityColorValue = (e, value) => {
+        const colorsClone = colors ?
+            window.structuredClone(colors)
+            : { selected: { color: 0.5, scale: 'magma' } };
+        colorsClone.selected.color = {
+            type: 'attribute_density',
+            attribute: value,
+        };
         ppc.colors = colorsClone;
         logPPCEvent({ colors: colorsClone });
         setProps({ ppcState: ppc, demo })
@@ -1420,7 +1445,7 @@ const ColorSettings = (
     const setColorMap = (e, colorMap) => {
         const colorsClone = colors ?
             window.structuredClone(colors)
-            : { selected: { color: 0.5, scale: 'plasma' } };
+            : { selected: { color: 0.5, scale: 'magma' } };
         colorsClone.selected.scale = colorMap;
         ppc.colors = colorsClone;
         logPPCEvent({ colors: colorsClone });
@@ -1491,6 +1516,11 @@ const ColorSettings = (
                             value={'attribute'}
                             label={'Attr.'}
                         />
+                        <FormControlLabel
+                            control={<Radio />}
+                            value={'attribute_density'}
+                            label={'Dens.'}
+                        />
                         {userGroup === 'PPC' ? <FormControlLabel
                             control={<Radio />}
                             value={'probability'}
@@ -1520,6 +1550,23 @@ const ColorSettings = (
                                 row
                                 value={attributeColorModeValue}
                                 onChange={setAttributeColorValue}
+                            >
+                                {Object.entries(axes).map(([k, v]) => <FormControlLabel
+                                    control={<Radio />}
+                                    value={k}
+                                    label={v.label}
+                                />)}
+                            </RadioGroup>
+                        </FormControl> : null
+                }
+                {
+                    colorMode === 'attribute_density' ?
+                        <FormControl fullWidth>
+                            <FormLabel>Color Mode: Attribute Density</FormLabel>
+                            <RadioGroup
+                                row
+                                value={attributeDensityColorModeValue}
+                                onChange={setAttributeDensityColorValue}
                             >
                                 {Object.entries(axes).map(([k, v]) => <FormControlLabel
                                     control={<Radio />}
@@ -1792,7 +1839,7 @@ const tutorial1 = (): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -1923,7 +1970,7 @@ const tutorial2 = (): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2074,7 +2121,7 @@ const tutorial2A = (): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2151,7 +2198,7 @@ const tutorial2B = (): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2272,7 +2319,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2389,7 +2436,7 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2480,7 +2527,7 @@ const tutorial5 = (userGroup: UserGroup): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2559,7 +2606,7 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
             activeLabel: 'Default',
             colors: {
                 selected: {
-                    scale: 'plasma',
+                    scale: 'magma',
                     color: 0.5,
                 }
             },
@@ -2629,7 +2676,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
     initialState.colors = {
-        selected: { scale: 'plasma', color: 0.5 }
+        selected: { scale: 'magma', color: 0.5 }
     };
     initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
@@ -2712,7 +2759,7 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
     initialState.colors = {
-        selected: { scale: 'plasma', color: 0.5 }
+        selected: { scale: 'magma', color: 0.5 }
     };
     initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';
@@ -2817,7 +2864,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
     initialState.colors = {
-        selected: { scale: 'plasma', color: 0.5 }
+        selected: { scale: 'magma', color: 0.5 }
     };
     initialState.colorBar = 'visible';
     initialState.powerProfile = 'high';

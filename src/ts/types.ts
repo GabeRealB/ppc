@@ -21,13 +21,18 @@ export type ColorScale = {
     gradient: [Color][] | [Color, number][]
 }
 
+export interface ColorAttributeDensity {
+    type: 'attribute_density',
+    attribute: string,
+}
+
 export interface ColorProbability {
-    type: string
+    type: 'probability'
 }
 
 export type SelectedColor = {
     scale: string | Color | ColorScale,
-    color: number | string | ColorProbability
+    color: number | string | ColorAttributeDensity | ColorProbability
 }
 
 export type Colors = {
