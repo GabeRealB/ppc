@@ -82,6 +82,7 @@ import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
 import { syntheticDataset, adultDataset, ablationDataset } from './datasets';
+import { Group } from '@mui/icons-material';
 
 const INSTRUCTIONS_VIDEO_HEIGHT = 720;
 const EPSILON = 1.17549435082228750797e-38;
@@ -736,7 +737,7 @@ function DemoPage2(app: App) {
                         {...ppcState}
                     />
                 </Grid>
-                <Grid xs={2} maxHeight={'95%'} sx={{ overflow: 'auto' }}>
+                <Grid xs={2} maxHeight={'95%'} sx={{ overflowY: 'auto', overflowX: 'hidden' }}>
                     <Stack
                         spacing={2}
                         justifyContent='flex-start'
@@ -2564,7 +2565,11 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
                     mode to encode the value of said attribute. For the selection, you must
                     try to maximize the number of entries that truly belong to
                     class <b>C1</b>, while minimizing the number of entries wrongly
-                    attributed to that class.
+                    attributed to that class. Rate how confident you are that your selection
+                    is able to accurately maximize the number of entries assigned to class
+                    &#32;<b>C1</b>, while minimizing the number of entries of the other class.
+                    Additionally, rate your level of confidence, that your selection can not
+                    be improved by any significant amount.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2587,12 +2592,62 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
 
     const taskResult = {
         sampleIndices,
-        accuracy_confidence: undefined,
-        overall_confidence: undefined,
+        accuracyConfidence: undefined,
+        overallConfidence: undefined,
+    };
+
+    const taskResultInput = (props: { task: DemoTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { accuracyConfidence, overallConfidence } = taskResult;
+
+        const updateAccuracyConfidence = (e, value) => {
+            taskResult.accuracyConfidence = value ? value : undefined;
+            forceUpdate();
+        };
+        const updateOverallConfidence = (e, value) => {
+            taskResult.overallConfidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    How confident are you in the accuracy of your selection?
+                </Typography>
+                <Container>
+                    <Rating
+                        name='selection_confidence'
+                        value={accuracyConfidence}
+                        max={6}
+                        size='large'
+                        onChange={updateAccuracyConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    How confident are you that this is the best possible result?
+                </Typography>
+                <Container>
+                    <Rating
+                        name='overall_confidence'
+                        value={overallConfidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
     };
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
+            return false;
+        }
+
+        if (taskResult.accuracyConfidence === undefined
+            || taskResult.overallConfidence === undefined) {
             return false;
         }
 
@@ -2615,6 +2670,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
         initialState,
         finalState: null,
         taskResult,
+        taskResultInput,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
@@ -2654,7 +2710,11 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
                     mode to encode the value of said attribute. For the selection, you must
                     try to maximize the number of people who truly have an income greater
                     than $50,000, while minimizing the number of people who are wrongly
-                    attributed that label.
+                    attributed that label. Rate how confident you are that your selection
+                    is able to accurately maximize the number of entries with an income greater
+                    than $50,000, while minimizing the number of entries with a lower income.
+                    Additionally, rate your level of confidence, that your selection can not
+                    be improved by any significant amount.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2677,12 +2737,62 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
 
     const taskResult = {
         sampleIndices,
-        accuracy_confidence: undefined,
-        overall_confidence: undefined,
+        accuracyConfidence: undefined,
+        overallConfidence: undefined,
+    };
+
+    const taskResultInput = (props: { task: DemoTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { accuracyConfidence, overallConfidence } = taskResult;
+
+        const updateAccuracyConfidence = (e, value) => {
+            taskResult.accuracyConfidence = value ? value : undefined;
+            forceUpdate();
+        };
+        const updateOverallConfidence = (e, value) => {
+            taskResult.overallConfidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    How confident are you in the accuracy of your selection?
+                </Typography>
+                <Container>
+                    <Rating
+                        name='selection_confidence'
+                        value={accuracyConfidence}
+                        max={6}
+                        size='large'
+                        onChange={updateAccuracyConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    How confident are you that this is the best possible result?
+                </Typography>
+                <Container>
+                    <Rating
+                        name='overall_confidence'
+                        value={overallConfidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
     };
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
+            return false;
+        }
+
+        if (taskResult.accuracyConfidence === undefined
+            || taskResult.overallConfidence === undefined) {
             return false;
         }
 
@@ -2705,6 +2815,7 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
         initialState,
         finalState: null,
         taskResult,
+        taskResultInput,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
@@ -2752,7 +2863,10 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
                     tend to increase the <i>Ablation Volume</i>. You may not apply any brush directly
                     to the included <i>Ablation Volume</i> attribute, but you may use it otherwise.
                     You may estimate the distribution of an attribute by changing the color
-                    mode to encode the value of said attribute.
+                    mode to encode the value of said attribute. Rate how confident you are that your
+                    selection tends to maximize the volume of the ablation.
+                    Additionally, rate your level of confidence, that your selection can not
+                    be improved by any significant amount.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2789,8 +2903,53 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
 
     const taskResult = {
         sampleIndices,
-        accuracy_confidence: undefined,
-        overall_confidence: undefined,
+        accuracyConfidence: undefined,
+        overallConfidence: undefined,
+    };
+
+    const taskResultInput = (props: { task: DemoTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { accuracyConfidence, overallConfidence } = taskResult;
+
+        const updateAccuracyConfidence = (e, value) => {
+            taskResult.accuracyConfidence = value ? value : undefined;
+            forceUpdate();
+        };
+        const updateOverallConfidence = (e, value) => {
+            taskResult.overallConfidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    How confident are you in the accuracy of your selection?
+                </Typography>
+                <Container>
+                    <Rating
+                        name='selection_confidence'
+                        value={accuracyConfidence}
+                        max={6}
+                        size='large'
+                        onChange={updateAccuracyConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    How confident are you that this is the best possible result?
+                </Typography>
+                <Container>
+                    <Rating
+                        name='overall_confidence'
+                        value={overallConfidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
     };
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
@@ -2817,6 +2976,7 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
         initialState,
         finalState: null,
         taskResult,
+        taskResultInput,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
