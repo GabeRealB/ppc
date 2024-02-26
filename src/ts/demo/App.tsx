@@ -299,25 +299,29 @@ function WelcomePage(app: App) {
     const [webgpuTestStatus, setWebgpuTestStatus] = useState<boolean>(undefined);
     useEffect(() => {
         (async () => {
-            if (!navigator.gpu) {
-                setWebgpuTestStatus(false);
-                return;
-            }
+            try {
+                if (!navigator.gpu) {
+                    setWebgpuTestStatus(false);
+                    return;
+                }
 
-            const gpu = navigator.gpu;
-            const adapter = await gpu.requestAdapter();
-            if (!adapter) {
-                setWebgpuTestStatus(false);
-                return;
-            }
+                const gpu = navigator.gpu;
+                const adapter = await gpu.requestAdapter();
+                if (!adapter) {
+                    setWebgpuTestStatus(false);
+                    return;
+                }
 
-            const device = await adapter.requestDevice();
-            if (!device) {
+                const device = await adapter.requestDevice();
+                if (!device) {
+                    setWebgpuTestStatus(false);
+                    return;
+                }
+                device.destroy();
+                setWebgpuTestStatus(true);
+            } catch (error) {
                 setWebgpuTestStatus(false);
-                return;
             }
-            device.destroy();
-            setWebgpuTestStatus(true);
         })();
     }, [])
 
