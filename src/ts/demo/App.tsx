@@ -2839,10 +2839,9 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
                     The dataset simulates multiple radiofrequency ablation treatments
                     of tumorous liver tissue. Along with the liver and tumor tissues,
                     there are also blood vessels that have to be considered. For each
-                    of those tissues, we track the <i>Density</i>, <i>Heat Capacity</i>,
-                    &#32;<i>Thermal Conductivity</i> and <i>Blood Perfusion Rate</i>.
-                    To quantify the effectiveness of the treatment, we computed
-                    the <i>Ablation Volume</i> in mm<sup>3</sup>.
+                    of those tissues, we track the <i>Thermal Conductivity</i> and
+                    &#32;<i>Blood Perfusion Rate</i>. To quantify the effectiveness of
+                    the treatment, we computed the <i>Ablation Volume</i> in mm<sup>3</sup>.
                 </DialogContentText>
             </>);
     },
@@ -2867,17 +2866,10 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
     }];
 
     const visible = [
-        'density_liver',
-        'density_vessel',
-        'density_tumor',
-        'heat_capacity_liver',
-        'heat_capacity_vessel',
-        'heat_capacity_tumor',
         'thermal_conductivity_liver',
         'thermal_conductivity_vessel',
         'thermal_conductivity_tumor',
         'relative_blood_perfusion_rate_liver',
-        'relative_blood_perfusion_rate_vessel',
         'relative_blood_perfusion_rate_tumor',
         'ablation_volume',
     ];
@@ -2945,6 +2937,11 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
 
     const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
         if (!brushes) {
+            return false;
+        }
+
+        if (taskResult.accuracyConfidence === undefined
+            || taskResult.overallConfidence === undefined) {
             return false;
         }
 
