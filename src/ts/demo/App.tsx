@@ -1877,7 +1877,7 @@ const tutorial2 = (): DemoTask => {
                     move the brush by holding the left mouse button and dragging the pointer.
                     <br />
                     <br />
-                    Select the ranges <b>10 to 20</b> and <b>80 to 90</b> of the attribute <b>A2</b>, without
+                    Select the ranges <b>8 to 22</b> and <b>78 to 92</b> of the attribute <b>A2</b>, without
                     including any curve passing though the range <b>40 to 60</b> of the same attribute.
                     <br />
                     <br />
@@ -1939,7 +1939,7 @@ const tutorial2 = (): DemoTask => {
 
     return {
         name: 'Create a new selection.',
-        shortDescription: 'Select only the ranges [10, 20] and [80, 90] of A2.',
+        shortDescription: 'Select only the ranges [8, 22] and [78, 92] of A2.',
         instructions: buildInstructions,
         viewed: false,
         initialState: {
