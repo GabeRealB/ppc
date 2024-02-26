@@ -68,21 +68,20 @@ import extendAxisInstr from './resources/extend_axis_instr.mp4'
 import brushingExtInstr from './resources/brushing_ext_instr.mp4'
 import brushFadeoutInstr from './resources/brush_fadeout_instr.mp4'
 import interpolationChangeInstr from './resources/interpolation_change_instr.mp4'
-import labelsNewInstr from './resources/labels_new_instr.mp4'
-import labelsCertaintyInstr from './resources/labels_certainty_instr.mp4'
-import labelsCompareInstr from './resources/labels_compare_instr.mp4'
 import colorsInstr from './resources/colors_instr.mp4'
 import colorsInstrAttribute from './resources/colors_instr_attribute.mp4'
 import colorsInstrDensity from './resources/colors_instr_density.mp4'
 import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
 import colorsOrderInstr from './resources/colors_order_instr.mp4'
 import attributesInstr from './resources/attributes_instr.mp4'
+import classSeparationInstr from './resources/class_separation_instr.mp4'
+import classSeparationDensityInstr from './resources/class_separation_density_instr.mp4'
+import classSeparationFilterInstr from './resources/class_separation_filter_instr.mp4'
 
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticDataset, adultDataset, ablationDataset } from './datasets';
-import { Group } from '@mui/icons-material';
+import { syntheticTestDataset, syntheticDataset, adultDataset, ablationDataset } from './datasets';
 
 const INSTRUCTIONS_VIDEO_HEIGHT = 720;
 const EPSILON = 1.17549435082228750797e-38;
@@ -1758,6 +1757,10 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
         tasks.push(tutorial3(userGroup))
         tasks.push(tutorial4(userGroup))
 
+        if (userGroup === 'PPC') {
+            tasks.push(tutorial5());
+        }
+
         tasks.push(tutorialFreeRoam(userGroup));
     }
 
@@ -2434,6 +2437,87 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
         },
         finalState: null,
         canContinue: (ppc: Props) => checkVisible(ppc.order),
+    };
+}
+
+const tutorial5 = (): DemoTask => {
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    Oftentimes, it is not clear how an attribute is linked with the class of a point.
+                    In those cases, one has to make informed guesses using the available information.
+                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
+                        <source src={classSeparationInstr} type='video/mp4'></source>
+                    </video>
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    One way to gain some insight into the data is to change what information is portrayed
+                    by the color. The <i>Density</i> color mode allows you to estimate how the data is
+                    distributed. In the presence of multiple attributes, it is often useful to also look
+                    into the <i>Attribute</i> color mode. With that information and a bit of experimentation,
+                    you can then try to make a selection that maximizes the number of curves belonging to a
+                    class, while minimizing the number of elements belonging to the other classes.
+                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
+                        <source src={classSeparationDensityInstr} type='video/mp4'></source>
+                    </video>
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    Even after careful selection, it is not always possible to separate the classes in the
+                    dataset. You can try to fine-tune your selection by modifying the <i>Selection Probability Bounds</i>.
+                    By default, the selection bounds are configured such, that all brushed regions are selected,
+                    but they can be configured to any certainty range. The certainty of one point is computed by combining
+                    the certainty of each brushed region the point passed through, which can be seen with the
+                    &#32;<i>Probability</i> color mode. Note that customizing the selection bounds may also filter
+                    out points that truly belong to the class of interest.
+                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
+                        <source src={classSeparationFilterInstr} type='video/mp4'></source>
+                    </video>
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    Try to separate the two classes, <i>C1</i> and <i>C2</i>, using the information provided
+                    by changing the color mode of the visualization. After having done so, try to guess
+                    to which class the points labeled as <i>Unknown</i> belong to.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['a1', 'class'];
+    const included = [];
+    const { state: initialState, sampleIndices } = syntheticTestDataset(visible, included);
+    initialState.interactionMode = InteractionMode.Full;
+    initialState.labels = { 'C1': {}, 'C2': {} };
+    initialState.activeLabel = 'C1';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+
+    return {
+        name: 'Separating classes.',
+        shortDescription: 'Try to separate the class C1 from C2.',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        canContinue: (ppc: Props) => true
     };
 }
 
