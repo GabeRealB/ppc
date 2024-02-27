@@ -2545,68 +2545,24 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
             </>);
     }];
 
+    const visible = ['a1', 'class', 'label'];
+    const included = [];
+    const { state: initialState, sampleIndices } = syntheticTestDataset(visible, included);
+    initialState.interactionMode = interactionMode;;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
     return {
         name: 'Make yourself familiar with the visualization.',
         shortDescription: 'Continue when you feel ready.',
         instructions: buildInstructions,
         viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-                'a4': {
-                    label: 'A4',
-                    range: [0, 50],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 50),
-                },
-                'a5': {
-                    label: 'A5',
-                    range: [-10000, 0],
-                    dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
-                },
-                'a6': {
-                    label: 'A6',
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map((v, x) => x / 10),
-                },
-            },
-            order: ['a3', 'a2', 'a1'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            interactionMode: interactionMode,
-            debug: {
-                showAxisBoundingBox: false,
-                showLabelBoundingBox: false,
-                showCurvesBoundingBox: false,
-                showAxisLineBoundingBox: false,
-                showSelectionsBoundingBox: false,
-                showColorBarBoundingBox: false,
-            },
-            powerProfile: 'high',
-            setProps: undefined,
-        },
+        initialState,
         finalState: null,
         canContinue: (ppc: Props) => true
     };
