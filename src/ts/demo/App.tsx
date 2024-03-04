@@ -151,6 +151,7 @@ type Results = {
     age?: number,
     sex?: Sex,
     education?: LevelOfEducation,
+    major?: string,
     colorAbnormality?: ColorAbnormality,
     analysisProficiency?: Proficiency,
     pcProficiency?: Proficiency,
@@ -465,6 +466,7 @@ function DemoPage1(app: App) {
     const [age, setAge] = useState<number>(undefined);
     const [sex, setSex] = useState<Sex>(undefined);
     const [education, setEducation] = useState<LevelOfEducation>(undefined);
+    const [major, setMajor] = useState<string>(undefined);
     const [colorAbnormalty, setAbnormality] = useState<ColorAbnormality>(undefined);
     const [analysisProficiency, setAnalysisProficiency] = useState<number>(0);
     const [pcProficiency, setPcProficiency] = useState<number>(0);
@@ -486,6 +488,11 @@ function DemoPage1(app: App) {
     const handleEducationChange = (e) => {
         results.education = e.target.value as LevelOfEducation;
         setEducation(e.target.value as LevelOfEducation);
+    }
+
+    const handleMajorChange = (e) => {
+        results.major = e.target.value;
+        setMajor(e.target.value);
     }
 
     const handleColorAbnormalityChange = (e) => {
@@ -564,6 +571,7 @@ function DemoPage1(app: App) {
         && !ageError
         && sex !== undefined
         && education !== undefined
+        && major !== undefined
         && colorAbnormalty !== undefined
         && analysisProficiency !== 0
         && pcProficiency !== 0;
@@ -613,7 +621,7 @@ function DemoPage1(app: App) {
             </Box>
             <Box marginY={1.5}>
                 <FormControl>
-                    <InputLabel id='education-label'>Level of education</InputLabel>
+                    <InputLabel id='education-label'>Achieved level of education</InputLabel>
                     <Select
                         labelId='education-label'
                         id='education-select'
@@ -626,6 +634,29 @@ function DemoPage1(app: App) {
                         <MenuItem value='bachelor'>Bachelor or equivalent</MenuItem>
                         <MenuItem value='master'>Master or equivalent</MenuItem>
                         <MenuItem value='doctoral'>Doctoral or equivalent</MenuItem>
+                    </Select>
+                </FormControl>
+            </Box>
+            <Box marginY={1.5}>
+                <FormControl>
+                    <InputLabel id='education-label'>Degree major</InputLabel>
+                    <Select
+                        labelId='major-label'
+                        id='major-select'
+                        value={major}
+                        label='Major'
+                        sx={{ m: 1, minWidth: 240 }}
+                        onChange={handleMajorChange}
+                    >
+                        <MenuItem value='arts-and-humanities'>Arts and Humanities</MenuItem>
+                        <MenuItem value='business'>Business</MenuItem>
+                        <MenuItem value='health-and-medicine'>Health and Medicine</MenuItem>
+                        <MenuItem value='multi-interdisciplinary-studies'>Multi-Interdisciplinary Studies</MenuItem>
+                        <MenuItem value='public-and-social-services'>Public and Social Services</MenuItem>
+                        <MenuItem value='stem'>Science, Technology, Engineering, and Math</MenuItem>
+                        <MenuItem value='social-sciences'>Social Sciences</MenuItem>
+                        <MenuItem value='trades-and-personal-services'>Trades and Personal Services</MenuItem>
+                        <MenuItem value='other'>Other</MenuItem>
                     </Select>
                 </FormControl>
             </Box>
