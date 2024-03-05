@@ -4,6 +4,9 @@ import React, { Component, createElement, useEffect, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import pako from 'pako';
 
+import { TextareaAutosize as BaseTextareaAutosize } from '@mui/base/TextareaAutosize';
+import { styled } from '@mui/system';
+
 import List from '@mui/material/List';
 import Stack from '@mui/material/Stack';
 import FormControl from '@mui/material/FormControl';
@@ -85,7 +88,7 @@ import { syntheticTestDataset, syntheticDataset, adultDataset, ablationDataset }
 
 const INSTRUCTIONS_VIDEO_HEIGHT = 720;
 const EPSILON = 1.17549435082228750797e-38;
-const VERSION = 1;
+const VERSION = 2;
 
 type DemoTask = {
     name: string,
@@ -109,6 +112,7 @@ type TaskMode = 'Full' | 'Tutorial' | 'Eval'
 type DemoPage = 'welcome'
     | 'demo1'
     | 'demo2'
+    | 'feedback'
     | 'finish';
 
 type Sex = 'male' | 'female' | 'other';
@@ -155,6 +159,7 @@ type Results = {
     colorAbnormality?: ColorAbnormality,
     analysisProficiency?: Proficiency,
     pcProficiency?: Proficiency,
+    feedback?: string,
     taskLogs: TaskLog[],
 };
 
@@ -163,6 +168,7 @@ type DemoState = {
 
     userId: uuid,
     userGroup: UserGroup,
+    location: string,
 
     currentTask: number,
     tasks: DemoTask[],
@@ -201,6 +207,10 @@ class App extends Component<any, AppState> {
         if (userGroup !== 'PC' && userGroup !== 'PPC') {
             userGroup = Math.random() < 0.5 ? 'PC' : 'PPC';
         }
+        let location = searchParams.get('location');
+        if (!location) {
+            location = 'unknown';
+        }
 
         const deadline = new Date(2024, 2, 31);
         const deadlinePassed = Date.now() > deadline.getTime();
@@ -217,6 +227,7 @@ class App extends Component<any, AppState> {
                 currentPage: 'welcome',
                 userId: uuid(),
                 userGroup: userGroup as UserGroup,
+                location,
                 showInstructions: true,
                 currentTask: 0,
                 tasks: tasks,
@@ -284,6 +295,9 @@ class App extends Component<any, AppState> {
                 break;
             case 'demo2':
                 page = createElement(DemoPage2, this);
+                break;
+            case 'feedback':
+                page = createElement(FeedbackPage, this);
                 break;
             case 'finish':
                 page = createElement(FinishPage, this);
@@ -789,6 +803,102 @@ function DemoPage2(app: App) {
     )
 }
 
+function FeedbackPage(app: App) {
+    const { demo } = app.state;
+    const { results } = demo;
+
+    const blue = {
+        100: '#DAECFF',
+        200: '#b6daff',
+        400: '#3399FF',
+        500: '#007FFF',
+        600: '#0072E5',
+        900: '#003A75',
+    };
+
+    const grey = {
+        50: '#F3F6F9',
+        100: '#E5EAF2',
+        200: '#DAE2ED',
+        300: '#C7D0DD',
+        400: '#B0B8C4',
+        500: '#9DA8B7',
+        600: '#6B7A90',
+        700: '#434D5B',
+        800: '#303740',
+        900: '#1C2025',
+    };
+
+    const Textarea = styled(BaseTextareaAutosize)(
+        ({ theme }) => `
+        box-sizing: border-box;
+        width: 100%;
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.875rem;
+        font-weight: 400;
+        line-height: 1.5;
+        padding: 8px 12px;
+        border-radius: 8px;
+        color: ${theme.palette.mode === 'dark' ? grey[300] : grey[900]};
+        background: ${theme.palette.mode === 'dark' ? grey[900] : '#fff'};
+        border: 1px solid ${theme.palette.mode === 'dark' ? grey[700] : grey[200]};
+        box-shadow: 0px 2px 2px ${theme.palette.mode === 'dark' ? grey[900] : grey[50]};
+
+        &:hover {
+        border-color: ${blue[400]};
+        }
+
+        &:focus {
+        border-color: ${blue[400]};
+        box-shadow: 0 0 0 3px ${theme.palette.mode === 'dark' ? blue[600] : blue[200]};
+        }
+
+        // firefox
+        &:focus-visible {
+        outline: 0;
+        }
+        `,
+    );
+
+    const handleFeedbackChange = (e) => {
+        results.feedback = e.target.value;
+    };
+
+    const handleClick = () => {
+        demo.currentPage = 'finish';
+        app.setProps({ demo });
+    };
+
+    return (
+        <Container>
+            <Typography variant='h4'>
+                <b>
+                    Before you finish, you can provide some feedback about any
+                    difficulties encountered, unclear task descriptions, suggestions
+                    and the like.
+                </b>
+            </Typography>
+            <Box marginY={2}>
+                <Textarea
+                    aria-label="feedback"
+                    minRows={5}
+                    placeholder="Feedback"
+                    onChange={handleFeedbackChange}
+                />
+            </Box>
+            <Box marginY={2}>
+                <Button
+                    variant='contained'
+                    onClick={handleClick}
+                    fullWidth
+                >
+                    Finish test
+                </Button>
+            </Box>
+        </Container>
+    );
+}
+
 function FinishPage(app: App) {
     const { demo } = app.state;
     const { results, userId, userGroup, deadlinePassed, dryRun } = demo;
@@ -997,7 +1107,7 @@ const TaskView = (
             demo.showInstructions = !next.viewed;
             setProps({ ppcState: nextPpc, demo });
         } else {
-            demo.currentPage = 'finish';
+            demo.currentPage = 'feedback';
             setProps({ demo });
         }
     };
