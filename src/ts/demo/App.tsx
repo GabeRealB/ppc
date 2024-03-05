@@ -1942,6 +1942,7 @@ const tutorial1 = (): DemoTask => {
                     <source src={moveAxesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Attribute axes can be moved by holding the left mouse button on the label of an attribute.
                     Move the axis of the attribute <b>A1</b>, such that it lies in between the attribute axes
                     &#32;<b>A2</b> and <b>A3</b>.
@@ -2022,6 +2023,7 @@ const tutorial2 = (): DemoTask => {
                     move the brush by holding the left mouse button and dragging the pointer.
                     <br />
                     <br />
+                    <b>Task:</b><br />
                     Select the ranges <b>8 to 22</b> and <b>78 to 92</b> of the attribute <b>A2</b>, without
                     including any curve passing though the range <b>40 to 60</b> of the same attribute.
                     <br />
@@ -2181,6 +2183,7 @@ const tutorial2A = (): DemoTask => {
         return (
             <Stack spacing={1}>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Create one brush on the attribute <b>A2</b>, consisting of 4 control points.
                     The brush must start at around the value <b>30</b> and must include all curves
                     up to the value <b>70</b>. The certainty on the first and last control point
@@ -2297,6 +2300,7 @@ const tutorial2B = (): DemoTask => {
                     <source src={interpolationChangeInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Set the interpolation mode to <b>In-Out</b>.
                     <br />
                     <br />
@@ -2442,6 +2446,7 @@ const tutorial3 = (userGroup: UserGroup): DemoTask => {
         return (
             <Stack spacing={1}>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Enable the color bar under the <b>Colors</b> section.
                     <br />
                     <br />
@@ -2514,6 +2519,7 @@ const tutorial4 = (userGroup: UserGroup): DemoTask => {
                     <source src={attributesInstr} type='video/mp4'></source>
                 </video>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Enable the attribute <b>A5</b> under the <b>Attributes</b> section.
                     <br />
                     <br />
@@ -2635,6 +2641,7 @@ const tutorial5 = (): DemoTask => {
         return (
             <>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Try to separate the two classes, <i>C1</i> and <i>C2</i>, using the information provided
                     by changing the color mode of the visualization. After having done so, try to guess
                     to which class the points labeled as <i>Unknown</i> belong to.
@@ -2734,6 +2741,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
         return (
             <>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Given the provided information, select the entries assigned to
                     class <b>C1</b>. You may not apply any brush directly to the
                     included <i>Class</i> attribute, but you may use it otherwise.
@@ -2802,7 +2810,8 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
                     />
                 </Container>
                 <Typography variant='subtitle1' marginY={2}>
-                    How confident are you that this is the best possible result?
+                    How confident are you that you cannot significantly
+                    improve your selection?
                 </Typography>
                 <Container>
                     <Rating
@@ -2879,6 +2888,7 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
         return (
             <>
                 <DialogContentText>
+                    <b>Task:</b><br />
                     Given the provided information, select the entries with an
                     income greater than $50,000. You may not apply any brush directly
                     to the included <i>Income</i> attribute, but you may use it otherwise.
@@ -2947,7 +2957,8 @@ const taskAdult = (userGroup: UserGroup): DemoTask => {
                     />
                 </Container>
                 <Typography variant='subtitle1' marginY={2}>
-                    How confident are you that this is the best possible result?
+                    How confident are you that you cannot significantly
+                    improve your selection?
                 </Typography>
                 <Container>
                     <Rating
@@ -3034,8 +3045,9 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
         return (
             <>
                 <DialogContentText>
-                    Given the provided information, select the biological properties that
-                    tend to increase the <i>Ablation Volume</i>. You may not apply any brush directly
+                    <b>Task:</b><br />
+                    Given the provided information, make a selection that tends to increase
+                    the <i>Ablation Volume</i>. You may not apply any brush directly
                     to the included <i>Ablation Volume</i> attribute, but you may use it otherwise.
                     You may estimate the distribution of an attribute by changing the color
                     mode to encode the value of said attribute. Rate how confident you are that your
@@ -3105,7 +3117,8 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
                     />
                 </Container>
                 <Typography variant='subtitle1' marginY={2}>
-                    How confident are you that this is the best possible result?
+                    How confident are you that you cannot significantly
+                    improve your selection?
                 </Typography>
                 <Container>
                     <Rating
