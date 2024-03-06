@@ -168,7 +168,7 @@ type DemoState = {
 
     userId: uuid,
     userGroup: UserGroup,
-    location: string,
+    variant: string,
 
     currentTask: number,
     tasks: DemoTask[],
@@ -207,9 +207,20 @@ class App extends Component<any, AppState> {
         if (userGroup !== 'PC' && userGroup !== 'PPC') {
             userGroup = Math.random() < 0.5 ? 'PC' : 'PPC';
         }
-        let location = searchParams.get('location');
-        if (!location) {
-            location = 'unknown';
+        let variant = searchParams.get('v');
+        switch (variant) {
+            case 'oudn':
+                variant = 'local';
+                break;
+            case 'dldz':
+                variant = 'experts';
+                break;
+            case 'gtfj':
+                variant = 'paper';
+                break;
+            default:
+                variant = 'unknown';
+                break;
         }
 
         const deadline = new Date(2024, 2, 31);
@@ -227,7 +238,7 @@ class App extends Component<any, AppState> {
                 currentPage: 'welcome',
                 userId: uuid(),
                 userGroup: userGroup as UserGroup,
-                location,
+                variant,
                 showInstructions: true,
                 currentTask: 0,
                 tasks: tasks,
@@ -901,7 +912,7 @@ function FeedbackPage(app: App) {
 
 function FinishPage(app: App) {
     const { demo } = app.state;
-    const { results, userId, userGroup, deadlinePassed, dryRun } = demo;
+    const { results, userId, userGroup, variant, deadlinePassed, dryRun } = demo;
 
     const [finished, setFinished] = useState<{ error: any } | boolean>(deadlinePassed);
 
@@ -911,7 +922,7 @@ function FinishPage(app: App) {
         }
 
         const fileName = `${uuid()}.bin`;
-        const fileContents = { userId, userGroup, results, VERSION };
+        const fileContents = { userId, userGroup, variant, results, VERSION };
         const fileContentsJSON = JSON.stringify(fileContents);
         const fileContentsCompressed = pako.deflate(fileContentsJSON);
 
