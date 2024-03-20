@@ -1080,6 +1080,19 @@ const TaskView = (
     const task = tasks[currentTask];
     const { name, shortDescription } = task;
 
+    const getSelectedIndices = () => {
+        const { selectionIndices } = ppc;
+        if (!selectionIndices) {
+            return {};
+        }
+
+        const selections = {};
+        for (const [label, indices] of Object.entries(selectionIndices)) {
+            selections[label] = Array.from(indices).map((value) => Number(value));
+        }
+        return selections;
+    };
+
     const handleNext = () => {
         const { taskLogs } = results;
         const timestamp = performance.now();
@@ -1088,7 +1101,8 @@ const TaskView = (
         const currentLog = taskLogs[currentTask];
         currentLog.events.push({
             type: 'end',
-            timestamp
+            timestamp,
+            data: { 'selected': getSelectedIndices() }
         });
 
         if (current.taskResult) {
@@ -1131,7 +1145,8 @@ const TaskView = (
         const currentLog = taskLogs[currentTask];
         currentLog.events.push({
             type: 'end',
-            timestamp
+            timestamp,
+            data: { 'selected': getSelectedIndices() }
         });
 
         const prev = tasks[currentTask - 1];
