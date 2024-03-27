@@ -2,6 +2,10 @@ import { createSyntheticTestDataset } from './datasets/synthetic_test';
 import { createSyntheticDataset } from './datasets/synthetic';
 import { createAdultDataset } from './datasets/adult';
 import { createAblationDataset } from './datasets/ablation';
+
+import { createIrisDataset } from './datasets/iris';
+import { createShipDataset } from './datasets/ship';
+
 import { Props } from 'types';
 
 export function syntheticTestDataset(visible: string[], include: string[], samples?: number): { state: Props, sampleIndices: number[] } {
@@ -58,4 +62,26 @@ export function ablationDataset(visible: string[], include: string[], samples?: 
     return {
         state, sampleIndices
     };
+}
+
+export function irisDataset(): Props {
+    const dataset = createIrisDataset();
+    const state = {
+        axes: dataset,
+        order: [],
+        labels: {},
+        setProps: undefined
+    };
+    return state;
+}
+
+export function shipDataset(): Props {
+    const dataset = createShipDataset();
+    const state = {
+        axes: dataset,
+        order: [],
+        labels: {},
+        setProps: undefined
+    };
+    return state;
 }

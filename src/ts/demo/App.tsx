@@ -84,7 +84,7 @@ import classSeparationFilterInstr from './resources/class_separation_filter_inst
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, syntheticDataset, adultDataset, ablationDataset } from './datasets';
+import { syntheticTestDataset, syntheticDataset, adultDataset, ablationDataset, irisDataset, shipDataset } from './datasets';
 
 const INSTRUCTIONS_VIDEO_HEIGHT = 720;
 const EPSILON = 1.17549435082228750797e-38;
@@ -107,7 +107,7 @@ type DemoTask = {
 
 type UserGroup = 'PC' | 'PPC';
 
-type TaskMode = 'Full' | 'Tutorial' | 'Eval'
+type TaskMode = 'Full' | 'Tutorial' | 'Eval' | 'Paper'
 
 type DemoPage = 'welcome'
     | 'demo1'
@@ -200,7 +200,7 @@ class App extends Component<any, AppState> {
         const debugMode = searchParams.has('debug');
         const dryRun = searchParams.has('dryRun');
         let taskMode = searchParams.get('taskMode');
-        if (!['Full', 'Tutorial', 'Eval'].includes(taskMode)) {
+        if (!['Full', 'Tutorial', 'Eval', 'Paper'].includes(taskMode)) {
             taskMode = 'Full' as TaskMode;
         }
         let userGroup = searchParams.get('userGroup');
@@ -1941,6 +1941,11 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
         tasks.push(taskAblation(userGroup));
     }
 
+    if (taskMode === 'Paper') {
+        tasks.push(taskIris(userGroup));
+        tasks.push(taskSHIP(userGroup));
+    }
+
     return tasks;
 }
 
@@ -3190,5 +3195,73 @@ const taskAblation = (userGroup: UserGroup): DemoTask => {
         taskResult,
         taskResultInput,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
+    };
+}
+
+const taskIris = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                </DialogContentText>
+            </>);
+    }];
+
+    const initialState = irisDataset();
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    return {
+        name: 'Iris',
+        shortDescription: '',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        canContinue: (ppc: Props) => true
+    };
+}
+
+const taskSHIP = (userGroup: UserGroup): DemoTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                </DialogContentText>
+            </>);
+    }];
+
+    const initialState = shipDataset();
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    return {
+        name: 'Iris',
+        shortDescription: '',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        canContinue: (ppc: Props) => true
     };
 }
