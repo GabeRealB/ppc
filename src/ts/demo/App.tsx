@@ -17,6 +17,7 @@ import ListItemText from '@mui/material/ListItemText';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
+import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import Slider from '@mui/material/Slider';
 import Divider from '@mui/material/Divider';
@@ -65,41 +66,26 @@ import StopIcon from '@mui/icons-material/Stop';
 import InfoIcon from '@mui/icons-material/Info';
 import StarIcon from '@mui/icons-material/Star';
 
-import moveAxesInstr from './resources/move_axes_instr.mp4'
-import brushingInstr from './resources/brushing_instr.mp4'
-import extendAxisInstr from './resources/extend_axis_instr.mp4'
-import brushingExtInstr from './resources/brushing_ext_instr.mp4'
-import brushFadeoutInstr from './resources/brush_fadeout_instr.mp4'
-import interpolationChangeInstr from './resources/interpolation_change_instr.mp4'
-import colorsInstr from './resources/colors_instr.mp4'
-import colorsInstrAttribute from './resources/colors_instr_attribute.mp4'
-import colorsInstrDensity from './resources/colors_instr_density.mp4'
-import colorsCertaintyInstr from './resources/colors_certainty_instr.mp4'
-import colorsOrderInstr from './resources/colors_order_instr.mp4'
-import attributesInstr from './resources/attributes_instr.mp4'
-import classSeparationInstr from './resources/class_separation_instr.mp4'
-import classSeparationDensityInstr from './resources/class_separation_density_instr.mp4'
-import classSeparationFilterInstr from './resources/class_separation_filter_instr.mp4'
-
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, syntheticDataset, adultDataset, ablationDataset, irisDataset, shipDataset } from './datasets';
+import { syntheticTestDataset, applicationDataset, } from './datasets';
 
-const INSTRUCTIONS_VIDEO_HEIGHT = 720;
+import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
+
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 2;
 
-type DemoTask = {
+type StudyTask = {
     name: string,
     shortDescription: string,
     instructions: (() => React.JSX.Element)[],
-    taskResultInput?: (props: { task: DemoTask, forceUpdate: () => void }) => React.JSX.Element,
+    taskResultInput?: (props: { task: StudyTask, forceUpdate: () => void }) => React.JSX.Element,
     taskResult?: any,
     viewed: boolean,
     initialState: Props,
     finalState: Props,
-    canContinue: (ppc: Props, task?: DemoTask) => boolean,
+    canContinue: (ppc: Props, task?: StudyTask) => boolean,
     disableLabels?: boolean,
     disableAttributes?: boolean,
     disableColors?: boolean,
@@ -110,8 +96,8 @@ type UserGroup = 'PC' | 'PPC';
 type TaskMode = 'Full' | 'Tutorial' | 'Eval' | 'Paper'
 
 type DemoPage = 'welcome'
-    | 'demo1'
-    | 'demo2'
+    | 'qualitative'
+    | 'quantitative'
     | 'feedback'
     | 'finish';
 
@@ -163,7 +149,7 @@ type Results = {
     taskLogs: TaskLog[],
 };
 
-type DemoState = {
+type StudyState = {
     currentPage: DemoPage,
 
     userId: uuid,
@@ -171,7 +157,7 @@ type DemoState = {
     variant: string,
 
     currentTask: number,
-    tasks: DemoTask[],
+    tasks: StudyTask[],
     showInstructions: boolean,
 
     showDebugInfo: boolean,
@@ -185,7 +171,7 @@ type DemoState = {
 
 type AppState = {
     ppcState: Props,
-    demo: DemoState,
+    demo: StudyState,
 };
 
 class App extends Component<any, AppState> {
@@ -223,7 +209,7 @@ class App extends Component<any, AppState> {
                 break;
         }
 
-        const deadline = new Date(2024, 2, 31);
+        const deadline = new Date(2024, 8, 31);
         const deadlinePassed = Date.now() > deadline.getTime();
 
         const tasks = constructTasks(userGroup as UserGroup, taskMode as TaskMode);
@@ -301,11 +287,11 @@ class App extends Component<any, AppState> {
             case 'welcome':
                 page = createElement(WelcomePage, this);
                 break;
-            case 'demo1':
-                page = createElement(DemoPage1, this);
+            case 'qualitative':
+                page = createElement(QualitativeStudyPage, this);
                 break;
-            case 'demo2':
-                page = createElement(DemoPage2, this);
+            case 'quantitative':
+                page = createElement(QuantitativeStudy, this);
                 break;
             case 'feedback':
                 page = createElement(FeedbackPage, this);
@@ -396,7 +382,7 @@ function WelcomePage(app: App) {
 
     const handleClick = () => {
         const { demo } = app.state;
-        demo.currentPage = 'demo1';
+        demo.currentPage = 'qualitative';
         demo.results.taskLogs[0].events.push({
             type: 'start',
             timestamp: performance.now(),
@@ -485,7 +471,7 @@ function WelcomePage(app: App) {
     );
 }
 
-function DemoPage1(app: App) {
+function QualitativeStudyPage(app: App) {
     const { results } = app.state.demo;
 
     const [age, setAge] = useState<number>(undefined);
@@ -577,7 +563,7 @@ function DemoPage1(app: App) {
 
     const handleClick = () => {
         const { demo } = app.state;
-        demo.currentPage = 'demo2';
+        demo.currentPage = 'quantitative';
         app.setProps({ demo });
     }
 
@@ -770,7 +756,7 @@ function DemoPage1(app: App) {
     )
 }
 
-function DemoPage2(app: App) {
+function QuantitativeStudy(app: App) {
     const {
         ppcState,
         demo,
@@ -991,7 +977,7 @@ function FinishPage(app: App) {
 }
 
 const InstructionsDialog = (props: {
-    demo: DemoState;
+    demo: StudyState;
     setProps: (newProps) => void
 }) => {
     const { demo, setProps } = props;
@@ -1071,7 +1057,7 @@ const InstructionsDialog = (props: {
 
 const TaskView = (
     ppc: Props,
-    demo: DemoState,
+    demo: StudyState,
     setProps: (newProps) => void,
     logPPCEvent: (newProps) => void,
     forceUpdate: () => void,
@@ -1265,7 +1251,7 @@ const LabelsViewItem = (
 
 const LabelsView = (
     ppc: Props,
-    demo: DemoState,
+    demo: StudyState,
     setProps: (newProps) => void,
     logPPCEvent: (newProps) => void
 ) => {
@@ -1429,7 +1415,7 @@ const AttributeListItem = (
 
 const AttributeList = (
     ppcState: Props,
-    demo: DemoState,
+    demo: StudyState,
     axes: { [id: string]: Axis },
     setProps: (newProps) => void,
     logPPCEvent: (newProps) => void
@@ -1485,7 +1471,7 @@ const AttributeList = (
 
 const ColorSettings = (
     ppc: Props,
-    demo: DemoState,
+    demo: StudyState,
     setProps: (newProps) => void,
     logPPCEvent: (newProps) => void
 ) => {
@@ -1831,7 +1817,7 @@ const ActionsInfo = (ppc: Props) => {
     );
 }
 
-const DebugInfo = (ppc: Props, demo: DemoState, setProps: (newProps) => void,
+const DebugInfo = (ppc: Props, demo: StudyState, setProps: (newProps) => void,
     logPPCEvent: (newProps) => void) => {
     const { userId, userGroup, currentTask, tasks } = demo;
 
@@ -1917,794 +1903,17 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
     const tasks = [];
 
     if (taskMode === 'Full' || taskMode === 'Tutorial') {
-        tasks.push(tutorial1());
-        tasks.push(tutorial2());
-
-        if (userGroup === 'PPC') {
-            tasks.push(tutorial2A());
-            tasks.push(tutorial2B());
-        }
-
-        tasks.push(tutorial3(userGroup))
-        tasks.push(tutorial4(userGroup))
-
-        if (userGroup === 'PPC') {
-            tasks.push(tutorial5());
-        }
-
-        tasks.push(tutorialFreeRoam(userGroup));
+        tasks.push(taskTutorial(userGroup));
     }
 
     if (taskMode === 'Full' || taskMode === 'Eval') {
-        tasks.push(taskSynthetic(userGroup));
-        tasks.push(taskAdult(userGroup));
-        tasks.push(taskAblation(userGroup));
-    }
-
-    if (taskMode === 'Paper') {
-        tasks.push(taskIris(userGroup));
-        tasks.push(taskSHIP(userGroup));
+        tasks.push(taskApplication(userGroup));
     }
 
     return tasks;
 }
 
-const tutorial1 = (): DemoTask => {
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    In a parallel coordinates plot, a data point is represented as a curve, passing through
-                    all attribute axes. For example, in a three-dimensional dataset with the attributes &#32;
-                    <b>A1</b>, <b>A2</b> and <b>A3</b>, the point (5, 10, 3) would be represented as a
-                    curve, passing through the value 5 on the axis <b>A1</b>, 10 on the axis <b>A2</b>,
-                    and 3 on the axis <b>A3</b>. This enables the visualization of datasets with many
-                    attributes.
-                    <br />
-                    <br />
-                    One additional property of a parallel coordinates plot is, that one can estimate
-                    correlations between attributes. For example, one could observe that while the value
-                    of an attribute increases, it decreases for another attribute. However, this type of
-                    analysis is only possible, when the two attributes that we want to compare are direct
-                    neighbors. Therefore, the order of the attribute axes is significant, and it is
-                    possible to reorder them at will.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={moveAxesInstr} type='video/mp4'></source>
-                </video>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Attribute axes can be moved by holding the left mouse button on the label of an attribute.
-                    Move the axis of the attribute <b>A1</b>, such that it lies in between the attribute axes
-                    &#32;<b>A2</b> and <b>A3</b>.
-                    <br /><br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    }];
-
-    return {
-        name: 'Reorder attribute axes.',
-        shortDescription: 'Reorder A1 in between A2 and A3',
-        instructions: buildInstructions,
-        viewed: true,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 10),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            interactionMode: InteractionMode.RestrictedCompatibility,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => (ppc.order[0] == 'a2'
-            && ppc.order[1] == 'a1' && ppc.order[2] == 'a3')
-            || (ppc.order[0] == 'a3' && ppc.order[1] == 'a1'
-                && ppc.order[2] == 'a2'),
-        disableLabels: true,
-        disableAttributes: true,
-        disableColors: true,
-    };
-}
-
-const tutorial2 = (): DemoTask => {
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    Another basic interaction in a parallel coordinates plot is the brushing of interesting
-                    data points. By brushing on an attribute axis it is possible to filter the data to show
-                    which curves pass through the brushed range of values. The curves that are filtered out
-                    will be shown in a light gray color. Multiple brushes on the same axis will filter
-                    curves that pass through at least one of them.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={brushingInstr} type='video/mp4'></source>
-                </video>
-                <DialogContentText>
-                    New selections can be brushed by holding the left mouse button over an unbrushed portion
-                    of an attribute axis and dragging the mouse. Once added, the brush can be removed by
-                    clicking the left mouse button, while hovering the brush. Otherwise, it is possible to
-                    move the brush by holding the left mouse button and dragging the pointer.
-                    <br />
-                    <br />
-                    <b>Task:</b><br />
-                    Select the ranges <b>8 to 22</b> and <b>78 to 92</b> of the attribute <b>A2</b>, without
-                    including any curve passing though the range <b>40 to 60</b> of the same attribute.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    }];
-
-    const checkSelectedRanges = (selections?: { [id: string]: Brushes }) => {
-        if (!selections || 'Default' in selections === false) {
-            return false;
-        }
-
-        const brushes = selections['Default'];
-        if ('a1' in brushes || 'a3' in brushes || 'a2' in brushes === false) {
-            return false;
-        }
-        const a2 = brushes['a2'];
-
-        const mustContain: [number, boolean][] = [
-            [10, false],
-            [15, false],
-            [20, false],
-            [80, false],
-            [85, false],
-            [90, false],
-        ];
-        const mustNotContain: [number, boolean][] = [
-            [40, false],
-            [45, false],
-            [50, false],
-            [55, false],
-            [60, false],
-        ];
-        for (const brush of a2) {
-            const min = brush.controlPoints[0][0];
-            const max = brush.controlPoints[brush.controlPoints.length - 1][0];
-            for (const x of mustContain) {
-                if (min <= x[0] && x[0] <= max) {
-                    x[1] = true;
-                }
-            }
-            for (const x of mustNotContain) {
-                if (min <= x[0] && x[0] <= max) {
-                    x[1] = true;
-                }
-            }
-        }
-
-        const allMust = mustContain
-            .map(([v, contained]) => contained)
-            .reduce((curr, x) => curr && x, true);
-        const anyMustNot = mustNotContain
-            .map(([v, contained]) => contained)
-            .reduce((curr, x) => curr || x, false);
-
-        return allMust && !anyMustNot;
-    }
-
-    return {
-        name: 'Create a new selection.',
-        shortDescription: 'Select only the ranges [8, 22] and [78, 92] of A2.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            interactionMode: InteractionMode.Compatibility,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => checkSelectedRanges(ppc.brushes),
-        disableLabels: true,
-        disableAttributes: true,
-        disableColors: true,
-    };
-}
-
-const tutorial2A = (): DemoTask => {
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    You can expand the axis by clicking the left mouse button, while hovering the label
-                    of an attribute. In the expanded state, you can see and modify the degee of certainty
-                    with which a data point is part of the selection. The certainty is then shown by a
-                    curve, where the values range from <b>0%</b> certainty on the <b>rightmost</b> to
-                    <b>100%</b> certainty on the leftmost of the curve. When collapsed, the certainty
-                    of a brush is shown through the color of the brush, with <b>neon green</b> indicating
-                    a certainty of <b>100%</b> and <b>black</b> indicating a certainty of <b>0%</b>.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={extendAxisInstr} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    },
-    () => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    Each new brush is added with a certainty of <b>100%</b>. The certainty can then be
-                    modified, by moving the <b>control points</b> on the curve with the <b>left mouse
-                        button</b>. When multiple brushes overlap, the curve will be formed by computing
-                    the maxium of all overlapping segments. The individual brushes are not combined
-                    in the expanded mode.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={brushingExtInstr} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    },
-    () => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    You can insert a new control point to a brush, by holding the <b>Shift</b> key, before
-                    dragging a control point on the axis. Alternatively, you can add the control point on
-                    both ends of the brushed region by holding either of the <b>Ctrl</b>, <b>Alt</b>,
-                    or <b>Option</b> keys, before dragging the first or last control points of the brush.
-                    A control point can be removed by clicking it on the axis.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={brushFadeoutInstr} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    },
-    () => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Create one brush on the attribute <b>A2</b>, consisting of 4 control points.
-                    The brush must start at around the value <b>30</b> and must include all curves
-                    up to the value <b>70</b>. The certainty on the first and last control point
-                    must be <b>0%</b>, while the range <b>40</b> to <b>60</b> must have a
-                    certainty of <b>100%</b>.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    }];
-
-    const checkSelectedRanges = (selections?: { [id: string]: Brushes }) => {
-        if (!selections || 'Default' in selections === false) {
-            return false;
-        }
-
-        const brushes = selections['Default'];
-        if ('a1' in brushes || 'a3' in brushes || 'a2' in brushes === false) {
-            return false;
-        }
-        const a2 = brushes['a2'];
-        if (a2.length != 1) {
-            return false;
-        }
-
-        const brush = a2[0];
-        if (brush.controlPoints.length != 4) {
-            return false;
-        }
-
-        const [c1, c2, c3, c4] = brush.controlPoints;
-        if (c1[1] != 0 || c2[1] != 1 || c3[1] != 1 || c4[1] != 0) {
-            return false;
-        }
-
-        if (c1[0] < 25 || c1[0] > 30) {
-            return false;
-        }
-        if (c2[0] < 35 || c2[0] > 45) {
-            return false;
-        }
-        if (c3[0] < 55 || c3[0] > 65) {
-            return false;
-        }
-        if (c4[0] < 70 || c4[0] > 75) {
-            return false;
-        }
-
-        return true;
-    }
-
-    return {
-        name: 'Uncertain brushing.',
-        shortDescription: 'Brush A2 in the range [30, 70], where the range [40, 60] has a certainty of 100%.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            interactionMode: InteractionMode.Full,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => checkSelectedRanges(ppc.brushes),
-        disableLabels: true,
-        disableAttributes: true,
-        disableColors: true,
-    };
-}
-
-const tutorial2B = (): DemoTask => {
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    You can control how the curve behaves in between the control points by selecting
-                    a different interpolation mode on the top right toolbar. Different interpolation
-                    modes may allow you to better approximate the shape of a desired curve. The
-                    interpolation modes are (from left to right): <b>Linear</b>, <b>In</b>, <b>Out</b>,
-                    and <b>In-Out</b>. By default, the linear interpolation mode is selected. The
-                    interpolation mode of the primary segment of each brush is always linear, and can
-                    not be changed.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={interpolationChangeInstr} type='video/mp4'></source>
-                </video>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Set the interpolation mode to <b>In-Out</b>.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    }];
-
-    const checkInterpolationMode = (labels: { [id: string]: LabelInfo }) => {
-        const label = labels['Default'];
-        return label.easing === 'inout';
-    };
-
-    return {
-        name: 'Different curves.',
-        shortDescription: 'Switch the interpolation mode to In-Out.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            brushes: {
-                'Default': {
-                    'a2': [
-                        { controlPoints: [[30, 0], [40, 1], [60, 1], [70, 0]], mainSegmentIdx: 1 }
-                    ]
-                }
-            },
-            interactionMode: InteractionMode.Full,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => checkInterpolationMode(ppc.labels),
-        disableLabels: true,
-        disableAttributes: true,
-        disableColors: true,
-    };
-}
-
-const tutorial3 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    The parallel coordinates plot can encode some information in the form of the colors
-                    of the data point curves. Depending on the task, it may be worthwhile to look into
-                    the color settings under the <b>Colors</b> section, on the right. There you can
-                    configure the color bar visibility, the information that is encoded as the color,
-                    and the color scale that should be used to color the information.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={colorsInstr} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    },
-    () => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    The attribute color mode uses the value of the curve at some specific attribute axis to
-                    determine the color of said curve. With this, you can compare the values of attributes
-                    that are not direct neighbors.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={colorsInstrAttribute} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    },
-    () => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    One additional color mode is the display of the density of the curves on some specific
-                    attribute axis. The main use case of this color mode is the estimation of data distributions.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={colorsInstrDensity} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    }];
-
-    if (userGroup === 'PPC') {
-        buildInstructions.push(() => {
-            return (
-                <Stack spacing={1}>
-                    <DialogContentText>
-                        In addition to the other color modes, you can select to color the curves based on
-                        their computed certainty of selection.
-                    </DialogContentText>
-                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={colorsCertaintyInstr} type='video/mp4'></source>
-                    </video>
-                </Stack>);
-        });
-    }
-
-    buildInstructions.push(() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    You may notice that the parallel coordinates may suffer from a cluttering problem
-                    where, because of overlapping curves, it becomes difficult to see the color of some
-                    group of curves. To alleviate this, we allow you to specify an ordering for the curves.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={colorsOrderInstr} type='video/mp4'></source>
-                </video>
-            </Stack>);
-    });
-    buildInstructions.push(() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Enable the color bar under the <b>Colors</b> section.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    });
-
-    return {
-        name: 'Color settings.',
-        shortDescription: 'Enable the color bar.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            interactionMode,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => ppc.colorBar === 'visible',
-        disableAttributes: true,
-    };
-}
-
-const tutorial4 = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <Stack spacing={1}>
-                <DialogContentText>
-                    A dataset may contain more attributes than can be visualized simultaneously.
-                    In that case, it may be required to filter which attributes can contribute
-                    to the selection of the curves. The <b>Attributes</b> section contains info
-                    about all the attributes present in the dataset. There you can select whether
-                    to show or hide an attribute from the plot.
-                </DialogContentText>
-                <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                    <source src={attributesInstr} type='video/mp4'></source>
-                </video>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Enable the attribute <b>A5</b> under the <b>Attributes</b> section.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right once the task has been completed.
-                </DialogContentText>
-            </Stack>);
-    }];
-
-    const checkVisible = (axesOrder: string[]) => {
-        return axesOrder && axesOrder.indexOf('a5') !== -1;
-    };
-
-    return {
-        name: 'More attributes.',
-        shortDescription: 'Enable the attribute A5.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState: {
-            axes: {
-                'a1': {
-                    label: 'A1',
-                    range: [0, 10000],
-                    dataPoints: [...Array(100)].map((v, x) => x * x),
-                },
-                'a2': {
-                    label: 'A2',
-                    range: [0, 100],
-                    dataPoints: [...Array(100)].map((v, x) => 100 - x),
-                },
-                'a3': {
-                    label: 'A3',
-                    range: [-125000, 125000],
-                    dataPoints: [...Array(100)].map((v, x) => Math.pow(x - 50, 3)),
-                },
-                'a4': {
-                    label: 'A4',
-                    range: [0, 50],
-                    dataPoints: [...Array(100)].map(() => Math.random() * 50),
-                },
-                'a5': {
-                    label: 'A5',
-                    range: [-10000, 0],
-                    dataPoints: [...Array(100)].map((v, x) => -Math.pow(x, 2)),
-                },
-                'a6': {
-                    label: 'A6',
-                    range: [0, 10],
-                    dataPoints: [...Array(100)].map((v, x) => x / 10),
-                },
-            },
-            order: ['a1', 'a2', 'a3'],
-            labels: {
-                'Default': {},
-            },
-            activeLabel: 'Default',
-            colors: {
-                selected: {
-                    scale: 'magma',
-                    color: 0.5,
-                }
-            },
-            colorBar: 'hidden',
-            interactionMode,
-            powerProfile: 'high',
-            setProps: undefined,
-        },
-        finalState: null,
-        canContinue: (ppc: Props) => checkVisible(ppc.order),
-    };
-}
-
-const tutorial5 = (): DemoTask => {
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                    Oftentimes, it is not clear how an attribute is linked with the class of a point.
-                    In those cases, one has to make informed guesses using the available information.
-                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={classSeparationInstr} type='video/mp4'></source>
-                    </video>
-                </DialogContentText>
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <DialogContentText>
-                    One way to gain some insight into the data is to change what information is portrayed
-                    by the color. The <i>Density</i> color mode allows you to estimate how the data is
-                    distributed. In the presence of multiple attributes, it is often useful to also look
-                    into the <i>Attribute</i> color mode. With that information and a bit of experimentation,
-                    you can then try to make a selection that maximizes the number of curves belonging to a
-                    class, while minimizing the number of elements belonging to the other classes.
-                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={classSeparationDensityInstr} type='video/mp4'></source>
-                    </video>
-                </DialogContentText>
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <DialogContentText>
-                    Even after careful selection, it is not always possible to separate the classes in the
-                    dataset. You can try to fine-tune your selection by modifying the <i>Selection Probability Bounds</i>.
-                    By default, the selection bounds are configured such, that all brushed regions are selected,
-                    but they can be configured to any certainty range. The certainty of one point is computed by combining
-                    the certainty of each brushed region the point passed through, which can be seen with the
-                    &#32;<i>Probability</i> color mode. Note that customizing the selection bounds may also filter
-                    out points that truly belong to the class of interest.
-                    <video autoPlay loop muted height={INSTRUCTIONS_VIDEO_HEIGHT} style={{ objectFit: 'fill' }} id='instructions_video'>
-                        <source src={classSeparationFilterInstr} type='video/mp4'></source>
-                    </video>
-                </DialogContentText>
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Try to separate the two classes, <i>C1</i> and <i>C2</i>, using the information provided
-                    by changing the color mode of the visualization. After having done so, try to guess
-                    to which class the points labeled as <i>Unknown</i> belong to.
-                </DialogContentText>
-            </>);
-    }];
-
-    const visible = ['a1', 'class'];
-    const included = [];
-    const { state: initialState, sampleIndices } = syntheticTestDataset(visible, included);
-    initialState.interactionMode = InteractionMode.Full;
-    initialState.labels = { 'C1': {}, 'C2': {} };
-    initialState.activeLabel = 'C1';
-    initialState.colors = {
-        selected: { scale: 'magma', color: 0.5 }
-    };
-    initialState.colorBar = 'visible';
-    initialState.powerProfile = 'high';
-
-
-    return {
-        name: 'Separating classes.',
-        shortDescription: 'Try to separate the class C1 from C2.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        canContinue: (ppc: Props) => true
-    };
-}
-
-const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
+const taskTutorial = (userGroup: UserGroup): StudyTask => {
     const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
@@ -2713,13 +1922,12 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
         return (
             <>
                 <DialogContentText>
-                    You have reached the end of the tutorial section. Before you continue to the next task,
-                    you can try out interacting with the visualization freely.
+                    Before you continue to the first task, you can try out interacting with the visualization freely.
                     Remember to look at the <b>Actions</b> tab to see the actions available to you.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right once you feel ready to continue with
-                    the next task.
+                    the first task.
                 </DialogContentText>
             </>);
     }];
@@ -2747,7 +1955,7 @@ const tutorialFreeRoam = (userGroup: UserGroup): DemoTask => {
     };
 }
 
-const taskSynthetic = (userGroup: UserGroup): DemoTask => {
+const taskApplication = (userGroup: UserGroup): StudyTask => {
     const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
@@ -2757,14 +1965,11 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
             <>
                 <DialogContentText>
                     For this task, you will look into a synthetic dataset consisting
-                    of the attributes <i>A1</i>, <i>A2</i> and <i>Class</i>, where
-                    the last attribute denotes the assigned class of each point.
-                    The class of each point is determined by assigning a probability
-                    to each value of the two attributes and treating them as
-                    statistically independent random variables. A point is then
-                    assigned to class <b>C1</b>, if the combination of the two
-                    random variables yields a probability greater or equal to <b>50%</b>.
-                    Otherwise, the point is assigned to the class <b>C2</b>.
+                    of the attributes <i>A1</i> and <i>A2</i>. This task tests the
+                    ability of a user, to faithfully recreate known selections.
+                    To that end, you are provided with the probability curves for
+                    both attributes <i>A1</i> and <i>A2</i>:
+                    <img src={taskApplicationProbabilityCurves} style={{ objectFit: 'fill' }} />
                 </DialogContentText>
             </>);
     },
@@ -2773,18 +1978,16 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
             <>
                 <DialogContentText>
                     <b>Task:</b><br />
-                    Given the provided information, select the entries assigned to
-                    class <b>C1</b>. You may not apply any brush directly to the
-                    included <i>Class</i> attribute, but you may use it otherwise.
-                    You may estimate the distribution of an attribute by changing the color
-                    mode to encode the value of said attribute. For the selection, you must
-                    try to maximize the number of entries that truly belong to
-                    class <b>C1</b>, while minimizing the number of entries wrongly
-                    attributed to that class. Rate how confident you are that your selection
-                    is able to accurately maximize the number of entries assigned to class
-                    &#32;<b>C1</b>, while minimizing the number of entries of the other class.
-                    Additionally, rate your level of confidence, that your selection can not
-                    be improved by any significant amount.
+                    Given the provided information, <b>select the entries that have a
+                        selection probability <i>p</i>, with 0% &lt; <i>p</i> &le; 25%</b>.
+                    As a reminder - the selection probability of each entry is derived by
+                    multiplying the probability of the entry on each individual attribute.
+                    For instance, if an entry passes through a point with a selection
+                    probability of <b>70%</b> on <i>A1</i> and <b>50%</b> on <i>A2</i>,
+                    the final selection probability amounts to <b>35%</b>.
+                    <br />
+                    Rate your confidence of being able to correctly select the requested
+                    entries.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2793,9 +1996,9 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
             </>);
     }];
 
-    const visible = ['a1', 'a2', 'class'];
+    const visible = ['a1', 'a2'];
     const included = [];
-    const { state: initialState, sampleIndices } = syntheticDataset(visible, included, 200);
+    const { state: initialState, sampleIndices } = applicationDataset(visible, included, 200);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2807,47 +2010,28 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
 
     const taskResult = {
         sampleIndices,
-        accuracyConfidence: undefined,
-        overallConfidence: undefined,
+        confidence: undefined,
     };
 
-    const taskResultInput = (props: { task: DemoTask, forceUpdate: () => void }): React.JSX.Element => {
+    const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
         const { task, forceUpdate } = props;
         const { taskResult } = task;
-        const { accuracyConfidence, overallConfidence } = taskResult;
+        const { confidence } = taskResult;
 
-        const updateAccuracyConfidence = (e, value) => {
-            taskResult.accuracyConfidence = value ? value : undefined;
-            forceUpdate();
-        };
         const updateOverallConfidence = (e, value) => {
-            taskResult.overallConfidence = value ? value : undefined;
+            taskResult.confidence = value ? value : undefined;
             forceUpdate();
         };
 
         return (
             <>
                 <Typography variant='subtitle1' marginY={2}>
-                    How confident are you in the accuracy of your selection?
+                    Rate your confidence:
                 </Typography>
                 <Container>
                     <Rating
-                        name='selection_confidence'
-                        value={accuracyConfidence}
-                        max={6}
-                        size='large'
-                        onChange={updateAccuracyConfidence}
-                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
-                    />
-                </Container>
-                <Typography variant='subtitle1' marginY={2}>
-                    How confident are you that you cannot significantly
-                    improve your selection?
-                </Typography>
-                <Container>
-                    <Rating
-                        name='overall_confidence'
-                        value={overallConfidence}
+                        name='confidence'
+                        value={confidence}
                         max={6}
                         size='large'
                         onChange={updateOverallConfidence}
@@ -2862,8 +2046,7 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
             return false;
         }
 
-        if (taskResult.accuracyConfidence === undefined
-            || taskResult.overallConfidence === undefined) {
+        if (taskResult.confidence === undefined) {
             return false;
         }
 
@@ -2879,8 +2062,8 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
     }
 
     return {
-        name: 'Statistically independent variables.',
-        shortDescription: 'Select the entries assigned to class C1.',
+        name: 'Applying existing probability curves.',
+        shortDescription: 'Select the entries with a selection probability p, where 0% < p ≤ 25%.',
         instructions: buildInstructions,
         viewed: false,
         initialState,
@@ -2888,380 +2071,5 @@ const taskSynthetic = (userGroup: UserGroup): DemoTask => {
         taskResult,
         taskResultInput,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
-    };
-}
-
-const taskAdult = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                    For the next task, we will look at a subset of the US
-                    Adult Census dataset, which is derived from the 1994
-                    US Census database.
-                    <br />
-                    <br />
-                    The dataset tracks various attributes of multiple people,
-                    including their age, education, race, marital status,
-                    occupation, et cetera, with the aim of predicting whether
-                    someone has an annual income greater than $50,000. For this
-                    task, you will provided with the age, sex, education and
-                    hours worked per week of 5000 random people contained in
-                    the dataset.
-                </DialogContentText>
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Given the provided information, select the entries with an
-                    income greater than $50,000. You may not apply any brush directly
-                    to the included <i>Income</i> attribute, but you may use it otherwise.
-                    You may estimate the distribution of an attribute by changing the color
-                    mode to encode the value of said attribute. For the selection, you must
-                    try to maximize the number of people who truly have an income greater
-                    than $50,000, while minimizing the number of people who are wrongly
-                    attributed that label. Rate how confident you are that your selection
-                    is able to accurately maximize the number of entries with an income greater
-                    than $50,000, while minimizing the number of entries with a lower income.
-                    Additionally, rate your level of confidence, that your selection can not
-                    be improved by any significant amount.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right, once you feel
-                    that you have fulfilled the task.
-                </DialogContentText>
-            </>);
-    }];
-
-    const visible = ['age', 'sex', 'education', 'hours-per-week', 'income'];
-    const included = [];
-    const { state: initialState, sampleIndices } = adultDataset(visible, included, 5000);
-    initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Default': {} };
-    initialState.activeLabel = 'Default';
-    initialState.colors = {
-        selected: { scale: 'magma', color: 0.5 }
-    };
-    initialState.colorBar = 'visible';
-    initialState.powerProfile = 'high';
-
-    const taskResult = {
-        sampleIndices,
-        accuracyConfidence: undefined,
-        overallConfidence: undefined,
-    };
-
-    const taskResultInput = (props: { task: DemoTask, forceUpdate: () => void }): React.JSX.Element => {
-        const { task, forceUpdate } = props;
-        const { taskResult } = task;
-        const { accuracyConfidence, overallConfidence } = taskResult;
-
-        const updateAccuracyConfidence = (e, value) => {
-            taskResult.accuracyConfidence = value ? value : undefined;
-            forceUpdate();
-        };
-        const updateOverallConfidence = (e, value) => {
-            taskResult.overallConfidence = value ? value : undefined;
-            forceUpdate();
-        };
-
-        return (
-            <>
-                <Typography variant='subtitle1' marginY={2}>
-                    How confident are you in the accuracy of your selection?
-                </Typography>
-                <Container>
-                    <Rating
-                        name='selection_confidence'
-                        value={accuracyConfidence}
-                        max={6}
-                        size='large'
-                        onChange={updateAccuracyConfidence}
-                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
-                    />
-                </Container>
-                <Typography variant='subtitle1' marginY={2}>
-                    How confident are you that you cannot significantly
-                    improve your selection?
-                </Typography>
-                <Container>
-                    <Rating
-                        name='overall_confidence'
-                        value={overallConfidence}
-                        max={6}
-                        size='large'
-                        onChange={updateOverallConfidence}
-                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
-                    />
-                </Container>
-            </>);
-    };
-
-    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
-        if (!brushes) {
-            return false;
-        }
-
-        if (taskResult.accuracyConfidence === undefined
-            || taskResult.overallConfidence === undefined) {
-            return false;
-        }
-
-        let hasBrushed = false;
-        for (const [_, labelBrushes] of Object.entries(brushes)) {
-            if ('income' in labelBrushes) {
-                return false;
-            }
-            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
-        }
-
-        return hasBrushed;
-    }
-
-    return {
-        name: 'Filter by income.',
-        shortDescription: 'Select the persons with an income greater than 50K.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        taskResult,
-        taskResultInput,
-        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
-    };
-}
-
-const taskAblation = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                    For the next task, we will look into a simulated radiofrequency
-                    ablation dataset. Radiofrequency ablation is a minimally
-                    invasive procedure that aims to remove malicious or dysfunctional
-                    tissue, like tumors. A needle-like probe is inserted into the
-                    malicious tissue and is then powered, which exposes the cells
-                    to a temperature above 60°C. Those temperatures result in the
-                    death of the affected cells, when applied for a few minutes.
-                    In the treatment of tumorous tissue, the procedure aims to
-                    ablate all tumorous cells, including a safety margin of 5 to 10mm.
-                    Apart from ablating the malicious tissue and the safety margin
-                    around it, the procedure should minimize the harm to the
-                    healthy tissue. To that extent, it is important to understand
-                    how the biological properties of the involved tissues affect
-                    the treatment.
-                    <br />
-                    <br />
-                    The dataset simulates multiple radiofrequency ablation treatments
-                    of tumorous liver tissue. Along with the liver and tumor tissues,
-                    there are also blood vessels that have to be considered. For each
-                    of those tissues, we track the <i>Thermal Conductivity</i> and
-                    &#32;<i>Blood Perfusion Rate</i>. To quantify the effectiveness of
-                    the treatment, we computed the <i>Ablation Volume</i> in mm<sup>3</sup>.
-                </DialogContentText>
-            </>);
-    },
-    () => {
-        return (
-            <>
-                <DialogContentText>
-                    <b>Task:</b><br />
-                    Given the provided information, make a selection that tends to increase
-                    the <i>Ablation Volume</i>. You may not apply any brush directly
-                    to the included <i>Ablation Volume</i> attribute, but you may use it otherwise.
-                    You may estimate the distribution of an attribute by changing the color
-                    mode to encode the value of said attribute. Rate how confident you are that your
-                    selection tends to maximize the volume of the ablation.
-                    Additionally, rate your level of confidence, that your selection can not
-                    be improved by any significant amount.
-                    <br />
-                    <br />
-                    Press the <b>Next</b> button on the bottom right, once you feel
-                    that you have fulfilled the task.
-                </DialogContentText>
-            </>);
-    }];
-
-    const visible = [
-        'thermal_conductivity_liver',
-        'thermal_conductivity_vessel',
-        'thermal_conductivity_tumor',
-        'relative_blood_perfusion_rate_liver',
-        'relative_blood_perfusion_rate_tumor',
-        'ablation_volume',
-    ];
-    const included = [];
-    const { state: initialState, sampleIndices } = ablationDataset(visible, included, 5000);
-    initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Default': {} };
-    initialState.activeLabel = 'Default';
-    initialState.colors = {
-        selected: { scale: 'magma', color: 0.5 }
-    };
-    initialState.colorBar = 'visible';
-    initialState.powerProfile = 'high';
-
-    const taskResult = {
-        sampleIndices,
-        accuracyConfidence: undefined,
-        overallConfidence: undefined,
-    };
-
-    const taskResultInput = (props: { task: DemoTask, forceUpdate: () => void }): React.JSX.Element => {
-        const { task, forceUpdate } = props;
-        const { taskResult } = task;
-        const { accuracyConfidence, overallConfidence } = taskResult;
-
-        const updateAccuracyConfidence = (e, value) => {
-            taskResult.accuracyConfidence = value ? value : undefined;
-            forceUpdate();
-        };
-        const updateOverallConfidence = (e, value) => {
-            taskResult.overallConfidence = value ? value : undefined;
-            forceUpdate();
-        };
-
-        return (
-            <>
-                <Typography variant='subtitle1' marginY={2}>
-                    How confident are you in the accuracy of your selection?
-                </Typography>
-                <Container>
-                    <Rating
-                        name='selection_confidence'
-                        value={accuracyConfidence}
-                        max={6}
-                        size='large'
-                        onChange={updateAccuracyConfidence}
-                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
-                    />
-                </Container>
-                <Typography variant='subtitle1' marginY={2}>
-                    How confident are you that you cannot significantly
-                    improve your selection?
-                </Typography>
-                <Container>
-                    <Rating
-                        name='overall_confidence'
-                        value={overallConfidence}
-                        max={6}
-                        size='large'
-                        onChange={updateOverallConfidence}
-                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
-                    />
-                </Container>
-            </>);
-    };
-
-    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
-        if (!brushes) {
-            return false;
-        }
-
-        if (taskResult.accuracyConfidence === undefined
-            || taskResult.overallConfidence === undefined) {
-            return false;
-        }
-
-        let hasBrushed = false;
-        for (const [_, labelBrushes] of Object.entries(brushes)) {
-            if ('ablation_volume' in labelBrushes) {
-                return false;
-            }
-            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
-        }
-
-        return hasBrushed;
-    }
-
-    return {
-        name: 'Ablation analysis.',
-        shortDescription: 'Make a selection that tends to increase the Ablation Volume.',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        taskResult,
-        taskResultInput,
-        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
-    };
-}
-
-const taskIris = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                </DialogContentText>
-            </>);
-    }];
-
-    const initialState = irisDataset();
-    initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Default': {} };
-    initialState.activeLabel = 'Default';
-    initialState.colors = {
-        selected: { scale: 'magma', color: 0.5 }
-    };
-    initialState.colorBar = 'visible';
-    initialState.powerProfile = 'high';
-
-    return {
-        name: 'Iris',
-        shortDescription: '',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        canContinue: (ppc: Props) => true
-    };
-}
-
-const taskSHIP = (userGroup: UserGroup): DemoTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
-
-    const buildInstructions = [() => {
-        return (
-            <>
-                <DialogContentText>
-                </DialogContentText>
-            </>);
-    }];
-
-    const initialState = shipDataset();
-    initialState.interactionMode = interactionMode;
-    initialState.labels = { 'Default': {} };
-    initialState.activeLabel = 'Default';
-    initialState.colors = {
-        selected: { scale: 'magma', color: 0.5 }
-    };
-    initialState.colorBar = 'visible';
-    initialState.powerProfile = 'high';
-
-    return {
-        name: 'Iris',
-        shortDescription: '',
-        instructions: buildInstructions,
-        viewed: false,
-        initialState,
-        finalState: null,
-        canContinue: (ppc: Props) => true
     };
 }
