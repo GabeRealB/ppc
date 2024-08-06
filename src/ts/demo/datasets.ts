@@ -1,5 +1,6 @@
 import { createSyntheticTestDataset } from './datasets/synthetic_test';
 import { createApplicationDataset } from './datasets/application';
+import { createEvaluationDataset } from './datasets/evaluation';
 
 import { Props } from 'types';
 
@@ -20,6 +21,20 @@ export function syntheticTestDataset(visible: string[], include: string[], sampl
 export function applicationDataset(visible: string[], include: string[], samples?: number): { state: Props, sampleIndices: number[] } {
     const included = new Set([...visible, ...include]);
     const { dataset, sampleIndices } = createApplicationDataset(Array.from(included), samples);
+    const state = {
+        axes: dataset,
+        order: visible,
+        labels: {},
+        setProps: undefined
+    };
+    return {
+        state, sampleIndices
+    };
+}
+
+export function evaluationDataset(visible: string[], include: string[], samples?: number): { state: Props, sampleIndices: number[] } {
+    const included = new Set([...visible, ...include]);
+    const { dataset, sampleIndices } = createEvaluationDataset(Array.from(included), samples);
     const state = {
         axes: dataset,
         order: visible,

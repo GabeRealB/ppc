@@ -69,9 +69,11 @@ import StarIcon from '@mui/icons-material/Star';
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, applicationDataset, } from './datasets';
+import { syntheticTestDataset, applicationDataset, evaluationDataset } from './datasets';
 
 import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
+import taskEvaluationCurvesA from './resources/task_evaluation_curves_a.png'
+import taskEvaluationCurvesB from './resources/task_evaluation_curves_b.png'
 
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 2;
@@ -933,25 +935,29 @@ function FinishPage(app: App) {
             return;
         }
 
-        const client = new S3Client({
-            region: 'eu-central-1',
-            endpoint: 'https://s3.hidrive.strato.com',
-            credentials: {
-                accessKeyId: 'AHS4MOAD6Q7YF20RJLZX',
-                secretAccessKey: 'IE0g/gBAFSix49pPMwZAcnWwe7OhtWWj9/ACeHQY',
-            }
-        });
-        const command = new PutObjectCommand({
-            Bucket: 'userstudy',
-            Key: fileName,
-            Body: fileContentsCompressed,
-        });
+        try {
+            const client = new S3Client({
+                region: 'eu-central-1',
+                endpoint: 'https://s3.hidrive.strato.com',
+                credentials: {
+                    accessKeyId: 'AHS4MOAD6Q7YF20RJLZX',
+                    secretAccessKey: 'IE0g/gBAFSix49pPMwZAcnWwe7OhtWWj9/ACeHQY',
+                }
+            });
+            const command = new PutObjectCommand({
+                Bucket: 'userstudy',
+                Key: fileName,
+                Body: fileContentsCompressed,
+            });
 
-        client.send(command).then(() => {
-            setFinished(true);
-        }).catch((e) => {
-            setFinished({ error: e });
-        })
+            client.send(command).then(() => {
+                setFinished(true);
+            }).catch((e) => {
+                setFinished({ error: e.toString() });
+            })
+        } catch (e) {
+            setFinished({ error: e.toString() });
+        }
     }, []);
 
     return (
@@ -1947,6 +1953,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
 
     if (taskMode === 'Full' || taskMode === 'Eval') {
         tasks.push(taskApplication(userGroup));
+        tasks.push(taskEvaluation(userGroup));
     }
 
     return tasks;
@@ -2110,5 +2117,136 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
         taskResult,
         taskResultInput,
         canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
+    };
+}
+
+const taskEvaluation = (userGroup: UserGroup): StudyTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For this task, you will look into another synthetic dataset
+                    consisting of the attributes <i>A1</i>, <i>A2</i> and <i>Class</i>.
+                    This task tests the ability of a user, identify the set of curves
+                    matching the computed classes of the entries. To that end, you are
+                    provided with two sets of probability curves (denoted <b>(a)</b>
+                    &#32;and <b>(b)</b>):
+                    <img src={taskEvaluationCurvesA} style={{ objectFit: 'fill' }} />
+                    <img src={taskEvaluationCurvesB} style={{ objectFit: 'fill' }} />
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    <b>Task:</b><br />
+                    Given the two sets of probability curves, <b>select whether the
+                        curves (a) or (b) better fit the data</b>. You may use the
+                    provided <i>Class</i> attribute to identify the currect set of
+                    curves. The correct set of curves will assign each entry with
+                    a <b>selection probability between 25% and 75% to the class C1</b>.
+                    <br />
+                    Rate your confidence of being able to correctly identify the
+                    correct probability curves.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['a1', 'a2', 'class'];
+    const included = [];
+    const { state: initialState, sampleIndices } = evaluationDataset(visible, included, 200);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        correctCurves: undefined,
+        confidence: undefined,
+    };
+
+    const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { correctCurves, confidence } = taskResult;
+
+        const updateCorrectCurves = (e, value) => {
+            taskResult.correctCurves = value ? value : undefined;
+            forceUpdate();
+        }
+
+        const updateOverallConfidence = (e, value) => {
+            taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    Select the correct curves:
+                </Typography>
+                <Container>
+                    <RadioGroup
+                        row
+                        name='curve-selection'
+                        value={correctCurves}
+                        onChange={updateCorrectCurves}
+                    >
+                        <FormControlLabel value='a' control={<Radio />} label='A' />
+                        <FormControlLabel value='b' control={<Radio />} label='B' />
+                    </RadioGroup>
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate your confidence:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='confidence'
+                        value={confidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
+    };
+
+    const checkCompleted = () => {
+        if (taskResult.correctCurves == undefined) {
+            return false;
+        }
+
+        if (taskResult.confidence === undefined) {
+            return false;
+        }
+
+        return true;
+    }
+
+    return {
+        name: 'Select the right curves.',
+        shortDescription: 'Select which curves fit the data best.',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResult,
+        taskResultInput,
+        canContinue: (ppc: Props) => checkCompleted()
     };
 }
