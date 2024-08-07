@@ -69,7 +69,7 @@ import StarIcon from '@mui/icons-material/Star';
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, applicationDataset, validationDataset } from './datasets';
+import { syntheticTestDataset, applicationDataset, validationDataset, derivationDataset } from './datasets';
 
 import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
 import taskEvaluationCurvesA from './resources/task_evaluation_curves_a.png'
@@ -1915,6 +1915,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
     if (taskMode === 'Full' || taskMode === 'Eval') {
         tasks.push(taskApplication(userGroup));
         tasks.push(taskValidation(userGroup));
+        tasks.push(taskDerivation(userGroup));
     }
 
     return tasks;
@@ -2005,7 +2006,7 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
 
     const visible = ['a1', 'a2'];
     const included = [];
-    const { state: initialState, sampleIndices } = applicationDataset(visible, included, 200);
+    const { state: initialState, sampleIndices } = applicationDataset(visible, included, 500);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2124,7 +2125,7 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
 
     const visible = ['a1', 'a2', 'class'];
     const included = [];
-    const { state: initialState, sampleIndices } = validationDataset(visible, included, 200);
+    const { state: initialState, sampleIndices } = validationDataset(visible, included, 500);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2209,5 +2210,122 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
         taskResult,
         taskResultInput,
         canContinue: (ppc: Props) => checkCompleted()
+    };
+}
+
+const taskDerivation = (userGroup: UserGroup): StudyTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Compatibility
+        : InteractionMode.Full;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For this task, you will look into the Iris dataset. The dataset
+                    measures the lengths and widths of the sepals and petals of different
+                    iris flowers, which are the <i>iris virginica</i>, <i>iris versicolour</i>
+                    &#32;and <i>iris setosa</i>.
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    <b>Task:</b><br />
+                    Given the provided information, <b>select the entries that are
+                        classified as <i>Iris Versicolour</i></b>.
+                    For the selection you must try to maximize the number of entries
+                    that are truly classified as <i>Iris Versicolour</i>, while minimizing
+                    the number of entries belonging to other iris types. To fulfill
+                    the task, you may not have any brush applied to the <i>target</i>
+                    &#32;attribute, but may utilize it otherwise.
+                    <br />
+                    Rate your confidence of being able to correctly select the requested
+                    entries.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'target'];
+    const included = [];
+    const { state: initialState, sampleIndices } = derivationDataset(visible, included, 500);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        confidence: undefined,
+    };
+
+    const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { confidence } = taskResult;
+
+        const updateOverallConfidence = (e, value) => {
+            taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate your confidence:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='confidence'
+                        value={confidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
+    };
+
+    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
+        if (!brushes) {
+            return false;
+        }
+
+        if (taskResult.confidence === undefined) {
+            return false;
+        }
+
+        let hasBrushed = false;
+        for (const [_, labelBrushes] of Object.entries(brushes)) {
+            if ('target' in labelBrushes) {
+                return false;
+            }
+            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
+        }
+
+        return hasBrushed;
+    }
+
+    return {
+        name: 'Select the Iris Versicolour.',
+        shortDescription: 'Select the entries that are classified as "Iris Versicolour".',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResult,
+        taskResultInput,
+        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
     };
 }
