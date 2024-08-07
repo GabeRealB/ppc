@@ -8105,7 +8105,7 @@ const dataset = {
     }
 };
 
-export function createEvaluationDataset(include: string[], samples?: number) {
+export function createValidationDataset(include: string[], samples?: number) {
     const data = {};
     for (const incl of include) {
         data[incl] = window.structuredClone(dataset[incl]);
