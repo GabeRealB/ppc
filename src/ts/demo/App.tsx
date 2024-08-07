@@ -940,12 +940,12 @@ function FinishPage(app: App) {
                 region: 'eu-central-1',
                 endpoint: 'https://s3.hidrive.strato.com',
                 credentials: {
-                    accessKeyId: 'AHS4MOAD6Q7YF20RJLZX',
-                    secretAccessKey: 'IE0g/gBAFSix49pPMwZAcnWwe7OhtWWj9/ACeHQY',
+                    accessKeyId: 'AHS4179P7RE2NNDLUF1A',
+                    secretAccessKey: 'A5+5Wo8nJQJ6cP+7yH2BUDUL4uvH5hPr4aaMFI31',
                 }
             });
             const command = new PutObjectCommand({
-                Bucket: 'userstudy',
+                Bucket: 'second-study',
                 Key: fileName,
                 Body: fileContentsCompressed,
             });
