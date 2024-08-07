@@ -69,7 +69,7 @@ import StarIcon from '@mui/icons-material/Star';
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, applicationDataset, evaluationDataset } from './datasets';
+import { syntheticTestDataset, applicationDataset, validationDataset } from './datasets';
 
 import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
 import taskEvaluationCurvesA from './resources/task_evaluation_curves_a.png'
@@ -1914,7 +1914,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
 
     if (taskMode === 'Full' || taskMode === 'Eval') {
         tasks.push(taskApplication(userGroup));
-        tasks.push(taskEvaluation(userGroup));
+        tasks.push(taskValidation(userGroup));
     }
 
     return tasks;
@@ -2081,7 +2081,7 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
     };
 }
 
-const taskEvaluation = (userGroup: UserGroup): StudyTask => {
+const taskValidation = (userGroup: UserGroup): StudyTask => {
     const interactionMode = userGroup === 'PC'
         ? InteractionMode.Compatibility
         : InteractionMode.Full;
@@ -2124,7 +2124,7 @@ const taskEvaluation = (userGroup: UserGroup): StudyTask => {
 
     const visible = ['a1', 'a2', 'class'];
     const included = [];
-    const { state: initialState, sampleIndices } = evaluationDataset(visible, included, 200);
+    const { state: initialState, sampleIndices } = validationDataset(visible, included, 200);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';

@@ -1,6 +1,6 @@
 import { createSyntheticTestDataset } from './datasets/synthetic_test';
 import { createApplicationDataset } from './datasets/application';
-import { createEvaluationDataset } from './datasets/evaluation';
+import { createValidationDataset } from './datasets/validation';
 
 import { Props } from 'types';
 
@@ -32,9 +32,9 @@ export function applicationDataset(visible: string[], include: string[], samples
     };
 }
 
-export function evaluationDataset(visible: string[], include: string[], samples?: number): { state: Props, sampleIndices: number[] } {
+export function validationDataset(visible: string[], include: string[], samples?: number): { state: Props, sampleIndices: number[] } {
     const included = new Set([...visible, ...include]);
-    const { dataset, sampleIndices } = createEvaluationDataset(Array.from(included), samples);
+    const { dataset, sampleIndices } = createValidationDataset(Array.from(included), samples);
     const state = {
         axes: dataset,
         order: visible,
