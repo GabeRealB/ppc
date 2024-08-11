@@ -69,9 +69,10 @@ import StarIcon from '@mui/icons-material/Star';
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, applicationDataset, validationDataset, derivationDataset, derivationControlDataset } from './datasets';
+import { syntheticTestDataset, applicationDataset, applicationControlDataset, validationDataset, derivationDataset, derivationControlDataset } from './datasets';
 
 import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
+import taskApplicationControlProbabilityCurves from './resources/task_application_control_probability_curves.png'
 import taskEvaluationCurvesA from './resources/task_evaluation_curves_a.png'
 import taskEvaluationCurvesB from './resources/task_evaluation_curves_b.png'
 
@@ -1954,6 +1955,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
 
     if (taskMode === 'Full' || taskMode === 'Eval') {
         tasks.push(taskApplication(userGroup));
+        tasks.push(taskApplicationControl(userGroup));
         tasks.push(taskValidation(userGroup));
         tasks.push(taskDerivation(userGroup));
         tasks.push(taskDerivationControl(userGroup));
@@ -2049,6 +2051,148 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
     const visible = ['a1', 'a2'];
     const included = [];
     const { state: initialState, sampleIndices } = applicationDataset(visible, included, 300);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        confidence: undefined,
+        difficulty: undefined,
+    };
+
+    const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { confidence, difficulty } = taskResult;
+
+        const updateOverallConfidence = (e, value) => {
+            taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateDifficulty = (e, value) => {
+            taskResult.difficulty = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate your confidence:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='confidence'
+                        value={confidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate the difficulty of the task:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='difficulty'
+                        value={difficulty}
+                        max={6}
+                        size='large'
+                        onChange={updateDifficulty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
+    };
+
+    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
+        if (!brushes) {
+            return false;
+        }
+
+        if (taskResult.confidence === undefined) {
+            return false;
+        }
+        if (taskResult.difficulty === undefined) {
+            return false;
+        }
+
+        let hasBrushed = false;
+        for (const [_, labelBrushes] of Object.entries(brushes)) {
+            if ('class' in labelBrushes) {
+                return false;
+            }
+            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
+        }
+
+        return hasBrushed;
+    }
+
+    return {
+        name: 'Applying existing probability curves.',
+        shortDescription: 'Select the entries with a selection probability p, where 0% < p ≤ 25%.',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResult,
+        taskResultInput,
+        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
+    };
+}
+
+const taskApplicationControl = (userGroup: UserGroup): StudyTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Full
+        : InteractionMode.Compatibility;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For this task, you will look into a synthetic dataset consisting
+                    of the attributes <i>A1</i> and <i>A2</i>. This task tests the
+                    ability of a user, to faithfully recreate known selections.
+                    To that end, you are provided with the probability curves for
+                    both attributes <i>A1</i> and <i>A2</i>:
+                    <img src={taskApplicationControlProbabilityCurves} style={{ objectFit: 'fill' }} />
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    <b>Task:</b><br />
+                    Given the provided information, <b>select the entries that have a
+                        selection probability <i>p</i>, with 0% &lt; <i>p</i> &le; 25%</b>.
+                    As a reminder - the selection probability of each entry is derived by
+                    multiplying the probability of the entry on each individual attribute.
+                    For instance, if an entry passes through a point with a selection
+                    probability of <b>70%</b> on <i>A1</i> and <b>50%</b> on <i>A2</i>,
+                    the final selection probability amounts to <b>35%</b>.
+                    <br />
+                    <b>Rate your confidence</b> of being able to correctly select the requested
+                    entries. Finally, <b>rate the difficulty</b> of the task on a scale
+                    of <b>one star (very easy)</b> to <b>six stars (very difficult)</b>.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['a1', 'a2'];
+    const included = [];
+    const { state: initialState, sampleIndices } = applicationControlDataset(visible, included, 300);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
