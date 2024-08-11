@@ -111,7 +111,7 @@ def export_json(dataset):
         }
     }
 
-    file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'output.json')
+    file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'output_a.json')
     with open(file_path, 'w') as f:
         json.dump(obj, f, indent=4)
 
