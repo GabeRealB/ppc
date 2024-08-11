@@ -2211,6 +2211,7 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
                     >
                         <FormControlLabel value='a' control={<Radio />} label='A' />
                         <FormControlLabel value='b' control={<Radio />} label='B' />
+                        <FormControlLabel value='other' control={<Radio />} label='Other' />
                     </RadioGroup>
                 </Container>
                 <Typography variant='subtitle1' marginY={2}>
