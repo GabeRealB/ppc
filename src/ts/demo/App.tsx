@@ -2048,7 +2048,7 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
 
     const visible = ['a1', 'a2'];
     const included = [];
-    const { state: initialState, sampleIndices } = applicationDataset(visible, included, 500);
+    const { state: initialState, sampleIndices } = applicationDataset(visible, included, 300);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
@@ -2190,7 +2190,7 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
 
     const visible = ['a1', 'a2', 'class'];
     const included = [];
-    const { state: initialState, sampleIndices } = validationDataset(visible, included, 500);
+    const { state: initialState, sampleIndices } = validationDataset(visible, included, 300);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
