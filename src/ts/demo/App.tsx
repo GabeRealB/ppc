@@ -1950,7 +1950,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
     const tasks = [];
 
     if (taskMode === 'Full' || taskMode === 'Tutorial') {
-        tasks.push(taskTutorial(userGroup));
+        tasks.push(taskTutorial());
     }
 
     if (taskMode === 'Full' || taskMode === 'Eval') {
@@ -1964,10 +1964,8 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
     return tasks;
 }
 
-const taskTutorial = (userGroup: UserGroup): StudyTask => {
-    const interactionMode = userGroup === 'PC'
-        ? InteractionMode.Compatibility
-        : InteractionMode.Full;
+const taskTutorial = (): StudyTask => {
+    const interactionMode = InteractionMode.Full;
 
     const buildInstructions = [() => {
         return (
