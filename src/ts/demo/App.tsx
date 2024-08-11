@@ -69,7 +69,7 @@ import StarIcon from '@mui/icons-material/Star';
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, applicationDataset, validationDataset, derivationDataset } from './datasets';
+import { syntheticTestDataset, applicationDataset, validationDataset, derivationDataset, derivationControlDataset } from './datasets';
 
 import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
 import taskEvaluationCurvesA from './resources/task_evaluation_curves_a.png'
@@ -1520,8 +1520,9 @@ const ColorSettings = (
     setProps: (newProps) => void,
     logPPCEvent: (newProps) => void
 ) => {
-    const { userGroup, tasks, currentTask } = demo;
+    const { tasks, currentTask } = demo;
     const { colors, colorBar, axes } = ppc;
+    const interactionMode = ppc.interactionMode ? ppc.interactionMode : InteractionMode.Full;
 
     if (tasks[currentTask].disableColors) {
         return (undefined);
@@ -1717,7 +1718,7 @@ const ColorSettings = (
                             value={'attribute_density'}
                             label={'Dens.'}
                         />
-                        {userGroup === 'PPC' ? <FormControlLabel
+                        {interactionMode === InteractionMode.Restricted || interactionMode == InteractionMode.Full ? <FormControlLabel
                             control={<Radio />}
                             value={'probability'}
                             label={'Prob.'}
@@ -1955,6 +1956,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
         tasks.push(taskApplication(userGroup));
         tasks.push(taskValidation(userGroup));
         tasks.push(taskDerivation(userGroup));
+        tasks.push(taskDerivationControl(userGroup));
     }
 
     return tasks;
@@ -2033,7 +2035,7 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
                     probability of <b>70%</b> on <i>A1</i> and <b>50%</b> on <i>A2</i>,
                     the final selection probability amounts to <b>35%</b>.
                     <br />
-                    Rate your confidence of being able to correctly select the requested
+                    <b>Rate your confidence</b> of being able to correctly select the requested
                     entries.
                     <br />
                     <br />
@@ -2152,7 +2154,7 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
                     curves. The correct set of curves will assign each entry with
                     a <b>selection probability between 25% and 75% to the class C1</b>.
                     <br />
-                    Rate your confidence of being able to correctly identify the
+                    <b>Rate your confidence</b> of being able to correctly identify the
                     correct probability curves.
                     <br />
                     <br />
@@ -2281,8 +2283,10 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
                     the task, you may not have any brush applied to the <i>target</i>
                     &#32;attribute, but may utilize it otherwise.
                     <br />
-                    Rate your confidence of being able to correctly select the requested
-                    entries.
+                    <b>Rate your confidence</b> of being able to correctly select the requested
+                    entries. Additionally, <b>estimate the certatinty</b> on a scale of <b>one star
+                        (very uncertain)</b> to <b>six stars (very certain)</b> of the selected entries
+                    belonging to the wrong classes.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2306,15 +2310,21 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
     const taskResult = {
         sampleIndices,
         confidence: undefined,
+        certainty: undefined,
     };
 
     const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
         const { task, forceUpdate } = props;
         const { taskResult } = task;
-        const { confidence } = taskResult;
+        const { confidence, certainty } = taskResult;
 
         const updateOverallConfidence = (e, value) => {
             taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateCertainty = (e, value) => {
+            taskResult.certainty = value ? value : undefined;
             forceUpdate();
         };
 
@@ -2333,6 +2343,19 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
                         emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                     />
                 </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Estimate the uncertainty:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='certainty'
+                        value={certainty}
+                        max={6}
+                        size='large'
+                        onChange={updateCertainty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
             </>);
     };
 
@@ -2342,6 +2365,9 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
         }
 
         if (taskResult.confidence === undefined) {
+            return false;
+        }
+        if (taskResult.certainty === undefined) {
             return false;
         }
 
@@ -2359,6 +2385,146 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
     return {
         name: 'Select the Iris Versicolour.',
         shortDescription: 'Select the entries that are classified as "Iris Versicolour".',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResult,
+        taskResultInput,
+        canContinue: (ppc: Props) => checkCompleted(ppc.brushes)
+    };
+}
+
+const taskDerivationControl = (userGroup: UserGroup): StudyTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Full
+        : InteractionMode.Compatibility;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For this task, you will look into a subset of the Penguins dataset.
+                    The dataset includes flipper lengths and body masses of various penguin
+                    species, including the <i>Chinstrap</i>, the <i>Adélie</i>, and the <i>Gentoo</i>.
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    <b>Task:</b><br />
+                    Given the provided information, <b>select the entries that are
+                        classified as <i>Gentoo</i></b>.
+                    For the selection you must try to maximize the number of entries
+                    that are truly classified as <i>Gentoo</i>, while minimizing
+                    the number of entries belonging to other iris types. To fulfill
+                    the task, you may not have any brush applied to the <i>species</i>
+                    &#32;attribute, but may utilize it otherwise.
+                    <br />
+                    <b>Rate your confidence</b> of being able to correctly select the requested
+                    entries. Additionally, <b>estimate the certatinty</b> on a scale of <b>one star
+                        (very uncertain)</b> to <b>six stars (very certain)</b> of the selected entries
+                    belonging to the wrong classes.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['flipper_length_mm', 'body_mass_g', 'species'];
+    const included = [];
+    const { state: initialState, sampleIndices } = derivationControlDataset(visible, included, 500);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        confidence: undefined,
+        certainty: undefined,
+    };
+
+    const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { confidence, certainty } = taskResult;
+
+        const updateOverallConfidence = (e, value) => {
+            taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateCertainty = (e, value) => {
+            taskResult.certainty = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate your confidence:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='confidence'
+                        value={confidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Estimate the uncertainty:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='certainty'
+                        value={certainty}
+                        max={6}
+                        size='large'
+                        onChange={updateCertainty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
+    };
+
+    const checkCompleted = (brushes?: { [id: string]: Brushes }) => {
+        if (!brushes) {
+            return false;
+        }
+
+        if (taskResult.confidence === undefined) {
+            return false;
+        }
+        if (taskResult.certainty === undefined) {
+            return false;
+        }
+
+        let hasBrushed = false;
+        for (const [_, labelBrushes] of Object.entries(brushes)) {
+            if ('species' in labelBrushes) {
+                return false;
+            }
+            hasBrushed = hasBrushed || Object.keys(labelBrushes).length != 0;
+        }
+
+        return hasBrushed;
+    }
+
+    return {
+        name: 'Select the Gentoo penguins.',
+        shortDescription: 'Select the entries that are classified as "Gentoo".',
         instructions: buildInstructions,
         viewed: false,
         initialState,
