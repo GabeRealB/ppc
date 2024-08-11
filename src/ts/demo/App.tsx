@@ -69,12 +69,22 @@ import StarIcon from '@mui/icons-material/Star';
 import PPC from '../components/PPC';
 import { Axis, Props, InteractionMode, Brushes, LabelInfo } from '../types'
 
-import { syntheticTestDataset, applicationDataset, applicationControlDataset, validationDataset, derivationDataset, derivationControlDataset } from './datasets';
+import {
+    syntheticTestDataset,
+    applicationDataset,
+    applicationControlDataset,
+    validationDataset,
+    validationControlDataset,
+    derivationDataset,
+    derivationControlDataset
+} from './datasets';
 
 import taskApplicationProbabilityCurves from './resources/task_application_probability_curves.png'
 import taskApplicationControlProbabilityCurves from './resources/task_application_control_probability_curves.png'
 import taskEvaluationCurvesA from './resources/task_evaluation_curves_a.png'
 import taskEvaluationCurvesB from './resources/task_evaluation_curves_b.png'
+import taskEvaluationControlCurvesA from './resources/task_evaluation_control_curves_a.png'
+import taskEvaluationControlCurvesB from './resources/task_evaluation_control_curves_b.png'
 
 const EPSILON = 1.17549435082228750797e-38;
 const VERSION = 2;
@@ -1957,6 +1967,7 @@ const constructTasks = (userGroup: UserGroup, taskMode: TaskMode) => {
         tasks.push(taskApplication(userGroup));
         tasks.push(taskApplicationControl(userGroup));
         tasks.push(taskValidation(userGroup));
+        tasks.push(taskValidationControl(userGroup));
         tasks.push(taskDerivation(userGroup));
         tasks.push(taskDerivationControl(userGroup));
     }
@@ -2333,6 +2344,160 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
     const visible = ['a1', 'a2', 'class'];
     const included = [];
     const { state: initialState, sampleIndices } = validationDataset(visible, included, 300);
+    initialState.interactionMode = interactionMode;
+    initialState.labels = { 'Default': {} };
+    initialState.activeLabel = 'Default';
+    initialState.colors = {
+        selected: { scale: 'magma', color: 0.5 }
+    };
+    initialState.colorBar = 'visible';
+    initialState.powerProfile = 'high';
+
+    const taskResult = {
+        sampleIndices,
+        correctCurves: undefined,
+        confidence: undefined,
+        difficulty: undefined,
+    };
+
+    const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
+        const { task, forceUpdate } = props;
+        const { taskResult } = task;
+        const { correctCurves, confidence, difficulty } = taskResult;
+
+        const updateCorrectCurves = (e, value) => {
+            taskResult.correctCurves = value ? value : undefined;
+            forceUpdate();
+        }
+
+        const updateOverallConfidence = (e, value) => {
+            taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateDifficulty = (e, value) => {
+            taskResult.difficulty = value ? value : undefined;
+            forceUpdate();
+        };
+
+        return (
+            <>
+                <Typography variant='subtitle1' marginY={2}>
+                    Select the correct curves:
+                </Typography>
+                <Container>
+                    <RadioGroup
+                        row
+                        name='curve-selection'
+                        value={correctCurves}
+                        onChange={updateCorrectCurves}
+                    >
+                        <FormControlLabel value='a' control={<Radio />} label='A' />
+                        <FormControlLabel value='b' control={<Radio />} label='B' />
+                        <FormControlLabel value='other' control={<Radio />} label='Other' />
+                    </RadioGroup>
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate your confidence:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='confidence'
+                        value={confidence}
+                        max={6}
+                        size='large'
+                        onChange={updateOverallConfidence}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate the difficulty of the task:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='difficulty'
+                        value={difficulty}
+                        max={6}
+                        size='large'
+                        onChange={updateDifficulty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
+            </>);
+    };
+
+    const checkCompleted = () => {
+        if (taskResult.correctCurves == undefined) {
+            return false;
+        }
+        if (taskResult.confidence === undefined) {
+            return false;
+        }
+        if (taskResult.difficulty === undefined) {
+            return false;
+        }
+
+        return true;
+    }
+
+    return {
+        name: 'Select the right curves.',
+        shortDescription: 'Select which curves fit the data best.',
+        instructions: buildInstructions,
+        viewed: false,
+        initialState,
+        finalState: null,
+        taskResult,
+        taskResultInput,
+        canContinue: (ppc: Props) => checkCompleted()
+    };
+}
+
+const taskValidationControl = (userGroup: UserGroup): StudyTask => {
+    const interactionMode = userGroup === 'PC'
+        ? InteractionMode.Full
+        : InteractionMode.Compatibility;
+
+    const buildInstructions = [() => {
+        return (
+            <>
+                <DialogContentText>
+                    For this task, you will look into another synthetic dataset
+                    consisting of the attributes <i>A1</i>, <i>A2</i> and <i>Class</i>.
+                    This task tests the ability of a user, identify the set of curves
+                    matching the computed classes of the entries. To that end, you are
+                    provided with two sets of probability curves (denoted <b>(a)</b>
+                    &#32;and <b>(b)</b>):
+                    <img src={taskEvaluationControlCurvesA} style={{ objectFit: 'fill' }} />
+                    <img src={taskEvaluationControlCurvesB} style={{ objectFit: 'fill' }} />
+                </DialogContentText>
+            </>);
+    },
+    () => {
+        return (
+            <>
+                <DialogContentText>
+                    <b>Task:</b><br />
+                    Given the two sets of probability curves, <b>select whether the
+                        curves (a) or (b) better fit the data</b>. You may use the
+                    provided <i>Class</i> attribute to identify the currect set of
+                    curves. The correct set of curves will assign each entry with
+                    a <b>selection probability between 25% and 75% to the class C1</b>.
+                    <br />
+                    <b>Rate your confidence</b> of being able to correctly identify the
+                    correct probability curves. Finally, <b>rate the difficulty</b> of the task
+                    on a scale of <b>one star (very easy)</b> to <b>six stars (very difficult)</b>.
+                    <br />
+                    <br />
+                    Press the <b>Next</b> button on the bottom right, once you feel
+                    that you have fulfilled the task.
+                </DialogContentText>
+            </>);
+    }];
+
+    const visible = ['a1', 'a2', 'class'];
+    const included = [];
+    const { state: initialState, sampleIndices } = validationControlDataset(visible, included, 300);
     initialState.interactionMode = interactionMode;
     initialState.labels = { 'Default': {} };
     initialState.activeLabel = 'Default';
