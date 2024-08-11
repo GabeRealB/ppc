@@ -1997,7 +1997,8 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
                     the final selection probability amounts to <b>35%</b>.
                     <br />
                     <b>Rate your confidence</b> of being able to correctly select the requested
-                    entries.
+                    entries. Finally, <b>rate the difficulty</b> of the task on a scale
+                    of <b>one star (very easy)</b> to <b>six stars (very difficult)</b>.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2021,15 +2022,21 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
     const taskResult = {
         sampleIndices,
         confidence: undefined,
+        difficulty: undefined,
     };
 
     const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
         const { task, forceUpdate } = props;
         const { taskResult } = task;
-        const { confidence } = taskResult;
+        const { confidence, difficulty } = taskResult;
 
         const updateOverallConfidence = (e, value) => {
             taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateDifficulty = (e, value) => {
+            taskResult.difficulty = value ? value : undefined;
             forceUpdate();
         };
 
@@ -2048,6 +2055,19 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
                         emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                     />
                 </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate the difficulty of the task:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='difficulty'
+                        value={difficulty}
+                        max={6}
+                        size='large'
+                        onChange={updateDifficulty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
             </>);
     };
 
@@ -2057,6 +2077,9 @@ const taskApplication = (userGroup: UserGroup): StudyTask => {
         }
 
         if (taskResult.confidence === undefined) {
+            return false;
+        }
+        if (taskResult.difficulty === undefined) {
             return false;
         }
 
@@ -2116,7 +2139,8 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
                     a <b>selection probability between 25% and 75% to the class C1</b>.
                     <br />
                     <b>Rate your confidence</b> of being able to correctly identify the
-                    correct probability curves.
+                    correct probability curves. Finally, <b>rate the difficulty</b> of the task
+                    on a scale of <b>one star (very easy)</b> to <b>six stars (very difficult)</b>.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2141,12 +2165,13 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
         sampleIndices,
         correctCurves: undefined,
         confidence: undefined,
+        difficulty: undefined,
     };
 
     const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
         const { task, forceUpdate } = props;
         const { taskResult } = task;
-        const { correctCurves, confidence } = taskResult;
+        const { correctCurves, confidence, difficulty } = taskResult;
 
         const updateCorrectCurves = (e, value) => {
             taskResult.correctCurves = value ? value : undefined;
@@ -2155,6 +2180,11 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
 
         const updateOverallConfidence = (e, value) => {
             taskResult.confidence = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateDifficulty = (e, value) => {
+            taskResult.difficulty = value ? value : undefined;
             forceUpdate();
         };
 
@@ -2188,6 +2218,19 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
                         emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                     />
                 </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate the difficulty of the task:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='difficulty'
+                        value={difficulty}
+                        max={6}
+                        size='large'
+                        onChange={updateDifficulty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
             </>);
     };
 
@@ -2195,8 +2238,10 @@ const taskValidation = (userGroup: UserGroup): StudyTask => {
         if (taskResult.correctCurves == undefined) {
             return false;
         }
-
         if (taskResult.confidence === undefined) {
+            return false;
+        }
+        if (taskResult.difficulty === undefined) {
             return false;
         }
 
@@ -2248,7 +2293,8 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
                     <b>Rate your confidence</b> of being able to correctly select the requested
                     entries. Additionally, <b>estimate the certatinty</b> on a scale of <b>one star
                         (very uncertain)</b> to <b>six stars (very certain)</b> of the selected entries
-                    belonging to the wrong classes.
+                    belonging to the wrong classes. Finally, <b>rate the difficulty</b> of the task
+                    on a scale of <b>one star (very easy)</b> to <b>six stars (very difficult)</b>.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2273,12 +2319,13 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
         sampleIndices,
         confidence: undefined,
         certainty: undefined,
+        difficulty: undefined,
     };
 
     const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
         const { task, forceUpdate } = props;
         const { taskResult } = task;
-        const { confidence, certainty } = taskResult;
+        const { confidence, certainty, difficulty } = taskResult;
 
         const updateOverallConfidence = (e, value) => {
             taskResult.confidence = value ? value : undefined;
@@ -2287,6 +2334,11 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
 
         const updateCertainty = (e, value) => {
             taskResult.certainty = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateDifficulty = (e, value) => {
+            taskResult.difficulty = value ? value : undefined;
             forceUpdate();
         };
 
@@ -2318,6 +2370,19 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
                         emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                     />
                 </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate the difficulty of the task:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='difficulty'
+                        value={difficulty}
+                        max={6}
+                        size='large'
+                        onChange={updateDifficulty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
             </>);
     };
 
@@ -2330,6 +2395,9 @@ const taskDerivation = (userGroup: UserGroup): StudyTask => {
             return false;
         }
         if (taskResult.certainty === undefined) {
+            return false;
+        }
+        if (taskResult.difficulty === undefined) {
             return false;
         }
 
@@ -2388,7 +2456,8 @@ const taskDerivationControl = (userGroup: UserGroup): StudyTask => {
                     <b>Rate your confidence</b> of being able to correctly select the requested
                     entries. Additionally, <b>estimate the certatinty</b> on a scale of <b>one star
                         (very uncertain)</b> to <b>six stars (very certain)</b> of the selected entries
-                    belonging to the wrong classes.
+                    belonging to the wrong classes. Finally, <b>rate the difficulty</b> of the task
+                    on a scale of <b>one star (very easy)</b> to <b>six stars (very difficult)</b>.
                     <br />
                     <br />
                     Press the <b>Next</b> button on the bottom right, once you feel
@@ -2413,12 +2482,13 @@ const taskDerivationControl = (userGroup: UserGroup): StudyTask => {
         sampleIndices,
         confidence: undefined,
         certainty: undefined,
+        difficulty: undefined,
     };
 
     const taskResultInput = (props: { task: StudyTask, forceUpdate: () => void }): React.JSX.Element => {
         const { task, forceUpdate } = props;
         const { taskResult } = task;
-        const { confidence, certainty } = taskResult;
+        const { confidence, certainty, difficulty } = taskResult;
 
         const updateOverallConfidence = (e, value) => {
             taskResult.confidence = value ? value : undefined;
@@ -2427,6 +2497,11 @@ const taskDerivationControl = (userGroup: UserGroup): StudyTask => {
 
         const updateCertainty = (e, value) => {
             taskResult.certainty = value ? value : undefined;
+            forceUpdate();
+        };
+
+        const updateDifficulty = (e, value) => {
+            taskResult.difficulty = value ? value : undefined;
             forceUpdate();
         };
 
@@ -2458,6 +2533,19 @@ const taskDerivationControl = (userGroup: UserGroup): StudyTask => {
                         emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
                     />
                 </Container>
+                <Typography variant='subtitle1' marginY={2}>
+                    Rate the difficulty of the task:
+                </Typography>
+                <Container>
+                    <Rating
+                        name='difficulty'
+                        value={difficulty}
+                        max={6}
+                        size='large'
+                        onChange={updateDifficulty}
+                        emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize='inherit' />}
+                    />
+                </Container>
             </>);
     };
 
@@ -2470,6 +2558,9 @@ const taskDerivationControl = (userGroup: UserGroup): StudyTask => {
             return false;
         }
         if (taskResult.certainty === undefined) {
+            return false;
+        }
+        if (taskResult.difficulty === undefined) {
             return false;
         }
 
