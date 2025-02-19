@@ -900,18 +900,31 @@ function FinishPage(app: App) {
     const { demo } = app.state;
     const { results, userId, userGroup, variant, deadlinePassed, dryRun } = demo;
 
+    type Download = {
+        name: string;
+        json: string;
+        compressed: string;
+    };
+    
+    const [download, setDownload] = useState<Download>(null);
     const [finished, setFinished] = useState<{ error: any } | boolean>(deadlinePassed);
 
     useEffect(() => {
-        if (finished) {
-            return;
-        }
-
         const fileName = `${uuid()}.bin`;
         const fileContents = { userId, userGroup, variant, results, VERSION };
         const fileContentsJSON = JSON.stringify(fileContents);
         const fileContentsCompressed = pako.deflate(fileContentsJSON);
 
+        const jsonBlob = new Blob([fileContentsJSON], { type: 'application/json' });
+        const compressedBlob = new Blob([fileContentsCompressed], { type: 'application/octet-stream;deflate' });
+        const jsonUrl = URL.createObjectURL(jsonBlob);
+        const compressedUrl = URL.createObjectURL(compressedBlob);
+        setDownload({name: fileName, json: jsonUrl, compressed: compressedUrl});
+
+        if (finished) {
+            return;
+        }
+        
         if (dryRun) {
             console.info('Dry run results', fileName, fileContents, fileContentsCompressed);
             console.info('Raw length', fileContentsJSON.length);
@@ -967,11 +980,37 @@ function FinishPage(app: App) {
                         </Typography>
                     </> : undefined
             }
+            { 
+              download !== null ?
+                    <>
+                      <Box marginY={2}>
+                          <Button
+                              variant='contained'
+                              href={download.compressed}
+                              download={download.name}
+                              fullWidth
+                          >
+                            Download results
+                          </Button>
+                      </Box>
+                      <Box marginY={2}>
+                          <Button
+                              variant='contained'
+                              href={download.json}
+                              download={download.name.replace('.bin', '.json')}
+                              fullWidth
+                          >
+                            Download results (JSON)
+                          </Button>
+                      </Box>
+                    </> : undefined
+            }
             {
                 finished && typeof (finished) == 'object' ?
                     <Alert severity='error'>
                         Could not submit results. Error: {finished.error}.
-                    </Alert> : undefined}
+                    </Alert> : undefined
+            }
         </Container >
     )
 }
