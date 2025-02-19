@@ -52,20 +52,18 @@ impl Device {
         &self,
         descriptor: BindGroupLayoutDescriptor<'_, N>,
     ) -> BindGroupLayout {
-        let layout = self.device.create_bind_group_layout(&descriptor.into());
-        if layout.is_falsy() {
-            panic!("could not create bind group layout");
-        }
-
+        let layout = self
+            .device
+            .create_bind_group_layout(&descriptor.into())
+            .expect("could not create bind group layout");
         BindGroupLayout { layout }
     }
 
     pub fn create_buffer(&self, descriptor: BufferDescriptor<'_>) -> Buffer {
-        let buffer = self.device.create_buffer(&descriptor.into());
-        if buffer.is_falsy() {
-            panic!("could not create buffer");
-        }
-
+        let buffer = self
+            .device
+            .create_buffer(&descriptor.into())
+            .expect("could not create buffer");
         Buffer { buffer }
     }
 
@@ -127,11 +125,10 @@ impl Device {
         &self,
         descriptor: RenderPipelineDescriptor<'_, N>,
     ) -> RenderPipeline {
-        let pipeline = self.device.create_render_pipeline(&descriptor.into());
-        if pipeline.is_falsy() {
-            panic!("could not create render pipeline");
-        }
-
+        let pipeline = self
+            .device
+            .create_render_pipeline(&descriptor.into())
+            .expect("could not create render pipeline");
         RenderPipeline { pipeline }
     }
 
@@ -176,11 +173,10 @@ impl Device {
         &self,
         descriptor: TextureDescriptor<'_, N, M>,
     ) -> Texture {
-        let texture = self.device.create_texture(&descriptor.into());
-        if texture.is_falsy() {
-            panic!("could not create texture");
-        }
-
+        let texture = self
+            .device
+            .create_texture(&descriptor.into())
+            .expect("could not create texture");
         Texture { texture }
     }
 }
@@ -229,12 +225,14 @@ impl Queue {
             .unwrap();
         let memory_data = memory.buffer().dyn_into::<js_sys::ArrayBuffer>().unwrap();
         let memory_data = js_sys::DataView::new(&memory_data, data_offset, data_size);
-        self.queue.write_buffer_with_u32_and_buffer_source_and_u32(
-            &buffer.buffer,
-            buffer_offset,
-            &memory_data,
-            0,
-        )
+        self.queue
+            .write_buffer_with_u32_and_buffer_source_and_u32(
+                &buffer.buffer,
+                buffer_offset,
+                &memory_data,
+                0,
+            )
+            .expect("could not write into buffer")
     }
 
     pub fn write_buffer_single<T: HostSharable>(
@@ -249,7 +247,8 @@ impl Queue {
 
     pub fn write_buffer_raw(&self, buffer: &Buffer, buffer_offset: u32, data: &[u8]) {
         self.queue
-            .write_buffer_with_u32_and_u8_array(&buffer.buffer, buffer_offset, data)
+            .write_buffer_with_u32_and_u8_slice(&buffer.buffer, buffer_offset, data)
+            .expect("could not write into buffer")
     }
 }
 
@@ -314,7 +313,7 @@ impl Buffer {
     }
 
     pub fn mapped_range(&self) -> js_sys::ArrayBuffer {
-        self.buffer.get_mapped_range()
+        self.buffer.get_mapped_range().unwrap()
     }
 
     pub unsafe fn get_mapped_range<T: HostSharable>(&self) -> Box<[T]> {
@@ -325,7 +324,7 @@ impl Buffer {
         let num_elements = self.size() / std::mem::size_of::<T>();
         let mut elements = Vec::<MaybeUninit<T>>::with_capacity(num_elements);
 
-        let mapped_range = self.buffer.get_mapped_range();
+        let mapped_range = self.buffer.get_mapped_range().unwrap();
         let mapped_range_u8 = js_sys::Uint8Array::new(&mapped_range);
 
         let elements_ptr = elements.as_mut_ptr().cast::<u8>();
@@ -390,11 +389,10 @@ impl CommandEncoder {
         &self,
         descriptor: RenderPassDescriptor<'_, N>,
     ) -> RenderPassEncoder {
-        let encoder = self.encoder.begin_render_pass(&descriptor.into());
-        if encoder.is_falsy() {
-            panic!("could not begin render pass")
-        }
-
+        let encoder = self
+            .encoder
+            .begin_render_pass(&descriptor.into())
+            .expect("could not begin render pass");
         RenderPassEncoder { encoder }
     }
 
@@ -420,13 +418,15 @@ impl CommandEncoder {
         destination_offset: usize,
         size: usize,
     ) {
-        self.encoder.copy_buffer_to_buffer_with_u32_and_u32_and_u32(
-            &source.buffer,
-            source_offset as u32,
-            &destination.buffer,
-            destination_offset as u32,
-            size as u32,
-        )
+        self.encoder
+            .copy_buffer_to_buffer_with_u32_and_u32_and_u32(
+                &source.buffer,
+                source_offset as u32,
+                &destination.buffer,
+                destination_offset as u32,
+                size as u32,
+            )
+            .expect("could not perform buffer copy")
     }
 
     pub fn finish(&self, descriptor: Option<CommandBufferDescriptor<'_>>) -> CommandBuffer {
@@ -486,7 +486,7 @@ impl ComputePassEncoder {
     }
 
     pub fn set_bind_group(&self, index: u32, bind_group: &BindGroup) {
-        self.encoder.set_bind_group(index, &bind_group.group)
+        self.encoder.set_bind_group(index, Some(&bind_group.group))
     }
 }
 
@@ -521,6 +521,7 @@ impl RenderPassEncoder {
         let [r, g, b, a] = color;
         self.encoder
             .set_blend_constant_with_gpu_color_dict(&web_sys::GpuColorDict::new(a, b, g, r))
+            .expect("could not set blend constant")
     }
 
     pub fn set_scissor_rect(&self, x: u32, y: u32, width: u32, height: u32) {
@@ -545,7 +546,7 @@ impl RenderPassEncoder {
     }
 
     pub fn set_bind_group(&self, index: u32, bind_group: &BindGroup) {
-        self.encoder.set_bind_group(index, &bind_group.group)
+        self.encoder.set_bind_group(index, Some(&bind_group.group))
     }
 
     pub fn draw(&self, vertex_count: usize) {
@@ -591,12 +592,12 @@ impl RenderPassEncoder {
     }
 
     pub fn set_vertex_buffer(&self, slot: u32, buffer: &Buffer) {
-        self.encoder.set_vertex_buffer(slot, &buffer.buffer)
+        self.encoder.set_vertex_buffer(slot, Some(&buffer.buffer))
     }
 
     pub fn set_vertex_buffer_with_offset(&self, slot: u32, buffer: &Buffer, offset: usize) {
         self.encoder
-            .set_vertex_buffer_with_u32(slot, &buffer.buffer, offset as u32)
+            .set_vertex_buffer_with_u32(slot, Some(&buffer.buffer), offset as u32)
     }
 
     pub fn set_vertex_buffer_with_offset_and_size(
@@ -608,7 +609,7 @@ impl RenderPassEncoder {
     ) {
         self.encoder.set_vertex_buffer_with_u32_and_u32(
             slot,
-            &buffer.buffer,
+            Some(&buffer.buffer),
             offset as u32,
             size as u32,
         )
@@ -729,7 +730,7 @@ impl ShaderModule {
     }
 
     pub async fn compilation_info(&self) -> Result<web_sys::GpuCompilationInfo, JsValue> {
-        let promise = self.module.compilation_info();
+        let promise = self.module.get_compilation_info();
         let compilation_info = JsFuture::from(promise).await?;
         compilation_info.dyn_into::<web_sys::GpuCompilationInfo>()
     }
@@ -793,7 +794,9 @@ impl Texture {
             self.texture.create_view()
         };
 
-        TextureView { view }
+        TextureView {
+            view: view.expect("could not create texure view"),
+        }
     }
 }
 
@@ -828,10 +831,9 @@ impl<'a, const N: usize> From<BindGroupDescriptor<'a, N>> for web_sys::GpuBindGr
             .map::<_, web_sys::GpuBindGroupEntry>(|e| e.into());
         let entries = js_sys::Array::from_iter(entries);
 
-        let mut descriptor = web_sys::GpuBindGroupDescriptor::new(&entries, &value.layout.layout);
-
+        let descriptor = web_sys::GpuBindGroupDescriptor::new(&entries, &value.layout.layout);
         if let Some(label) = value.label {
-            descriptor.label(&label);
+            descriptor.set_label(&label);
         }
 
         descriptor
@@ -879,13 +881,12 @@ pub struct BufferBinding {
 
 impl From<BufferBinding> for web_sys::GpuBufferBinding {
     fn from(value: BufferBinding) -> Self {
-        let mut binding = web_sys::GpuBufferBinding::new(&value.buffer.buffer);
-
+        let binding = web_sys::GpuBufferBinding::new(&value.buffer.buffer);
         if let Some(offset) = value.offset {
-            binding.offset(offset as f64);
+            binding.set_offset(offset as f64);
         }
         if let Some(size) = value.size {
-            binding.size(size as f64);
+            binding.set_size(size as f64);
         }
 
         binding
@@ -908,10 +909,9 @@ impl<'a, const N: usize> From<BindGroupLayoutDescriptor<'a, N>>
             .map::<_, web_sys::GpuBindGroupLayoutEntry>(|e| e.into());
         let entries = js_sys::Array::from_iter(entries);
 
-        let mut descriptor = web_sys::GpuBindGroupLayoutDescriptor::new(&entries);
-
+        let descriptor = web_sys::GpuBindGroupLayoutDescriptor::new(&entries);
         if let Some(label) = value.label {
-            descriptor.label(&label);
+            descriptor.set_label(&label);
         }
 
         descriptor
@@ -928,12 +928,12 @@ pub struct BindGroupLayoutEntry {
 
 impl From<BindGroupLayoutEntry> for web_sys::GpuBindGroupLayoutEntry {
     fn from(value: BindGroupLayoutEntry) -> Self {
-        let mut entry = web_sys::GpuBindGroupLayoutEntry::new(value.binding, value.visibility.val);
+        let entry = web_sys::GpuBindGroupLayoutEntry::new(value.binding, value.visibility.val);
         match value.resource {
-            BindGroupLayoutEntryResource::Buffer(b) => entry.buffer(&b.into()),
-            BindGroupLayoutEntryResource::Texture(t) => entry.texture(&t.into()),
-            BindGroupLayoutEntryResource::StorageTexture(s) => entry.storage_texture(&s.into()),
-            BindGroupLayoutEntryResource::Sampler(s) => entry.sampler(&s.into()),
+            BindGroupLayoutEntryResource::Buffer(b) => entry.set_buffer(&b.into()),
+            BindGroupLayoutEntryResource::Texture(t) => entry.set_texture(&t.into()),
+            BindGroupLayoutEntryResource::StorageTexture(s) => entry.set_storage_texture(&s.into()),
+            BindGroupLayoutEntryResource::Sampler(s) => entry.set_sampler(&s.into()),
         };
 
         entry
@@ -1029,10 +1029,10 @@ impl From<BufferBindingLayout> for web_sys::GpuBufferBindingLayout {
         let min_binding_size = value.min_binding_size.unwrap_or(0.0);
         let r#type = value.r#type.unwrap_or(BufferBindingType::Uniform).into();
 
-        let mut layout = web_sys::GpuBufferBindingLayout::new();
-        layout.has_dynamic_offset(has_dynamic_offset);
-        layout.min_binding_size(min_binding_size);
-        layout.type_(r#type);
+        let layout = web_sys::GpuBufferBindingLayout::new();
+        layout.set_has_dynamic_offset(has_dynamic_offset);
+        layout.set_min_binding_size(min_binding_size);
+        layout.set_type(r#type);
 
         layout
     }
@@ -1070,11 +1070,13 @@ impl From<BufferDescriptor<'_>> for web_sys::GpuBufferDescriptor {
         let size = value.size as f64;
         let usage = value.usage.0;
 
-        let mut descriptor = web_sys::GpuBufferDescriptor::new(size, usage);
-        value.label.map(|x| descriptor.label(&x));
-        value
-            .mapped_at_creation
-            .map(|x| descriptor.mapped_at_creation(x));
+        let descriptor = web_sys::GpuBufferDescriptor::new(size, usage);
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
+        if let Some(x) = value.mapped_at_creation {
+            descriptor.set_mapped_at_creation(x)
+        }
         descriptor
     }
 }
@@ -1228,12 +1230,16 @@ pub struct TextureBindingLayout {
 
 impl From<TextureBindingLayout> for web_sys::GpuTextureBindingLayout {
     fn from(value: TextureBindingLayout) -> Self {
-        let mut layout = web_sys::GpuTextureBindingLayout::new();
-        value.multisampled.map(|x| layout.multisampled(x));
-        value.sample_type.map(|x| layout.sample_type(x.into()));
-        value
-            .view_dimension
-            .map(|x| layout.view_dimension(x.into()));
+        let layout = web_sys::GpuTextureBindingLayout::new();
+        if let Some(x) = value.multisampled {
+            layout.set_multisampled(x)
+        }
+        if let Some(x) = value.sample_type {
+            layout.set_sample_type(x.into())
+        }
+        if let Some(x) = value.view_dimension {
+            layout.set_view_dimension(x.into())
+        }
         layout
     }
 }
@@ -1627,11 +1633,13 @@ pub struct StorageTextureBindingLayout {
 
 impl From<StorageTextureBindingLayout> for web_sys::GpuStorageTextureBindingLayout {
     fn from(value: StorageTextureBindingLayout) -> Self {
-        let mut layout = web_sys::GpuStorageTextureBindingLayout::new(value.format.into());
-        value.access.map(|x| layout.access(x.into()));
-        value
-            .view_dimension
-            .map(|x| layout.view_dimension(x.into()));
+        let layout = web_sys::GpuStorageTextureBindingLayout::new(value.format.into());
+        if let Some(x) = value.access {
+            layout.set_access(x.into())
+        }
+        if let Some(x) = value.view_dimension {
+            layout.set_view_dimension(x.into())
+        }
         layout
     }
 }
@@ -1658,8 +1666,10 @@ pub struct SamplerBindingLayout {
 
 impl From<SamplerBindingLayout> for web_sys::GpuSamplerBindingLayout {
     fn from(value: SamplerBindingLayout) -> Self {
-        let mut layout = web_sys::GpuSamplerBindingLayout::new();
-        value.r#type.map(|x| layout.type_(x.into()));
+        let layout = web_sys::GpuSamplerBindingLayout::new();
+        if let Some(x) = value.r#type {
+            layout.set_type(x.into())
+        }
         layout
     }
 }
@@ -1691,8 +1701,10 @@ pub struct ShaderModuleDescriptor<'a> {
 
 impl<'a> From<ShaderModuleDescriptor<'a>> for web_sys::GpuShaderModuleDescriptor {
     fn from(value: ShaderModuleDescriptor<'a>) -> Self {
-        let mut descriptor = web_sys::GpuShaderModuleDescriptor::new(&value.code);
-        value.label.map(|l| descriptor.label(&l));
+        let descriptor = web_sys::GpuShaderModuleDescriptor::new(&value.code);
+        if let Some(l) = value.label {
+            descriptor.set_label(&l)
+        }
         descriptor
     }
 }
@@ -1709,8 +1721,10 @@ impl<'a> From<ComputePipelineDescriptor<'a>> for web_sys::GpuComputePipelineDesc
     fn from(value: ComputePipelineDescriptor<'a>) -> Self {
         let layout = value.layout.into();
         let compute = value.compute.into();
-        let mut descriptor = web_sys::GpuComputePipelineDescriptor::new(&layout, &compute);
-        value.label.map(|x| descriptor.label(&x));
+        let descriptor = web_sys::GpuComputePipelineDescriptor::new(&layout, &compute);
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
         descriptor
     }
 }
@@ -1724,7 +1738,9 @@ pub struct ProgrammableStage<'a> {
 
 impl<'a> From<ProgrammableStage<'a>> for web_sys::GpuProgrammableStage {
     fn from(value: ProgrammableStage<'a>) -> Self {
-        web_sys::GpuProgrammableStage::new(value.entry_point, &value.module.module)
+        let stage = web_sys::GpuProgrammableStage::new(&value.module.module);
+        stage.set_entry_point(value.entry_point);
+        stage
     }
 }
 
@@ -1747,26 +1763,21 @@ impl<'a, const N: usize> From<RenderPipelineDescriptor<'a, N>>
         let layout = value.layout.into();
         let vertex = value.vertex.into();
 
-        let mut descriptor = web_sys::GpuRenderPipelineDescriptor::new(&layout, &vertex);
-
+        let descriptor = web_sys::GpuRenderPipelineDescriptor::new(&layout, &vertex);
         if let Some(label) = value.label {
-            descriptor.label(&label);
+            descriptor.set_label(&label);
         }
-
         if let Some(depth_stencil) = value.depth_stencil {
-            descriptor.depth_stencil(&depth_stencil.into());
+            descriptor.set_depth_stencil(&depth_stencil.into());
         }
-
         if let Some(fragment) = value.fragment {
-            descriptor.fragment(&fragment.into());
+            descriptor.set_fragment(&fragment.into());
         }
-
         if let Some(multisample) = value.multisample {
-            descriptor.multisample(&multisample.into());
+            descriptor.set_multisample(&multisample.into());
         }
-
         if let Some(primitive) = value.primitive {
-            descriptor.primitive(&primitive.into());
+            descriptor.set_primitive(&primitive.into());
         }
 
         descriptor
@@ -1802,8 +1813,10 @@ impl<'a, const N: usize> From<PipelineLayoutDescriptor<'a, N>>
     fn from(value: PipelineLayoutDescriptor<'a, N>) -> Self {
         let layouts =
             js_sys::Array::from_iter(value.layouts.map::<_, JsValue>(|l| l.layout.into())).into();
-        let mut descriptor = web_sys::GpuPipelineLayoutDescriptor::new(&layouts);
-        value.label.map(|l| descriptor.label(&l));
+        let descriptor = web_sys::GpuPipelineLayoutDescriptor::new(&layouts);
+        if let Some(l) = value.label {
+            descriptor.set_label(&l)
+        }
         descriptor
     }
 }
@@ -1821,15 +1834,19 @@ pub struct DepthStencilState {
 
 impl From<DepthStencilState> for web_sys::GpuDepthStencilState {
     fn from(value: DepthStencilState) -> Self {
-        let mut state = web_sys::GpuDepthStencilState::new(value.format.into());
-        value.depth_bias.map(|x| state.depth_bias(x));
-        value.depth_bias_clamp.map(|x| state.depth_bias_clamp(x));
-        value
-            .depth_bias_slope_scale
-            .map(|x| state.depth_bias_slope_scale(x));
+        let state = web_sys::GpuDepthStencilState::new(value.format.into());
+        if let Some(x) = value.depth_bias {
+            state.set_depth_bias(x)
+        }
+        if let Some(x) = value.depth_bias_clamp {
+            state.set_depth_bias_clamp(x)
+        }
+        if let Some(x) = value.depth_bias_slope_scale {
+            state.set_depth_bias_slope_scale(x)
+        }
 
-        state.depth_compare(value.depth_compare.into());
-        state.depth_write_enabled(value.depth_write_enabled);
+        state.set_depth_compare(value.depth_compare.into());
+        state.set_depth_write_enabled(value.depth_write_enabled);
 
         state
     }
@@ -1844,7 +1861,9 @@ pub struct VertexState<'a> {
 
 impl<'a> From<VertexState<'a>> for web_sys::GpuVertexState {
     fn from(value: VertexState<'a>) -> Self {
-        web_sys::GpuVertexState::new(value.entry_point, &value.module.module)
+        let state = web_sys::GpuVertexState::new(&value.module.module);
+        state.set_entry_point(value.entry_point);
+        state
     }
 }
 
@@ -1863,7 +1882,9 @@ impl<'a, const N: usize> From<FragmentState<'a, N>> for web_sys::GpuFragmentStat
         let targets = value.targets.map::<_, js_sys::Object>(Into::into);
         let targets = js_sys::Array::from_iter(targets);
 
-        web_sys::GpuFragmentState::new(entry_point, &module, &targets)
+        let state = web_sys::GpuFragmentState::new(&module, &targets);
+        state.set_entry_point(entry_point);
+        state
     }
 }
 
@@ -2008,12 +2029,16 @@ pub struct MultisampleState {
 
 impl From<MultisampleState> for web_sys::GpuMultisampleState {
     fn from(value: MultisampleState) -> Self {
-        let mut state = web_sys::GpuMultisampleState::new();
-        value
-            .alpha_to_coverage_enabled
-            .map(|x| state.alpha_to_coverage_enabled(x));
-        value.count.map(|x| state.count(x));
-        value.mask.map(|x| state.mask(x));
+        let state = web_sys::GpuMultisampleState::new();
+        if let Some(x) = value.alpha_to_coverage_enabled {
+            state.set_alpha_to_coverage_enabled(x)
+        }
+        if let Some(x) = value.count {
+            state.set_count(x)
+        }
+        if let Some(x) = value.mask {
+            state.set_mask(x)
+        }
         state
     }
 }
@@ -2030,21 +2055,21 @@ pub struct PrimitiveState {
 
 impl From<PrimitiveState> for web_sys::GpuPrimitiveState {
     fn from(value: PrimitiveState) -> Self {
-        let mut state = web_sys::GpuPrimitiveState::new();
+        let state = web_sys::GpuPrimitiveState::new();
         if let Some(v) = value.cull_mode {
-            state.cull_mode(v.into());
+            state.set_cull_mode(v.into());
         }
         if let Some(v) = value.front_face {
-            state.front_face(v.into());
+            state.set_front_face(v.into());
         }
         if let Some(v) = value.strip_index_format {
-            state.strip_index_format(v.into());
+            state.set_strip_index_format(v.into());
         }
         if let Some(v) = value.topology {
-            state.topology(v.into());
+            state.set_topology(v.into());
         }
         if let Some(v) = value.unclipped_depth {
-            state.unclipped_depth(v);
+            state.set_unclipped_depth(v);
         }
         state
     }
@@ -2140,26 +2165,40 @@ pub struct SamplerDescriptor<'a> {
 
 impl<'a> From<SamplerDescriptor<'a>> for web_sys::GpuSamplerDescriptor {
     fn from(value: SamplerDescriptor<'a>) -> Self {
-        let mut descriptor = web_sys::GpuSamplerDescriptor::new();
-        value.label.map(|x| descriptor.label(&x));
-        value
-            .address_mode_u
-            .map(|x| descriptor.address_mode_u(x.into()));
-        value
-            .address_mode_v
-            .map(|x| descriptor.address_mode_v(x.into()));
-        value
-            .address_mode_w
-            .map(|x| descriptor.address_mode_w(x.into()));
-        value.compare.map(|x| descriptor.compare(x.into()));
-        value.lod_max_clamp.map(|x| descriptor.lod_max_clamp(x));
-        value.lod_min_clamp.map(|x| descriptor.lod_min_clamp(x));
-        value.mag_filter.map(|x| descriptor.mag_filter(x.into()));
-        value.max_anisotropy.map(|x| descriptor.max_anisotropy(x));
-        value.min_filter.map(|x| descriptor.min_filter(x.into()));
-        value
-            .mipmap_filter
-            .map(|x| descriptor.mipmap_filter(x.into()));
+        let descriptor = web_sys::GpuSamplerDescriptor::new();
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
+        if let Some(x) = value.address_mode_u {
+            descriptor.set_address_mode_u(x.into())
+        }
+        if let Some(x) = value.address_mode_v {
+            descriptor.set_address_mode_v(x.into())
+        }
+        if let Some(x) = value.address_mode_w {
+            descriptor.set_address_mode_w(x.into())
+        }
+        if let Some(x) = value.compare {
+            descriptor.set_compare(x.into())
+        }
+        if let Some(x) = value.lod_max_clamp {
+            descriptor.set_lod_max_clamp(x)
+        }
+        if let Some(x) = value.lod_min_clamp {
+            descriptor.set_lod_min_clamp(x)
+        }
+        if let Some(x) = value.mag_filter {
+            descriptor.set_mag_filter(x.into())
+        }
+        if let Some(x) = value.max_anisotropy {
+            descriptor.set_max_anisotropy(x)
+        }
+        if let Some(x) = value.min_filter {
+            descriptor.set_min_filter(x.into())
+        }
+        if let Some(x) = value.mipmap_filter {
+            descriptor.set_mipmap_filter(x.into())
+        }
         descriptor
     }
 }
@@ -2268,17 +2307,25 @@ impl<'a, const N: usize, const M: usize> From<TextureDescriptor<'a, N, M>>
         );
         let usage = value.usage.0;
 
-        let mut descriptor = web_sys::GpuTextureDescriptor::new(format, &size, usage);
-        value.label.map(|x| descriptor.label(&x));
-        value.dimension.map(|x| descriptor.dimension(x.into()));
-        value.mip_level_count.map(|x| descriptor.mip_level_count(x));
-        value.sample_count.map(|x| descriptor.sample_count(x));
-        value.view_formats.map(|x| {
+        let descriptor = web_sys::GpuTextureDescriptor::new(format, &size, usage);
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
+        if let Some(x) = value.dimension {
+            descriptor.set_dimension(x.into())
+        }
+        if let Some(x) = value.mip_level_count {
+            descriptor.set_mip_level_count(x)
+        }
+        if let Some(x) = value.sample_count {
+            descriptor.set_sample_count(x)
+        }
+        if let Some(x) = value.view_formats {
             let x = js_sys::Array::from_iter(
                 x.map(|x| wasm_bindgen::JsValue::from(web_sys::GpuTextureFormat::from(x))),
             );
-            descriptor.view_formats(&x)
-        });
+            descriptor.set_view_formats(&x)
+        }
         descriptor
     }
 }
@@ -2298,19 +2345,31 @@ pub struct TextureViewDescriptor<'a> {
 
 impl<'a> From<TextureViewDescriptor<'a>> for web_sys::GpuTextureViewDescriptor {
     fn from(value: TextureViewDescriptor<'a>) -> Self {
-        let mut descriptor = web_sys::GpuTextureViewDescriptor::new();
-        value.label.map(|x| descriptor.label(&x));
-        value
-            .array_layer_count
-            .map(|x| descriptor.array_layer_count(x));
-        value.aspect.map(|x| descriptor.aspect(x.into()));
-        value
-            .base_array_layer
-            .map(|x| descriptor.base_array_layer(x));
-        value.base_mip_level.map(|x| descriptor.base_mip_level(x));
-        value.dimension.map(|x| descriptor.dimension(x.into()));
-        value.format.map(|x| descriptor.format(x.into()));
-        value.mip_level_count.map(|x| descriptor.mip_level_count(x));
+        let descriptor = web_sys::GpuTextureViewDescriptor::new();
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
+        if let Some(x) = value.array_layer_count {
+            descriptor.set_array_layer_count(x)
+        }
+        if let Some(x) = value.aspect {
+            descriptor.set_aspect(x.into())
+        }
+        if let Some(x) = value.base_array_layer {
+            descriptor.set_base_array_layer(x)
+        }
+        if let Some(x) = value.base_mip_level {
+            descriptor.set_base_mip_level(x)
+        }
+        if let Some(x) = value.dimension {
+            descriptor.set_dimension(x.into())
+        }
+        if let Some(x) = value.format {
+            descriptor.set_format(x.into())
+        }
+        if let Some(x) = value.mip_level_count {
+            descriptor.set_mip_level_count(x)
+        }
         descriptor
     }
 }
@@ -2395,8 +2454,10 @@ pub struct CommandEncoderDescriptor<'a> {
 
 impl From<CommandEncoderDescriptor<'_>> for web_sys::GpuCommandEncoderDescriptor {
     fn from(value: CommandEncoderDescriptor<'_>) -> Self {
-        let mut descriptor = web_sys::GpuCommandEncoderDescriptor::new();
-        value.label.map(|x| descriptor.label(&x));
+        let descriptor = web_sys::GpuCommandEncoderDescriptor::new();
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
         descriptor
     }
 }
@@ -2409,8 +2470,10 @@ pub struct ComputePassDescriptor<'a> {
 
 impl From<ComputePassDescriptor<'_>> for web_sys::GpuComputePassDescriptor {
     fn from(value: ComputePassDescriptor<'_>) -> Self {
-        let mut descriptor = web_sys::GpuComputePassDescriptor::new();
-        value.label.map(|x| descriptor.label(&x));
+        let descriptor = web_sys::GpuComputePassDescriptor::new();
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
         descriptor
     }
 }
@@ -2429,14 +2492,16 @@ impl<const N: usize> From<RenderPassDescriptor<'_, N>> for web_sys::GpuRenderPas
         let color_attachments = value.color_attachments.map::<_, JsValue>(Into::into);
         let color_attachments = js_sys::Array::from_iter(color_attachments);
 
-        let mut descriptor = web_sys::GpuRenderPassDescriptor::new(&color_attachments);
-        value.label.map(|x| descriptor.label(&x));
-        value
-            .depth_stencil_attachment
-            .map(|x| descriptor.depth_stencil_attachment(&x.into()));
-        value
-            .max_draw_count
-            .map(|x| descriptor.max_draw_count(x as f64));
+        let descriptor = web_sys::GpuRenderPassDescriptor::new(&color_attachments);
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
+        if let Some(x) = value.depth_stencil_attachment {
+            descriptor.set_depth_stencil_attachment(&x.into())
+        }
+        if let Some(x) = value.max_draw_count {
+            descriptor.set_max_draw_count(x as f64)
+        }
         descriptor
     }
 }
@@ -2491,29 +2556,31 @@ pub struct RenderPassDepthStencilAttachment {
 
 impl From<RenderPassDepthStencilAttachment> for web_sys::GpuRenderPassDepthStencilAttachment {
     fn from(value: RenderPassDepthStencilAttachment) -> Self {
-        let mut attachment = web_sys::GpuRenderPassDepthStencilAttachment::new(&value.view.view);
-        value
-            .depth_clear_value
-            .map(|x| attachment.depth_clear_value(x));
-        value
-            .depth_load_op
-            .map(|x| attachment.depth_load_op(x.into()));
-        value.depth_read_only.map(|x| attachment.depth_read_only(x));
-        value
-            .depth_store_op
-            .map(|x| attachment.depth_store_op(x.into()));
-        value
-            .stencil_clear_value
-            .map(|x| attachment.stencil_clear_value(x));
-        value
-            .stencil_load_op
-            .map(|x| attachment.stencil_load_op(x.into()));
-        value
-            .stencil_read_only
-            .map(|x| attachment.stencil_read_only(x));
-        value
-            .stencil_store_op
-            .map(|x| attachment.stencil_store_op(x.into()));
+        let attachment = web_sys::GpuRenderPassDepthStencilAttachment::new(&value.view.view);
+        if let Some(x) = value.depth_clear_value {
+            attachment.set_depth_clear_value(x)
+        }
+        if let Some(x) = value.depth_load_op {
+            attachment.set_depth_load_op(x.into())
+        }
+        if let Some(x) = value.depth_read_only {
+            attachment.set_depth_read_only(x)
+        }
+        if let Some(x) = value.depth_store_op {
+            attachment.set_depth_store_op(x.into())
+        }
+        if let Some(x) = value.stencil_clear_value {
+            attachment.set_stencil_clear_value(x)
+        }
+        if let Some(x) = value.stencil_load_op {
+            attachment.set_stencil_load_op(x.into())
+        }
+        if let Some(x) = value.stencil_read_only {
+            attachment.set_stencil_read_only(x)
+        }
+        if let Some(x) = value.stencil_store_op {
+            attachment.set_stencil_store_op(x.into())
+        }
 
         attachment
     }
@@ -2577,8 +2644,10 @@ pub struct CommandBufferDescriptor<'a> {
 
 impl From<CommandBufferDescriptor<'_>> for web_sys::GpuCommandBufferDescriptor {
     fn from(value: CommandBufferDescriptor<'_>) -> Self {
-        let mut descriptor = web_sys::GpuCommandBufferDescriptor::new();
-        value.label.map(|x| descriptor.label(&x));
+        let descriptor = web_sys::GpuCommandBufferDescriptor::new();
+        if let Some(x) = value.label {
+            descriptor.set_label(&x)
+        }
         descriptor
     }
 }

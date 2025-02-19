@@ -155,14 +155,14 @@ impl Renderer {
         }
         let gpu = navigator.gpu();
 
-        let mut adapter_options = web_sys::GpuRequestAdapterOptions::new();
+        let adapter_options = web_sys::GpuRequestAdapterOptions::new();
         match power_profile {
             wasm_bridge::PowerProfile::Auto => {}
             wasm_bridge::PowerProfile::Low => {
-                adapter_options.power_preference(web_sys::GpuPowerPreference::LowPower);
+                adapter_options.set_power_preference(web_sys::GpuPowerPreference::LowPower);
             }
             wasm_bridge::PowerProfile::High => {
-                adapter_options.power_preference(web_sys::GpuPowerPreference::HighPerformance);
+                adapter_options.set_power_preference(web_sys::GpuPowerPreference::HighPerformance);
             }
         }
 
@@ -232,10 +232,12 @@ impl Renderer {
             .dyn_into::<web_sys::CanvasRenderingContext2d>()
             .unwrap();
 
-        context_gpu.configure(
-            web_sys::GpuCanvasConfiguration::new(&device, gpu.get_preferred_canvas_format())
-                .alpha_mode(web_sys::GpuCanvasAlphaMode::Premultiplied),
-        );
+        let canvas_cfg =
+            web_sys::GpuCanvasConfiguration::new(&device, gpu.get_preferred_canvas_format());
+        canvas_cfg.set_alpha_mode(web_sys::GpuCanvasAlphaMode::Premultiplied);
+        context_gpu
+            .configure(&canvas_cfg)
+            .expect("could not configure the webgpu canvas");
 
         let device = webgpu::Device::new(device);
         let preferred_format = gpu.get_preferred_canvas_format().into();
@@ -641,8 +643,8 @@ impl Renderer {
         };
 
         self.context_2d.save();
-        self.context_2d.set_fill_style(&"rgb(178 178 178)".into());
-        self.context_2d.set_stroke_style(&"rgb(120 120 120)".into());
+        self.context_2d.set_fill_style_str("rgb(178 178 178)");
+        self.context_2d.set_stroke_style_str("rgb(120 120 120)");
 
         let guard = self.axes.borrow();
         let radius = guard.control_points_radius().extract::<f32>() as f64;
@@ -927,8 +929,8 @@ impl Renderer {
 
         // Draw the main view into the framebuffer.
         if self.canvas_gpu.width() != 0 && self.canvas_gpu.height() != 0 {
-            let texture_view =
-                webgpu::Texture::from_raw(self.context_gpu.get_current_texture()).create_view(None);
+            let current_texture = self.context_gpu.get_current_texture().unwrap();
+            let texture_view = webgpu::Texture::from_raw(current_texture).create_view(None);
             let msaa_texture_view = self.render_texture.view();
             let depth_texture_view = self.depth_texture.view();
 
@@ -1512,7 +1514,7 @@ impl Renderer {
             self.label_color_generator.next()
         };
 
-        let selection_bounds = selection_bounds.unwrap_or((std::f32::EPSILON, 1.0));
+        let selection_bounds = selection_bounds.unwrap_or((f32::EPSILON, 1.0));
 
         let label = LabelInfo {
             id,
@@ -1649,7 +1651,7 @@ impl Renderer {
             .position(|l| l.id == id)
             .expect("no label with a matching id found");
 
-        let selection_bounds = selection_bounds.unwrap_or((std::f32::EPSILON, 1.0));
+        let selection_bounds = selection_bounds.unwrap_or((f32::EPSILON, 1.0));
 
         self.labels[label_idx].threshold_changed = true;
         self.labels[label_idx].selection_bounds = selection_bounds;
@@ -1728,12 +1730,12 @@ impl Renderer {
             }
 
             let wasm_bridge::AxisDef {
-                key,
-                label,
-                points,
-                range,
-                visible_range,
-                ticks,
+                key: _,
+                label: _,
+                points: _,
+                range: _,
+                visible_range: _,
+                ticks: _,
             } = axis_def;
         }
         if let Some(wasm_bridge::AxisOrder::Custom { order }) = order_change {
@@ -2727,7 +2729,7 @@ impl Renderer {
             layout: self.pipelines.compute().create_curves.0.clone(),
         });
 
-        let num_workgroups = ((num_lines + 63) / 64) as u32;
+        let num_workgroups = num_lines.div_ceil(64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(&self.pipelines.compute().create_curves.1);
@@ -2812,7 +2814,7 @@ impl Renderer {
                 .clone(),
         });
 
-        let num_workgroups = ((self.buffers.data().data().len() + 63) / 64) as u32;
+        let num_workgroups = self.buffers.data().data().len().div_ceil(64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(
@@ -2868,7 +2870,7 @@ impl Renderer {
                 .clone(),
         });
 
-        let num_workgroups = ((num_data_points + 63) / 64) as u32;
+        let num_workgroups = num_data_points.div_ceil(64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(&self.pipelines.compute().compute_probability.reduce_pipeline);

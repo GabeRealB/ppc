@@ -1193,6 +1193,7 @@ impl ColorBarRenderPipeline {
 pub struct ComputePipelines {
     pub create_curves: (BindGroupLayout, ComputePipeline),
     pub compute_probability: ProbabilityComputationPipeline,
+    #[allow(unused)]
     pub transform_color_scale: (BindGroupLayout, ComputePipeline),
     curve_spline_sampling: ProbabilityCurveSplineSamplingComputePipeline,
     //
@@ -1550,7 +1551,7 @@ impl ProbabilityCurveSplineSamplingComputePipeline {
         });
 
         const NUM_WORKGROUPS: u32 =
-            ((buffers::ProbabilitySampleTexture::PROBABILITY_CURVE_RESOLUTION + 63) / 64) as u32;
+            buffers::ProbabilitySampleTexture::PROBABILITY_CURVE_RESOLUTION.div_ceil(64) as u32;
 
         let pass = encoder.begin_compute_pass(None);
         pass.set_pipeline(&self.pipeline);
@@ -1689,7 +1690,7 @@ impl ColorScaleSamplingComputePipeline {
         encoder: &CommandEncoder,
     ) {
         const NUM_WORKGROUPS: u32 =
-            ((buffers::ColorScaleTexture::COLOR_SCALE_RESOLUTION + 63) / 64) as u32;
+            buffers::ColorScaleTexture::COLOR_SCALE_RESOLUTION.div_ceil(64) as u32;
 
         let color_scale_view = color_scale.view();
         let bind_group = device.create_bind_group(BindGroupDescriptor {
