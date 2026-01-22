@@ -46,7 +46,7 @@
     "@mui/icons-material": "^5.15.5",
     "@mui/material": "^5.15.5",
     "@webgpu/types": "^0.1.40",
-    "lodash": "^4.17.21",
+    "lodash": "^4.17.23",
     "pako": "^2.1.0",
     "uuid": "^9.0.1"
   }
